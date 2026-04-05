@@ -45,9 +45,16 @@ export default function Navbar() {
           {/* Logo */}
           <button
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="text-[var(--color-text-primary)] font-semibold text-lg tracking-tight hover:text-[var(--color-accent)] transition-colors"
+            className="opacity-90 hover:opacity-100 transition-opacity"
+            aria-label="Back to top"
           >
-            ES<span className="text-[var(--color-accent)]">.</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="ES Logo"
+              style={{ filter: 'brightness(0) invert(1)' }}
+              className="h-10 w-auto object-contain"
+            />
           </button>
 
           {/* Desktop links */}
