@@ -74,9 +74,9 @@ export const translations: Record<string, Record<Locale, string>> = {
   // About
   'about.title': { he: 'אודות', en: 'About Me', ru: 'Обо мне' },
   'about.bio': {
-    he: 'מפתח צעיר עם תשוקה לטכנולוגיה, AI ופתרונות חכמים. מתמחה בבניית מערכות מורכבות מקצה לקצה — מאפליקציות ווב מודרניות, דרך בוטים אוטונומיים בענן, ועד כלי אוטומציה מתקדמים עם בינה מלאכותית. בונה פתרונות אמיתיים שעושים שינוי.',
-    en: 'Young developer passionate about technology, AI, and smart solutions. I specialize in building complex end-to-end systems — from modern web applications and autonomous cloud bots to advanced AI-powered automation tools. I build real solutions that make a difference.',
-    ru: 'Молодой разработчик, увлечённый технологиями, ИИ и умными решениями. Специализируюсь на создании сложных систем от начала до конца — от современных веб-приложений и автономных облачных ботов до продвинутых инструментов автоматизации с ИИ.',
+    he: 'מפתח Full-Stack עם רקע ייחודי — B.A. בעבודה סוציאלית לצד תשוקה עמוקה לטכנולוגיה ו-AI. מתמחה בבניית מערכות מורכבות מקצה לקצה — מאפליקציות ווב מודרניות, דרך בוטים אוטונומיים בענן, ועד כלי אוטומציה מתקדמים. הרקע האנושי שלי מוסיף פרספקטיבה שונה על פתרונות שעושים שינוי אמיתי.',
+    en: 'Full-Stack developer with a unique background — B.A. in Social Work alongside a deep passion for technology and AI. I specialize in building complex end-to-end systems: modern web apps, autonomous cloud bots, and advanced automation tools. My human-centered background brings a different perspective to building solutions that make a real difference.',
+    ru: 'Full-Stack разработчик с уникальным опытом — бакалавр социальной работы и глубокая страсть к технологиям и ИИ. Специализируюсь на сложных системах: веб-приложения, автономные облачные боты и инструменты автоматизации. Гуманитарный фон добавляет особый взгляд на решения, которые меняют мир.',
   },
   'about.metric.projects': { he: 'פרויקטים', en: 'Projects', ru: 'Проектов' },
   'about.metric.tech': { he: 'טכנולוגיות', en: 'Technologies', ru: 'Технологий' },

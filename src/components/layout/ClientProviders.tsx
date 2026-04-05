@@ -1,12 +1,13 @@
 'use client';
-import { I18nProvider } from '@/lib/i18n';
+import { I18nProvider, useI18n } from '@/lib/i18n';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
 
-export default function ClientProviders({ children }: { children: React.ReactNode }) {
+function InnerLayout({ children }: { children: React.ReactNode }) {
+  const { locale } = useI18n();
   return (
-    <I18nProvider>
+    <>
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
@@ -15,7 +16,15 @@ export default function ClientProviders({ children }: { children: React.ReactNod
         {children}
       </main>
       <Footer />
-      <AccessibilityWidget />
+      <AccessibilityWidget locale={locale} />
+    </>
+  );
+}
+
+export default function ClientProviders({ children }: { children: React.ReactNode }) {
+  return (
+    <I18nProvider>
+      <InnerLayout>{children}</InnerLayout>
     </I18nProvider>
   );
 }
