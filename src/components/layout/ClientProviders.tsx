@@ -3,6 +3,7 @@ import { I18nProvider, useI18n } from '@/lib/i18n';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
+import ChatWidget from '@/components/ui/ChatWidget';
 
 function InnerLayout({ children }: { children: React.ReactNode }) {
   const { locale } = useI18n();
@@ -16,6 +17,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <Footer />
+      <ChatWidget locale={locale} />
       <AccessibilityWidget locale={locale} />
     </>
   );
