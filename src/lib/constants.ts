@@ -56,7 +56,7 @@ export const projects: Project[] = [
       en: 'AI-powered fashion analysis platform — skin-tone analysis, body shape detection, style quizzes, and personalized outfit suggestions. Private project.',
       ru: 'AI платформа анализа моды — тон кожи, тип фигуры, стилевые квизы и персональные образы. Закрытый проект.',
     },
-    category: 'web-app',
+    category: 'desktop',
     techStack: ['Next.js 14', 'TypeScript', 'Tailwind', 'Supabase', 'Pollinations.ai'],
     featured: true,
   },
