@@ -71,7 +71,9 @@ export async function POST(req: NextRequest) {
     const data = await response.json();
     const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     if (!text) {
-      return NextResponse.json({ error: 'Empty response' }, { status: 500 });
+      const errMsg = data?.error?.message ?? JSON.stringify(data).slice(0, 200);
+      console.error('Gemini empty response:', errMsg);
+      return NextResponse.json({ error: 'Empty response', detail: errMsg }, { status: 500 });
     }
 
     return NextResponse.json({ text });
