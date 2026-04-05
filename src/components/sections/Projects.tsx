@@ -1,7 +1,7 @@
 'use client';
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { motion, useInView, AnimatePresence } from 'framer-motion';
-import { ExternalLink, X } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { projects, filterCategories, filterKeys, type FilterCategory } from '@/lib/constants';
 import GradientBar from '@/components/ui/GradientBar';
@@ -11,7 +11,6 @@ export default function Projects() {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: '-100px' });
   const [filter, setFilter] = useState<FilterCategory>('web-app');
-  const [preview, setPreview] = useState<{ url: string; title: string } | null>(null);
 
   const filtered = projects.filter((p) => p.category === filter);
 
@@ -58,19 +57,16 @@ export default function Projects() {
         <motion.div layout className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           <AnimatePresence mode="popLayout">
             {filtered.map((project, i) => (
-              <ProjectCard key={project.id} project={project} locale={locale} index={i} onPreview={setPreview} />
+              <ProjectCard key={project.id} project={project} locale={locale} index={i} />
             ))}
           </AnimatePresence>
         </motion.div>
       </div>
-      {preview && (
-        <PreviewModal url={preview.url} title={preview.title} onClose={() => setPreview(null)} />
-      )}
     </section>
   );
 }
 
-function ProjectCard({ project, locale, index, onPreview }: { project: typeof projects[0]; locale: 'he' | 'en' | 'ru'; index: number; onPreview: (p: { url: string; title: string }) => void }) {
+function ProjectCard({ project, locale, index }: { project: typeof projects[0]; locale: 'he' | 'en' | 'ru'; index: number }) {
   const cardRef = useRef<HTMLDivElement>(null);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -129,7 +125,7 @@ function ProjectCard({ project, locale, index, onPreview }: { project: typeof pr
         </p>
 
         {/* Tech badges */}
-        <div className="flex flex-wrap gap-2 mb-5">
+        <div className="flex flex-wrap gap-2 mb-4">
           {project.techStack.map((tech) => (
             <span
               key={tech}
@@ -140,94 +136,50 @@ function ProjectCard({ project, locale, index, onPreview }: { project: typeof pr
           ))}
         </div>
 
-        {/* Links */}
-        <div className="flex items-center gap-4">
-          {project.liveUrl && (
-            <button
-              onClick={() => onPreview({ url: project.liveUrl!, title: project.title[locale] })}
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
-            >
-              Preview
-            </button>
-          )}
-          {project.liveUrl && (
-            <a
-              href={project.liveUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors"
-            >
-              <ExternalLink size={14} strokeWidth={1.5} />
-              Visit
-            </a>
-          )}
-          {project.githubUrl && (
-            <a
-              href={project.githubUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
-            >
-              GitHub
-            </a>
-          )}
-        </div>
+        {/* Mini browser preview */}
+        {project.liveUrl && (
+          <a
+            href={project.liveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-lg overflow-hidden border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors mb-4 group/preview"
+            aria-label={`Open ${project.title[locale]}`}
+          >
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-bg-tertiary)] border-b border-[var(--color-border-default)]">
+              <span className="w-2 h-2 rounded-full bg-red-400/50" />
+              <span className="w-2 h-2 rounded-full bg-yellow-400/50" />
+              <span className="w-2 h-2 rounded-full bg-green-400/50" />
+              <span className="flex-1 mx-2 text-[10px] text-[var(--color-text-tertiary)] bg-[var(--color-bg-secondary)] rounded px-2 py-0.5 truncate font-mono">
+                {project.liveUrl.replace('https://', '')}
+              </span>
+              <ExternalLink size={10} className="text-[var(--color-text-tertiary)] opacity-0 group-hover/preview:opacity-100 transition-opacity shrink-0" />
+            </div>
+            <div className="relative h-32 overflow-hidden bg-[var(--color-bg-tertiary)]">
+              <img
+                src={`https://api.microlink.io/?url=${encodeURIComponent(project.liveUrl)}&screenshot=true&embed=screenshot.url&meta=false`}
+                alt={project.title[locale]}
+                className="w-full h-full object-cover object-top"
+                loading="lazy"
+              />
+              <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
+            </div>
+          </a>
+        )}
+
+        {/* GitHub link */}
+        {project.githubUrl && (
+          <a
+            href={project.githubUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            GitHub
+          </a>
+        )}
       </div>
     </motion.div>
   );
 }
 
-function PreviewModal({
-  url,
-  title,
-  onClose,
-}: {
-  url: string;
-  title: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
 
-  return (
-    <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="relative flex flex-col w-full max-w-5xl h-[88vh] bg-[var(--color-bg-secondary)] rounded-2xl overflow-hidden border border-[var(--color-border-default)] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--color-border-default)] shrink-0">
-          <span className="text-sm font-medium text-[var(--color-text-primary)] truncate max-w-[60%]">{title}</span>
-          <div className="flex items-center gap-3">
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors"
-            >
-              <ExternalLink size={12} strokeWidth={1.5} />
-              Open
-            </a>
-            <button
-              onClick={onClose}
-              aria-label="Close preview"
-              className="p-1 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-        <iframe
-          src={url}
-          title={title}
-          className="w-full flex-1 border-0"
-        />
-      </div>
-    </div>
-  );
-}
