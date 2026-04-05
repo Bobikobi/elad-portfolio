@@ -4,7 +4,7 @@ export interface Project {
   id: string;
   title: Record<Locale, string>;
   description: Record<Locale, string>;
-  category: 'web-app' | 'desktop' | 'ai-bot' | 'civic-tech' | 'component';
+  category: 'web-app' | 'desktop' | 'ai-bot';
   techStack: string[];
   liveUrl?: string;
   githubUrl?: string;
@@ -72,7 +72,7 @@ export const projects: Project[] = [
       en: 'Israeli political compass with Bayesian scoring, soft zone classification using Mahalanobis distance, confidence intervals, and interactive Recharts visualizations.',
       ru: 'Израильский политический компас с байесовским скорингом, мягкой классификацией зон через расстояние Махаланобиса и визуализациями Recharts.',
     },
-    category: 'civic-tech',
+    category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Supabase', 'Recharts', 'Framer Motion'],
     liveUrl: 'https://political-compass-il.vercel.app',
     featured: true,
@@ -89,7 +89,7 @@ export const projects: Project[] = [
       en: 'Municipal emergency management system for Netanya. Real-time event dashboards, incident reporting with Zod validation, org charts, and full trilingual support.',
       ru: 'Городская система управления ЧС для Нетании. Дашборды в реальном времени, отчёты об инцидентах с Zod validation, оргструктуры и трёхъязычная поддержка.',
     },
-    category: 'civic-tech',
+    category: 'web-app',
     techStack: ['Next.js 14', 'TypeScript', 'Supabase', 'Zod', 'i18n'],
     liveUrl: 'https://netanya-civil.vercel.app',
     featured: true,
@@ -112,6 +112,24 @@ export const projects: Project[] = [
     featured: false,
   },
   {
+    id: 'elad-portfolio',
+    title: {
+      he: 'פורטפוליו אישי',
+      en: 'Personal Portfolio',
+      ru: 'Личное Портфолио',
+    },
+    description: {
+      he: 'אתר הפורטפוליו הזה עצמו — Next.js 16, Tailwind CSS v4 ו-Framer Motion. תמיכה ב-3 שפות כולל RTL, ווידג\'ט נגישות מובנה, security headers ועיצוב dark-mode מלא.',
+      en: 'This very portfolio — built with Next.js 16, Tailwind CSS v4, and Framer Motion. Trilingual i18n with RTL, built-in accessibility widget, security headers, and dark-mode design.',
+      ru: 'Этот самый портфолио — Next.js 16, Tailwind CSS v4 и Framer Motion. Поддержка 3 языков с RTL, виджет доступности и security headers.',
+    },
+    category: 'web-app',
+    techStack: ['Next.js 16', 'TypeScript', 'Tailwind CSS v4', 'Framer Motion', 'i18n'],
+    liveUrl: 'https://elad-s-portfolio.vercel.app',
+    githubUrl: 'https://github.com/Bobikobi/elad-portfolio',
+    featured: true,
+  },
+  {
     id: 'accessibility-widget',
     title: {
       he: 'Accessibility Widget',
@@ -123,7 +141,7 @@ export const projects: Project[] = [
       en: 'Production-ready React component for accessibility: font scaling, contrast modes, link highlighting, animation toggle, and grayscale. Supports 3 languages with localStorage persistence.',
       ru: 'Production-ready React компонент доступности: масштабирование шрифта, контрастные режимы, выделение ссылок, остановка анимаций. 3 языка с localStorage.',
     },
-    category: 'component',
+    category: 'web-app',
     techStack: ['React', 'TypeScript', 'Tailwind', 'Lucide React'],
     featured: false,
   },
@@ -164,19 +182,17 @@ export const techCategories = [
 ];
 
 export const metrics = [
-  { value: 7, label: 'about.metric.projects' },
+  { value: 8, label: 'about.metric.projects' },
   { value: 12, label: 'about.metric.tech' },
   { value: 3, label: 'about.metric.languages' },
   { value: 3, label: 'about.metric.cloud' },
 ];
 
-export const filterCategories = ['all', 'web-app', 'desktop', 'ai-bot', 'civic-tech'] as const;
+export const filterCategories = ['web-app', 'desktop', 'ai-bot'] as const;
 export type FilterCategory = typeof filterCategories[number];
 
 export const filterKeys: Record<FilterCategory, string> = {
-  all: 'projects.filter.all',
   'web-app': 'projects.filter.web',
   desktop: 'projects.filter.desktop',
   'ai-bot': 'projects.filter.ai',
-  'civic-tech': 'projects.filter.civic',
 };
