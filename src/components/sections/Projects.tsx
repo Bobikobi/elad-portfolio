@@ -16,7 +16,7 @@ export default function Projects() {
   const filtered = projects.filter((p) => p.category === filter);
 
   return (
-    <section id="projects" className="relative py-32 px-6" ref={ref}>
+    <section id="projects" className="relative py-20 px-6" ref={ref}>
       <div className="mx-auto max-w-[1200px]">
         <motion.div
           initial={{ opacity: 0, y: 30 }}

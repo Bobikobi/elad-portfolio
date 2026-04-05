@@ -29,7 +29,7 @@ export default function Contact() {
     'w-full px-4 py-3 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-primary)] text-sm placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] transition-colors';
 
   return (
-    <section id="contact" className="relative py-32 px-6" ref={ref}>
+    <section id="contact" className="relative py-20 px-6" ref={ref}>
       <div className="mx-auto max-w-[1200px]">
         <div className="grid md:grid-cols-2 gap-16">
           {/* Left: info */}
