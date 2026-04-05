@@ -142,26 +142,22 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
             href={project.liveUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="block rounded-lg overflow-hidden border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors mb-4 group/preview"
+            className="relative block rounded-lg overflow-hidden border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors mb-4 group/preview"
             aria-label={`Open ${project.title[locale]}`}
           >
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-bg-tertiary)] border-b border-[var(--color-border-default)]">
-              <span className="w-2 h-2 rounded-full bg-red-400/50" />
-              <span className="w-2 h-2 rounded-full bg-yellow-400/50" />
-              <span className="w-2 h-2 rounded-full bg-green-400/50" />
-              <span className="flex-1 mx-2 text-[10px] text-[var(--color-text-tertiary)] bg-[var(--color-bg-secondary)] rounded px-2 py-0.5 truncate font-mono">
-                {project.liveUrl.replace('https://', '')}
-              </span>
-              <ExternalLink size={10} className="text-[var(--color-text-tertiary)] opacity-0 group-hover/preview:opacity-100 transition-opacity shrink-0" />
-            </div>
-            <div className="relative h-32 overflow-hidden bg-[var(--color-bg-tertiary)]">
+            <div className="relative h-36 overflow-hidden bg-[var(--color-bg-tertiary)]">
               <img
-                src={`https://api.microlink.io/?url=${encodeURIComponent(project.liveUrl)}&screenshot=true&embed=screenshot.url&meta=false`}
+                src={`https://image.thum.io/get/width/1200/crop/630/noanimate/${project.liveUrl}`}
                 alt={project.title[locale]}
                 className="w-full h-full object-cover object-top"
                 loading="lazy"
               />
               <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
+              <div className="absolute bottom-2 right-2 opacity-0 group-hover/preview:opacity-100 transition-opacity">
+                <span className="inline-flex items-center gap-1 text-[10px] text-white bg-black/60 rounded px-2 py-0.5 backdrop-blur-sm">
+                  <ExternalLink size={9} /> פתח
+                </span>
+              </div>
             </div>
           </a>
         )}
