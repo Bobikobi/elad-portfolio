@@ -42,6 +42,10 @@ export const metadata: Metadata = {
     alternateLocale: ["en_US", "ru_RU"],
   },
   robots: { index: true, follow: true },
+  icons: [
+    { rel: 'icon', url: '/logo.png', type: 'image/png' },
+    { rel: 'apple-touch-icon', url: '/logo.png' },
+  ],
 };
 
 export default function RootLayout({
