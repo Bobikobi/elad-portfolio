@@ -97,9 +97,9 @@ export const projects: Project[] = [
   {
     id: 'honey-shor',
     title: {
-      he: 'Honey Shor — אתר לקוח',
-      en: 'Honey Shor — Client Portfolio',
-      ru: 'Honey Shor — Портфолио клиента',
+      he: 'Honey Shor — דף נחיתה ללקוח',
+      en: 'Honey Shor — Client Landing Page',
+      ru: 'Honey Shor — Лендинг для клиента',
     },
     description: {
       he: 'אתר פורטפוליו למרצה. אנימציות scroll חלקות, SEO מובנה עם JSON-LD, הזמנת הרצאות ותאימות נגישות.',
