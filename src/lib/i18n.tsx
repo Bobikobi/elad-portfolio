@@ -88,9 +88,9 @@ export const translations: Record<string, Record<Locale, string>> = {
   'services.subtitle': { he: 'מה אני מציע', en: 'What I Offer', ru: 'Что я предлагаю' },
   'services.web.title': { he: 'פיתוח Full-Stack', en: 'Full-Stack Web Dev', ru: 'Full-Stack Разработка' },
   'services.web.desc': {
-    he: 'אפליקציות ווב מקצה לקצה עם Next.js, React ו-Supabase. מקונספט ועד deploy.',
-    en: 'End-to-end web apps with Next.js, React, and Supabase. From concept to Vercel deployment.',
-    ru: 'Веб-приложения от и до с Next.js, React и Supabase. От концепции до деплоя.',
+    he: 'אפליקציות ווב מקצה לקצה — HTML/CSS/JS/TS, React, Next.js, Tailwind, Supabase, REST APIs ו-OAuth. מעיצוב ועד deploy בVercel.',
+    en: 'End-to-end web apps in HTML, CSS, JavaScript & TypeScript — React, Next.js, Tailwind CSS, Supabase, REST APIs, and OAuth flows. From design to Vercel.',
+    ru: 'Веб-приложения на HTML/CSS/JS/TS — React, Next.js, Tailwind, Supabase, REST API и OAuth. От дизайна до деплоя.',
   },
   'services.ai.title': { he: 'AI ואוטומציה', en: 'AI & Automation', ru: 'ИИ и Автоматизация' },
   'services.ai.desc': {
@@ -122,13 +122,13 @@ export const translations: Record<string, Record<Locale, string>> = {
 
   // Tech
   'tech.title': { he: 'טכנולוגיות', en: 'Tech Stack', ru: 'Технологии' },
-  'tech.subtitle': { he: 'הכלים שלי', en: 'My Toolkit', ru: 'Мой инструментарий' },
+  'tech.subtitle': { he: 'שפות, ממשקים וכלים שאני עובד איתם', en: 'Languages, interfaces & tools I work with', ru: 'Языки, интерфейсы и инструменты' },
+  'tech.cat.languages': { he: 'שפות תכנות', en: 'Languages', ru: 'Языки' },
   'tech.cat.frontend': { he: 'Frontend', en: 'Frontend', ru: 'Frontend' },
   'tech.cat.backend': { he: 'Backend', en: 'Backend', ru: 'Backend' },
   'tech.cat.ai': { he: 'AI & ML', en: 'AI & ML', ru: 'AI & ML' },
-  'tech.cat.automation': { he: 'אוטומציה', en: 'Automation', ru: 'Автоматизация' },
-  'tech.cat.cloud': { he: 'ענן & DevOps', en: 'Cloud & DevOps', ru: 'Облако & DevOps' },
-  'tech.cat.tools': { he: 'כלים', en: 'Tools', ru: 'Инструменты' },
+  'tech.cat.automation': { he: 'Desktop & אוטומציה', en: 'Desktop & Automation', ru: 'Desktop и Автоматизация' },
+  'tech.cat.cloud': { he: 'ענן, DevOps & APIs', en: 'Cloud, DevOps & APIs', ru: 'Облако, DevOps и API' },
 
   // Contact
   'contact.title': { he: 'צור קשר', en: 'Get in Touch', ru: 'Связаться' },

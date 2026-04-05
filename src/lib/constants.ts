@@ -75,6 +75,7 @@ export const projects: Project[] = [
     },
     category: 'civic-tech',
     techStack: ['Next.js', 'TypeScript', 'Supabase', 'Recharts', 'Framer Motion'],
+    liveUrl: 'https://political-compass-il.vercel.app',
     featured: true,
   },
   {
@@ -137,12 +138,30 @@ export const services = [
 ];
 
 export const techCategories = [
-  { key: 'frontend', items: ['React', 'Next.js', 'TypeScript', 'Tailwind CSS', 'Framer Motion'] },
-  { key: 'backend', items: ['Node.js', 'Supabase', 'PostgreSQL', 'REST APIs', 'Zod'] },
-  { key: 'ai', items: ['Google Gemini 2.0', 'Pollinations.ai', 'Vision AI', 'Function Calling'] },
-  { key: 'automation', items: ['Puppeteer', 'Playwright', 'Electron', 'Freqtrade', 'Cron'] },
-  { key: 'cloud', items: ['GCP', 'Oracle Cloud', 'Contabo VPS', 'Vercel', 'Docker'] },
-  { key: 'tools', items: ['Git', 'VS Code', 'GitHub Actions', 'Telegram Bot API', 'systemd'] },
+  {
+    key: 'languages',
+    items: ['HTML5', 'CSS3', 'JavaScript (ES2022+)', 'TypeScript', 'Python', 'Bash/Shell'],
+  },
+  {
+    key: 'frontend',
+    items: ['React 19', 'Next.js 14', 'Tailwind CSS v4', 'Framer Motion', 'Recharts', 'shadcn/ui'],
+  },
+  {
+    key: 'backend',
+    items: ['Node.js', 'Supabase', 'PostgreSQL', 'REST APIs', 'Zod', 'OAuth 2.0', 'Server Actions'],
+  },
+  {
+    key: 'ai',
+    items: ['Google Gemini 2.0', 'Vision AI', 'Function Calling', 'Pollinations.ai', 'Prompt Engineering', 'Freqtrade'],
+  },
+  {
+    key: 'automation',
+    items: ['Electron', 'Puppeteer', 'Playwright', 'Cron Jobs', 'systemd', 'Telegram Bot API'],
+  },
+  {
+    key: 'cloud',
+    items: ['Vercel', 'GCP', 'Oracle Cloud', 'Docker', 'GitHub Actions', 'Google Sheets API', 'Facebook Graph API'],
+  },
 ];
 
 export const metrics = [
