@@ -52,7 +52,7 @@ export default function Navbar() {
             <img
               src="/logo.png"
               alt="ES Logo"
-              style={{ filter: 'brightness(0) invert(1)' }}
+              style={{ mixBlendMode: 'screen' }}
               className="h-10 w-auto object-contain"
             />
           </button>
