@@ -19,7 +19,7 @@ export function useI18n() {
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>('he');
+  const [locale, setLocaleState] = useState<Locale>('en');
 
   useEffect(() => {
     const saved = localStorage.getItem('locale') as Locale | null;
@@ -115,7 +115,7 @@ export const translations: Record<string, Record<Locale, string>> = {
   'projects.title': { he: 'פרויקטים', en: 'Projects', ru: 'Проекты' },
   'projects.subtitle': { he: 'עבודות נבחרות', en: 'Selected Work', ru: 'Избранные работы' },
   'projects.filter.all': { he: 'הכל', en: 'All', ru: 'Все' },
-  'projects.filter.web': { he: 'אפליקציות ווב', en: 'Web Apps', ru: 'Веб-приложения' },
+  'projects.filter.web': { he: 'אתרים ואפליקציות', en: 'Websites & Apps', ru: 'Сайты и приложения' },
   'projects.filter.desktop': { he: 'Desktop', en: 'Desktop', ru: 'Desktop' },
   'projects.filter.ai': { he: 'AI ואוטומציה', en: 'AI & Automation', ru: 'ИИ и Автоматизация' },
   'projects.filter.civic': { he: 'Civic-Tech', en: 'Civic-Tech', ru: 'Civic-Tech' },

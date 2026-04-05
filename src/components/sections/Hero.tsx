@@ -9,7 +9,7 @@ const titles = ['hero.title.0', 'hero.title.1', 'hero.title.2', 'hero.title.3'];
 
 const socials = [
   { icon: GithubIcon, href: 'https://github.com/Bobikobi', label: 'GitHub' },
-  { icon: LinkedinIcon, href: 'https://linkedin.com', label: 'LinkedIn' },
+  { icon: LinkedinIcon, href: 'https://www.linkedin.com/in/elad-saadon-184809281/', label: 'LinkedIn' },
   { icon: Send, href: 'https://t.me/', label: 'Telegram' },
   { icon: Mail, href: 'mailto:contact@eladsaadon.dev', label: 'Email' },
 ];

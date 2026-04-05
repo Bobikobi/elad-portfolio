@@ -36,12 +36,12 @@ export const projects: Project[] = [
       ru: 'AI Visual Web Scraper',
     },
     description: {
-      he: 'אפליקציית Desktop שמשלבת Puppeteer עם Google Gemini Vision AI. סורקת Facebook, Instagram ו-TikTok בגישה היברידית DOM + צילום מסך, עם סנכרון ל-Google Sheets.',
-      en: 'Desktop app combining Puppeteer with Google Gemini\'s multimodal Vision AI. Scrapes Facebook, Instagram, and TikTok using hybrid DOM + screenshot analysis, syncing to Google Sheets.',
-      ru: 'Desktop приложение сочетающее Puppeteer с мультимодальным Google Gemini Vision AI. Скрапинг Facebook, Instagram и TikTok с гибридным DOM + screenshot анализом.',
+      he: 'כלי Desktop לאיסוף נתונים אוטומטי מרשתות חברתיות, עם ניתוח חזותי מבוסס AI וסנכרון אוטומטי לגיליון Google Sheets.',
+      en: 'Desktop tool for automated data collection from social platforms, with AI-powered visual analysis and automatic sync to Google Sheets.',
+      ru: 'Desktop инструмент для автоматического сбора данных из социальных сетей с AI-анализом и синхронизацией в Google Sheets.',
     },
     category: 'desktop',
-    techStack: ['Electron', 'Puppeteer', 'Gemini 2.0', 'Sharp', 'Google Sheets API'],
+    techStack: ['Electron', 'Puppeteer', 'Gemini', 'Sharp', 'Google Sheets API'],
     featured: true,
   },
   {
@@ -152,7 +152,7 @@ export const techCategories = [
   },
   {
     key: 'ai',
-    items: ['Google Gemini 2.0', 'Vision AI', 'Function Calling', 'Pollinations.ai', 'Prompt Engineering', 'Freqtrade'],
+    items: ['Google Gemini', 'Vision AI', 'Function Calling', 'Pollinations.ai', 'Prompt Engineering', 'Freqtrade'],
   },
   {
     key: 'automation',
