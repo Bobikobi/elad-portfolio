@@ -42,6 +42,7 @@ export const metadata: Metadata = {
     alternateLocale: ["en_US", "ru_RU"],
   },
   robots: { index: true, follow: true },
+  icons: { icon: '/logo.png', shortcut: '/logo.png', apple: '/logo.png' },
 };
 
 export default function RootLayout({
