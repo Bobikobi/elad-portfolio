@@ -11,7 +11,7 @@ const socials = [
   { icon: GithubIcon, href: 'https://github.com/Bobikobi', label: 'GitHub' },
   { icon: LinkedinIcon, href: 'https://www.linkedin.com/in/elad-saadon-184809281/', label: 'LinkedIn' },
   { icon: WhatsAppIcon, href: 'https://wa.me/972545423380', label: 'WhatsApp' },
-  { icon: Mail, href: 'mailto:contact@eladsaadon.dev', label: 'Email' },
+  { icon: Mail, href: 'mailto:eladeladsaa@gmail.com', label: 'Email' },
 ];
 
 export default function Hero() {

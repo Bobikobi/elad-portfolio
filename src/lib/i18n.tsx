@@ -67,16 +67,16 @@ export const translations: Record<string, Record<Locale, string>> = {
   'hero.cta.work': { he: 'הפרויקטים שלי', en: 'View My Work', ru: 'Мои проекты' },
   'hero.cta.contact': { he: 'צור קשר', en: 'Get in Touch', ru: 'Связаться' },
   'hero.title.0': { he: 'מפתח Full-Stack', en: 'Full-Stack Developer', ru: 'Full-Stack Разработчик' },
-  'hero.title.1': { he: 'ארכיטקט מערכות AI', en: 'AI Systems Architect', ru: 'Архитектор AI Систем' },
-  'hero.title.2': { he: 'מהנדס אוטומציה', en: 'Automation Engineer', ru: 'Инженер Автоматизации' },
-  'hero.title.3': { he: 'בונה Civic-Tech', en: 'Civic-Tech Builder', ru: 'Civic-Tech Разработчик' },
+  'hero.title.1': { he: 'בונה עם AI', en: 'Builds with AI', ru: 'Разрабатывает с AI' },
+  'hero.title.2': { he: 'אוטומציה וכלים', en: 'Automation & Tools', ru: 'Автоматизация и Инструменты' },
+  'hero.title.3': { he: 'פרויקטים שעושים הבדל', en: 'Projects That Matter', ru: 'Проекты Которые Важны' },
 
   // About
   'about.title': { he: 'אודות', en: 'About Me', ru: 'Обо мне' },
   'about.bio': {
-    he: 'מפתח Full-Stack עם רקע ייחודי — B.A. בעבודה סוציאלית לצד תשוקה עמוקה לטכנולוגיה ו-AI. מתמחה בבניית מערכות מורכבות מקצה לקצה — מאפליקציות ווב מודרניות, דרך בוטים אוטונומיים בענן, ועד כלי אוטומציה מתקדמים. הרקע האנושי שלי מוסיף פרספקטיבה שונה על פתרונות שעושים שינוי אמיתי.',
-    en: 'Full-Stack developer with a unique background — B.A. in Social Work alongside a deep passion for technology and AI. I specialize in building complex end-to-end systems: modern web apps, autonomous cloud bots, and advanced automation tools. My human-centered background brings a different perspective to building solutions that make a real difference.',
-    ru: 'Full-Stack разработчик с уникальным опытом — бакалавр социальной работы и глубокая страсть к технологиям и ИИ. Специализируюсь на сложных системах: веб-приложения, автономные облачные боты и инструменты автоматизации. Гуманитарный фон добавляет особый взгляд на решения, которые меняют мир.',
+    he: 'מפתח Full-Stack עם רקע קצת שונה — B.A. בעבודה סוציאלית ואהבה אמיתית לבנות דברים עם קוד. נהנה מבניית אפליקציות ווב, אוטומציה של תהליכים, וניסויים עם AI. הרקע הסוציאלי עוזר לי להישאר ממוקד בלבנות דברים שבאמת שימושיים.',
+    en: 'Full-Stack developer with an uncommon background — B.A. in Social Work and a genuine love for building things with code. I enjoy creating web apps, automating workflows, and experimenting with AI. The social work side keeps me grounded in building things that are actually useful.',
+    ru: 'Full-Stack разработчик с нестандартным бэкграундом — бакалавр социальной работы и искренний интерес к программированию. Люблю создавать веб-приложения, автоматизировать процессы и экспериментировать с AI. Социальный фон помогает строить вещи, которые действительно полезны.',
   },
   'about.metric.projects': { he: 'פרויקטים', en: 'Projects', ru: 'Проектов' },
   'about.metric.tech': { he: 'טכנולוגיות', en: 'Technologies', ru: 'Технологий' },

@@ -48,11 +48,11 @@ export default function Contact() {
 
             <div className="flex flex-col gap-4">
               <a
-                href="mailto:contact@eladsaadon.dev"
+                href="mailto:eladeladsaa@gmail.com"
                 className="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors"
               >
                 <Mail size={18} strokeWidth={1.5} className="text-[var(--color-accent)]" />
-                <span className="text-sm text-[var(--color-text-secondary)]">contact@eladsaadon.dev</span>
+                <span className="text-sm text-[var(--color-text-secondary)]">eladeladsaa@gmail.com</span>
               </a>
               <a
                 href="https://github.com/Bobikobi"
