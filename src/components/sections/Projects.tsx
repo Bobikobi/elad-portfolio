@@ -146,11 +146,19 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
             aria-label={`Open ${project.title[locale]}`}
           >
             <div className="relative h-36 overflow-hidden bg-[var(--color-bg-tertiary)]">
-              <img
-                src={`https://image.thum.io/get/width/1200/crop/630/noanimate/${project.liveUrl}`}
-                alt={project.title[locale]}
-                className="w-full h-full object-cover object-top"
-                loading="lazy"
+              <iframe
+                src={project.liveUrl}
+                title={project.title[locale]}
+                style={{
+                  width: '1440px',
+                  height: '900px',
+                  transform: 'scale(0.27)',
+                  transformOrigin: 'top left',
+                  border: 'none',
+                  pointerEvents: 'none',
+                }}
+                tabIndex={-1}
+                aria-hidden="true"
               />
               <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
               <div className="absolute bottom-2 right-2 opacity-0 group-hover/preview:opacity-100 transition-opacity">

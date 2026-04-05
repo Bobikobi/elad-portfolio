@@ -91,7 +91,7 @@ export const projects: Project[] = [
     },
     category: 'web-app',
     techStack: ['Next.js 14', 'TypeScript', 'Supabase', 'Zod', 'i18n'],
-    liveUrl: 'https://netanya-civil.vercel.app',
+    liveUrl: 'https://netanya-civil.vercel.app/emergency',
     featured: true,
   },
   {

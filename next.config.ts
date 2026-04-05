@@ -16,7 +16,7 @@ const securityHeaders = [
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https: https://image.thum.io",
       "connect-src 'self' https:",
-      "frame-src 'none'",
+      "frame-src 'self' https://*.vercel.app https://netanya-civil.vercel.app https://political-compass-il.vercel.app https://honey-site-seven.vercel.app",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
