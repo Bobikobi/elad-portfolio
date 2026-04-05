@@ -55,6 +55,8 @@ interface AccessibilityWidgetProps {
 
 export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidgetProps) {
   const t = (key: string) => labels[key]?.[locale] ?? labels[key]?.['he'] ?? key;
+  const isRTL = locale === 'he';
+  const side = isRTL ? 'left-6' : 'right-6';
 
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<A11yState>(DEFAULT_STATE);
@@ -153,7 +155,7 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
         aria-label={t('toggleBtn')}
         aria-expanded={open}
         aria-controls="a11y-panel"
-        className={`fixed bottom-6 left-6 z-[9999] flex items-center gap-2 rounded-full shadow-lg px-4 py-3 text-white font-bold text-sm transition-all duration-300 hover:scale-105 focus-visible:ring-4 focus-visible:ring-blue-300 ${
+        className={`fixed bottom-6 ${side} z-[9999] flex items-center gap-2 rounded-full shadow-lg px-4 py-3 text-white font-bold text-sm transition-all duration-300 hover:scale-105 focus-visible:ring-4 focus-visible:ring-blue-300 ${
           isActive ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
         }`}
       >
@@ -169,7 +171,7 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
           role="dialog"
           aria-label={t('title')}
           aria-modal="false"
-          className="fixed bottom-20 left-6 z-[9999] w-72 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden animate-fadeIn"
+          className={`fixed bottom-20 ${side} z-[9999] w-72 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden animate-fadeIn`}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white">
