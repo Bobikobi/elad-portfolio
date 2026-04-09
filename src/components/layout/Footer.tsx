@@ -20,8 +20,12 @@ export default function Footer() {
       <div className="mx-auto max-w-[1200px] px-6 py-12">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Logo */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="ES Logo" className="h-8 w-auto object-contain" />
+          <span
+            className="text-3xl font-bold tracking-wide text-[var(--color-text-primary)]"
+            style={{ fontFamily: "'Glamora', serif" }}
+          >
+            E.S
+          </span>
 
           {/* Links */}
           <div className="flex items-center gap-6 text-sm text-[var(--color-text-tertiary)]">
