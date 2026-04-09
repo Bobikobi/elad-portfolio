@@ -10,14 +10,14 @@ About Elad:
 Skills: Next.js, React, TypeScript, Tailwind CSS, Node.js, Supabase, PostgreSQL, Python, Electron, Puppeteer, Google Gemini, Vercel, GCP, Docker
 
 Projects:
-1. OpenClaw — Autonomous multi-node AI system on VPS + GCP + Oracle Cloud, 11+ services, trading lab with Freqtrade
-2. AI Visual Web Scraper — Electron desktop app for smart data collection with AI analysis and Google Sheets sync
-3. AI Style App — Fashion AI platform (skin-tone analysis, style quizzes) — private project
-4. Political Compass IL — Israeli political compass with Bayesian scoring (live: https://political-compass-il.vercel.app)
-5. Netanya Emergency Teams — Municipal emergency management system (live: https://netanya-civil.vercel.app/emergency)
-6. Honey Shor Portfolio — Motivational speaker site with SEO and accessibility (live: https://honey-site-seven.vercel.app)
-7. Accessibility Widget — Production React component, 3 languages, localStorage
-8. Personal Portfolio — This website, Next.js 16 + Tailwind v4 + Framer Motion, full i18n (he/en/ru)
+1. OpenClaw - Autonomous multi-node AI system on VPS + GCP + Oracle Cloud, 11+ services, trading lab with Freqtrade
+2. AI Visual Web Scraper - Electron desktop app for smart data collection with AI analysis and Google Sheets sync
+3. AI Style App - Fashion AI platform (skin-tone analysis, style quizzes) - private project
+4. Political Compass IL - Israeli political compass with Bayesian scoring (live: https://political-compass-il.vercel.app)
+5. Netanya Emergency Teams - Municipal emergency management system (live: https://netanya-civil.vercel.app/emergency)
+6. Honey Shor Portfolio - Motivational speaker site with SEO and accessibility (live: https://honey-site-seven.vercel.app)
+7. Accessibility Widget - Production React component, 3 languages, localStorage
+8. Personal Portfolio - This website, Next.js 16 + Tailwind v4 + Framer Motion, full i18n (he/en/ru)
 
 Contact:
 - Email: eladeladsaa@gmail.com

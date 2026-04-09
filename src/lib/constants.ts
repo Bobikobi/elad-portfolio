@@ -16,9 +16,9 @@ export const projects: Project[] = [
   {
     id: 'openclaw',
     title: {
-      he: 'OpenClaw — מערכת AI אוטונומית',
-      en: 'OpenClaw — Autonomous AI System',
-      ru: 'OpenClaw — Автономная AI Система',
+      he: 'OpenClaw - מערכת AI אוטונומית',
+      en: 'OpenClaw - Autonomous AI System',
+      ru: 'OpenClaw - Автономная AI Система',
     },
     description: {
       he: 'מערכת AI רב-צמתית על Contabo VPS, GCP ו-Oracle Cloud. 11+ שירותי systemd כולל Telegram interceptor עם Gemini function-calling, pipeline משימות מלא, מעבדת מסחר עם 5 אסטרטגיות Freqtrade מקביליות, ומנוע אבולוציה לאופטימיזציה.',
@@ -53,9 +53,9 @@ export const projects: Project[] = [
       ru: 'AI Style App',
     },
     description: {
-      he: 'פלטפורמת ניתוח אופנה עם AI — ניתוח גוון עור, זיהוי מבנה גוף, חידון סגנון והצעות לבוש מותאמות אישית. פרויקט פרטי.',
-      en: 'AI-powered fashion analysis platform — skin-tone analysis, body shape detection, style quizzes, and personalized outfit suggestions. Private project.',
-      ru: 'AI платформа анализа моды — тон кожи, тип фигуры, стилевые квизы и персональные образы. Закрытый проект.',
+      he: 'פלטפורמת ניתוח אופנה עם AI - ניתוח גוון עור, זיהוי מבנה גוף, חידון סגנון והצעות לבוש מותאמות אישית. פרויקט פרטי.',
+      en: 'AI-powered fashion analysis platform - skin-tone analysis, body shape detection, style quizzes, and personalized outfit suggestions. Private project.',
+      ru: 'AI платформа анализа моды - тон кожи, тип фигуры, стилевые квизы и персональные образы. Закрытый проект.',
     },
     category: 'desktop',
     techStack: ['Next.js 14', 'TypeScript', 'Tailwind', 'Supabase', 'Pollinations.ai'],
@@ -98,9 +98,9 @@ export const projects: Project[] = [
   {
     id: 'honey-shor',
     title: {
-      he: 'Honey Shor — דף נחיתה ללקוח',
-      en: 'Honey Shor — Client Landing Page',
-      ru: 'Honey Shor — Лендинг для клиента',
+      he: 'Honey Shor - דף נחיתה ללקוח',
+      en: 'Honey Shor - Client Landing Page',
+      ru: 'Honey Shor - Лендинг для клиента',
     },
     description: {
       he: 'אתר פורטפוליו למרצה. אנימציות scroll חלקות, SEO מובנה עם JSON-LD, הזמנת הרצאות ותאימות נגישות.',
@@ -120,9 +120,9 @@ export const projects: Project[] = [
       ru: 'Личное Портфолио',
     },
     description: {
-      he: 'אתר הפורטפוליו הזה עצמו — Next.js 16, Tailwind CSS v4 ו-Framer Motion. תמיכה ב-3 שפות כולל RTL, ווידג\'ט נגישות מובנה, security headers ועיצוב dark-mode מלא.',
-      en: 'This very portfolio — built with Next.js 16, Tailwind CSS v4, and Framer Motion. Trilingual i18n with RTL, built-in accessibility widget, security headers, and dark-mode design.',
-      ru: 'Этот самый портфолио — Next.js 16, Tailwind CSS v4 и Framer Motion. Поддержка 3 языков с RTL, виджет доступности и security headers.',
+      he: 'אתר הפורטפוליו הזה עצמו - Next.js 16, Tailwind CSS v4 ו-Framer Motion. תמיכה ב-3 שפות כולל RTL, ווידג\'ט נגישות מובנה, security headers ועיצוב dark-mode מלא.',
+      en: 'This very portfolio - built with Next.js 16, Tailwind CSS v4, and Framer Motion. Trilingual i18n with RTL, built-in accessibility widget, security headers, and dark-mode design.',
+      ru: 'Этот самый портфолио - Next.js 16, Tailwind CSS v4 и Framer Motion. Поддержка 3 языков с RTL, виджет доступности и security headers.',
     },
     category: 'web-app',
     techStack: ['Next.js 16', 'TypeScript', 'Tailwind CSS v4', 'Framer Motion', 'i18n'],
@@ -133,19 +133,19 @@ export const projects: Project[] = [
   {
     id: 'shaperz',
     title: {
-      he: 'SHAPERZ — ניהול קהילות ומשפיענים',
-      en: 'SHAPERZ — Community & Influencer Management',
-      ru: 'SHAPERZ — Управление сообществами и инфлюенсерами',
+      he: 'SHAPERZ - ניהול קהילות ומשפיענים',
+      en: 'SHAPERZ - Community & Influencer Management',
+      ru: 'SHAPERZ - Управление сообществами и инфлюенсерами',
     },
     description: {
-      he: 'פלטפורמת שיווק קהילתי — חיבור מותגים ליוצרי תוכן, ניהול נבחרות שגרירים, קמפיינים מבוססי דאטה ואסטרטגיה שיווקית מלאה.',
-      en: 'Community marketing platform — connecting brands with content creators, ambassador management, data-driven campaigns, and full marketing strategy.',
-      ru: 'Платформа маркетинга сообществ — связь брендов с создателями контента, управление амбассадорами и маркетинговая стратегия.',
+      he: 'פלטפורמת שיווק קהילתי - חיבור מותגים ליוצרי תוכן, ניהול נבחרות שגרירים, קמפיינים מבוססי דאטה ואסטרטגיה שיווקית מלאה.',
+      en: 'Community marketing platform - connecting brands with content creators, ambassador management, data-driven campaigns, and full marketing strategy.',
+      ru: 'Платформа маркетинга сообществ - связь брендов с создателями контента, управление амбассадорами и маркетинговая стратегия.',
     },
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion', 'i18n'],
     liveUrl: 'https://shaperz-nine.vercel.app',
-    previewImage: 'https://image.thum.io/get/width/1440/crop/900/https://shaperz-nine.vercel.app/',
+    previewImage: '/images/projects/shaperz-preview.jpg',
     featured: true,
   },
   {

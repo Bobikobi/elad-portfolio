@@ -48,12 +48,12 @@ export default function Navbar() {
             className="flex items-center opacity-90 hover:opacity-100 transition-opacity"
             aria-label="Back to top"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo.png"
-              alt="ES Logo"
-              className="h-9 w-auto"
-            />
+            <span
+              className="text-3xl font-bold tracking-wide text-[var(--color-text-primary)]"
+              style={{ fontFamily: "'Glamora', serif" }}
+            >
+              E.S
+            </span>
           </button>
 
           {/* Desktop links */}
