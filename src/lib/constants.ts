@@ -130,6 +130,23 @@ export const projects: Project[] = [
     featured: true,
   },
   {
+    id: 'shaperz',
+    title: {
+      he: 'SHAPERZ — ניהול קהילות ומשפיענים',
+      en: 'SHAPERZ — Community & Influencer Management',
+      ru: 'SHAPERZ — Управление сообществами и инфлюенсерами',
+    },
+    description: {
+      he: 'פלטפורמת שיווק קהילתי — חיבור מותגים ליוצרי תוכן, ניהול נבחרות שגרירים, קמפיינים מבוססי דאטה ואסטרטגיה שיווקית מלאה.',
+      en: 'Community marketing platform — connecting brands with content creators, ambassador management, data-driven campaigns, and full marketing strategy.',
+      ru: 'Платформа маркетинга сообществ — связь брендов с создателями контента, управление амбассадорами и маркетинговая стратегия.',
+    },
+    category: 'web-app',
+    techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion', 'i18n'],
+    liveUrl: 'https://shaperz-nine.vercel.app',
+    featured: true,
+  },
+  {
     id: 'accessibility-widget',
     title: {
       he: 'Accessibility Widget',
