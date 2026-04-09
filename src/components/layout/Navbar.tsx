@@ -45,14 +45,14 @@ export default function Navbar() {
           {/* Logo */}
           <button
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="opacity-90 hover:opacity-100 transition-opacity"
+            className="flex items-center opacity-90 hover:opacity-100 transition-opacity"
             aria-label="Back to top"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo.png"
               alt="ES Logo"
-              className="h-7 w-auto object-contain"
+              className="h-6 w-auto"
             />
           </button>
 

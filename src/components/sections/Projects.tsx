@@ -146,20 +146,30 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
             aria-label={`Open ${project.title[locale]}`}
           >
             <div className="relative h-36 overflow-hidden bg-[var(--color-bg-tertiary)]">
-              <iframe
-                src={project.liveUrl}
-                title={project.title[locale]}
-                style={{
-                  width: '1440px',
-                  height: '900px',
-                  transform: 'scale(0.27)',
-                  transformOrigin: 'top left',
-                  border: 'none',
-                  pointerEvents: 'none',
-                }}
-                tabIndex={-1}
-                aria-hidden="true"
-              />
+              {project.previewImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={project.previewImage}
+                  alt={project.title[locale]}
+                  className="w-full h-full object-cover object-top"
+                  loading="lazy"
+                />
+              ) : (
+                <iframe
+                  src={project.liveUrl}
+                  title={project.title[locale]}
+                  style={{
+                    width: '1440px',
+                    height: '900px',
+                    transform: 'scale(0.27)',
+                    transformOrigin: 'top left',
+                    border: 'none',
+                    pointerEvents: 'none',
+                  }}
+                  tabIndex={-1}
+                  aria-hidden="true"
+                />
+              )}
               <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
               <div className="absolute bottom-2 right-2 opacity-0 group-hover/preview:opacity-100 transition-opacity">
                 <span className="inline-flex items-center gap-1 text-[10px] text-white bg-black/60 rounded px-2 py-0.5 backdrop-blur-sm">

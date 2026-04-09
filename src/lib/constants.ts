@@ -8,6 +8,7 @@ export interface Project {
   techStack: string[];
   liveUrl?: string;
   githubUrl?: string;
+  previewImage?: string;
   featured: boolean;
 }
 
@@ -144,6 +145,7 @@ export const projects: Project[] = [
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion', 'i18n'],
     liveUrl: 'https://shaperz-nine.vercel.app',
+    previewImage: 'https://image.thum.io/get/width/1440/crop/900/https://shaperz-nine.vercel.app/',
     featured: true,
   },
   {

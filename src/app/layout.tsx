@@ -21,11 +21,6 @@ const heebo = Heebo({
 });
 
 export const metadata: Metadata = {
-  icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
-    apple: '/favicon.png',
-  },
   title: "Elad Saadon | Full-Stack Developer & AI Systems Architect",
   description:
     "Young developer specializing in full-stack web development, AI integration, cloud automation, and civic-tech solutions. Building real solutions that make a difference.",
