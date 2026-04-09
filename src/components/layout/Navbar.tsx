@@ -52,7 +52,7 @@ export default function Navbar() {
             <img
               src="/logo.png"
               alt="ES Logo"
-              className="h-11 w-auto object-contain ms-4"
+              className="h-14 w-auto object-contain ms-4"
             />
           </button>
 
