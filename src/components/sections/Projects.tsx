@@ -146,19 +146,13 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
             aria-label={`Open ${project.title[locale]}`}
           >
             <div className="relative h-36 overflow-hidden bg-[var(--color-bg-tertiary)]">
-              {project.previewImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={project.previewImage}
-                  alt={project.title[locale]}
-                  className="w-full h-full object-cover object-top"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-[var(--color-accent-glow)] via-[var(--color-bg-tertiary)] to-[var(--color-gradient-end)]/10 flex items-center justify-center">
-                  <ExternalLink size={24} className="text-[var(--color-text-tertiary)] opacity-40" />
-                </div>
-              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={project.previewImage ?? `https://image.thum.io/get/width/600/crop/400/noanimate/${project.liveUrl}`}
+                alt={project.title[locale]}
+                className="w-full h-full object-cover object-top"
+                loading="lazy"
+              />
               <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
               <div className="absolute bottom-2 right-2 opacity-0 group-hover/preview:opacity-100 transition-opacity">
                 <span className="inline-flex items-center gap-1 text-[10px] text-white bg-black/60 rounded px-2 py-0.5 backdrop-blur-sm">
