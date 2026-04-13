@@ -50,7 +50,7 @@ export default function TechStack() {
                       damping: 10,
                       delay: 0.3 + catIdx * 0.1 + itemIdx * 0.03,
                     }}
-                    className="text-xs font-mono px-3 py-1.5 rounded-full bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:border-[var(--color-border-subtle)] transition-colors"
+                    className="text-xs font-mono px-3 py-1.5 rounded-full bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:border-[var(--color-border-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors"
                   >
                     {item}
                   </motion.span>

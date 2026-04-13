@@ -155,20 +155,9 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
                   loading="lazy"
                 />
               ) : (
-                <iframe
-                  src={project.liveUrl}
-                  title={project.title[locale]}
-                  style={{
-                    width: '1440px',
-                    height: '900px',
-                    transform: 'scale(0.27)',
-                    transformOrigin: 'top left',
-                    border: 'none',
-                    pointerEvents: 'none',
-                  }}
-                  tabIndex={-1}
-                  aria-hidden="true"
-                />
+                <div className="w-full h-full bg-gradient-to-br from-[var(--color-accent-glow)] via-[var(--color-bg-tertiary)] to-[var(--color-gradient-end)]/10 flex items-center justify-center">
+                  <ExternalLink size={24} className="text-[var(--color-text-tertiary)] opacity-40" />
+                </div>
               )}
               <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
               <div className="absolute bottom-2 right-2 opacity-0 group-hover/preview:opacity-100 transition-opacity">

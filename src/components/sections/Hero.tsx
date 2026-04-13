@@ -94,18 +94,18 @@ export default function Hero() {
 
           {/* CTA */}
           <div className="flex flex-wrap gap-4 mb-10">
-            <button
-              onClick={() => document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' })}
-              className="px-6 py-3 rounded-lg bg-[var(--color-accent)] text-white font-medium text-sm hover:bg-[var(--color-accent-hover)] hover:shadow-[0_0_20px_var(--color-accent-glow)] hover:-translate-y-0.5 active:scale-[0.97] transition-all"
+            <a
+              href="#projects"
+              className="px-6 py-3 rounded-lg bg-[var(--color-accent)] text-white font-medium text-sm hover:bg-[var(--color-accent-hover)] hover:shadow-[0_0_20px_var(--color-accent-glow)] hover:-translate-y-0.5 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)] transition-all"
             >
               {t('hero.cta.work')}
-            </button>
-            <button
-              onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
-              className="px-6 py-3 rounded-lg border border-[var(--color-border-subtle)] text-[var(--color-text-secondary)] font-medium text-sm hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)] hover:-translate-y-0.5 transition-all"
+            </a>
+            <a
+              href="#contact"
+              className="px-6 py-3 rounded-lg border border-[var(--color-border-subtle)] text-[var(--color-text-secondary)] font-medium text-sm hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)] transition-all"
             >
               {t('hero.cta.contact')}
-            </button>
+            </a>
           </div>
 
           {/* Social icons */}
@@ -117,7 +117,7 @@ export default function Hero() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={s.label}
-                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:scale-110 transition-all"
+                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-all"
               >
                 <s.icon size={20} strokeWidth={1.5} />
               </a>
