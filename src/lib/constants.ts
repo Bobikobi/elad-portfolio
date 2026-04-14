@@ -144,7 +144,7 @@ export const projects: Project[] = [
     },
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion', 'i18n'],
-    liveUrl: 'https://shaperz-nine.vercel.app',
+    liveUrl: 'https://www.shaperz.co.il/',
     previewImage: '/images/projects/shaperz-preview.jpg',
     featured: true,
   },
