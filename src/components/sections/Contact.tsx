@@ -64,6 +64,15 @@ export default function Contact() {
                 <span className="text-sm text-[var(--color-text-secondary)]">github.com/Bobikobi</span>
               </a>
               <a
+                href="https://www.linkedin.com/in/elad-saadon-184809281/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors"
+              >
+                <LinkedinIcon size={18} className="text-[var(--color-accent)]" />
+                <span className="text-sm text-[var(--color-text-secondary)]">LinkedIn</span>
+              </a>
+              <a
                 href="https://wa.me/972545423380"
                 target="_blank"
                 rel="noopener noreferrer"

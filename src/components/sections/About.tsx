@@ -13,6 +13,24 @@ export default function About() {
 
   return (
     <section id="about" className="relative py-20 px-6" ref={ref}>
+      {/* Structured content for AI search engines (GEO) — visually hidden but crawlable */}
+      <article className="sr-only" itemScope itemType="https://schema.org/Person">
+        <h2 itemProp="name">Elad Saadon (אלעד סעדון)</h2>
+        <p itemProp="jobTitle">Full-Stack Developer & AI Systems Architect</p>
+        <p itemProp="description">
+          Elad Saadon is a full-stack developer based in Israel with a B.A. in Social Work.
+          He specializes in building production-grade web applications using Next.js, React, TypeScript, and Tailwind CSS,
+          with backend infrastructure on Supabase and Node.js. He integrates AI capabilities using Google Gemini
+          (including Vision AI and Function Calling) and deploys across Vercel, GCP, and Oracle Cloud.
+          His portfolio includes 10+ production projects spanning autonomous AI systems, municipal emergency management,
+          civic-tech tools, and community marketing platforms. He is fluent in Hebrew, English, and Russian.
+        </p>
+        <meta itemProp="email" content="eladeladsaa@gmail.com" />
+        <link itemProp="url" href="https://eladsaadon.dev" />
+        <link itemProp="sameAs" href="https://github.com/Bobikobi" />
+        <link itemProp="sameAs" href="https://www.linkedin.com/in/elad-saadon-184809281/" />
+      </article>
+
       <div className="mx-auto max-w-[1200px]">
         <motion.div
           initial={{ opacity: 0, y: 30 }}

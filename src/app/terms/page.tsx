@@ -1,4 +1,11 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'תנאי שימוש',
+  description: 'תנאי השימוש של אתר הפורטפוליו של אלעד סעדון.',
+  alternates: { canonical: '/terms' },
+};
 
 export default function TermsPage() {
   return (

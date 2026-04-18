@@ -11,12 +11,12 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https: https://image.thum.io",
-      "connect-src 'self' https:",
-      "frame-src 'self' https://*.vercel.app https://netanya-civil.vercel.app https://political-compass-il.vercel.app https://honey-site-seven.vercel.app",
+      "connect-src 'self' https: https://www.google-analytics.com https://*.analytics.google.com",
+      "frame-src 'self' https://*.vercel.app https://netanya-civil.vercel.app https://political-compass-il.vercel.app https://honey-site-seven.vercel.app https://www.shaperz.co.il",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -30,6 +30,19 @@ const nextConfig: NextConfig = {
       {
         source: '/(.*)',
         headers: securityHeaders,
+      },
+      // Cache static assets aggressively for Core Web Vitals
+      {
+        source: '/fonts/(.*)',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/images/(.*)',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
       },
     ];
   },
