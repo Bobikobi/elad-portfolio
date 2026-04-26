@@ -7,15 +7,7 @@ import { projects, filterCategories, filterKeys, type FilterCategory } from '@/l
 import GradientBar from '@/components/ui/GradientBar';
 
 function getProjectPreviewSrc(project: typeof projects[0]) {
-  if (project.previewImage) {
-    return project.previewImage;
-  }
-
-  if (!project.liveUrl) {
-    return null;
-  }
-
-  return `https://image.thum.io/get/width/1200/crop/900/noanimate/${project.liveUrl}`;
+  return project.previewImage ?? null;
 }
 
 export default function Projects() {

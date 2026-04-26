@@ -76,6 +76,7 @@ export const projects: Project[] = [
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Supabase', 'Recharts', 'Framer Motion'],
     liveUrl: 'https://political-compass-il.vercel.app',
+    previewImage: '/images/projects/political-compass-preview.jpg',
     featured: true,
   },
   {
@@ -93,6 +94,7 @@ export const projects: Project[] = [
     category: 'web-app',
     techStack: ['Next.js 14', 'TypeScript', 'Supabase', 'Zod', 'i18n'],
     liveUrl: 'https://netanya-civil.vercel.app/emergency',
+    previewImage: '/images/projects/emergency-teams-preview.jpg',
     featured: true,
   },
   {
@@ -110,6 +112,7 @@ export const projects: Project[] = [
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion'],
     liveUrl: 'https://honey-site-seven.vercel.app',
+    previewImage: '/images/projects/honey-shor-preview.jpg',
     featured: false,
   },
   {
@@ -128,6 +131,7 @@ export const projects: Project[] = [
     techStack: ['Next.js 16', 'TypeScript', 'Tailwind CSS v4', 'Framer Motion', 'i18n'],
     liveUrl: 'https://elad-s-portfolio.vercel.app',
     githubUrl: 'https://github.com/Bobikobi/elad-portfolio',
+    previewImage: '/images/projects/elad-portfolio-preview.jpg',
     featured: true,
   },
   {
