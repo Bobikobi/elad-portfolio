@@ -81,6 +81,7 @@ export default function Projects() {
 function ProjectCard({ project, locale, index }: { project: typeof projects[0]; locale: 'he' | 'en' | 'ru'; index: number }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const previewSrc = getProjectPreviewSrc(project);
+  const [previewUnavailable, setPreviewUnavailable] = useState(false);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!cardRef.current) return;
@@ -159,15 +160,45 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
             aria-label={`Open ${project.title[locale]}`}
           >
             <div className="relative h-40 overflow-hidden bg-[var(--color-bg-tertiary)] sm:h-36">
-              {/* Image previews are more reliable than iframes on mobile and cheaper to render. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={previewSrc}
-                alt={project.title[locale]}
-                className="w-full h-full object-cover object-top"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
+              {previewUnavailable ? (
+                <div className="flex h-full w-full flex-col justify-between bg-[linear-gradient(135deg,rgba(139,92,246,0.22),rgba(6,182,212,0.14))] p-4">
+                  <div className="flex items-center justify-between gap-3 text-[10px] text-[var(--color-text-tertiary)]">
+                    <span className="rounded-full border border-[var(--color-border-default)] bg-black/20 px-2 py-1 uppercase tracking-[0.18em]">
+                      {project.category}
+                    </span>
+                    <span className="truncate">{new URL(project.liveUrl).hostname}</span>
+                  </div>
+                  <div>
+                    <div className="mb-2 text-sm font-semibold text-[var(--color-text-primary)]">
+                      {project.title[locale]}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {project.techStack.slice(0, 3).map((tech) => (
+                        <span
+                          key={tech}
+                          className="rounded-full border border-[var(--color-border-default)] bg-black/20 px-2 py-1 text-[10px] text-[var(--color-text-secondary)]"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Image previews are more reliable than iframes on mobile and cheaper to render. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previewSrc}
+                    alt={project.title[locale]}
+                    className="w-full h-full object-cover object-top"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    onError={() => setPreviewUnavailable(true)}
+                  />
+                  <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(9,9,11,0.28),transparent_45%)]" />
+                </>
+              )}
               <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
               <div className="absolute bottom-2 right-2 opacity-100 transition-opacity md:opacity-0 md:group-hover/preview:opacity-100">
                 <span className="inline-flex items-center gap-1 text-[10px] text-white bg-black/60 rounded px-2 py-0.5 backdrop-blur-sm">
