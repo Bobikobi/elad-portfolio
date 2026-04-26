@@ -6,6 +6,18 @@ import { useI18n } from '@/lib/i18n';
 import { projects, filterCategories, filterKeys, type FilterCategory } from '@/lib/constants';
 import GradientBar from '@/components/ui/GradientBar';
 
+function getProjectPreviewSrc(project: typeof projects[0]) {
+  if (project.previewImage) {
+    return project.previewImage;
+  }
+
+  if (!project.liveUrl) {
+    return null;
+  }
+
+  return `https://image.thum.io/get/width/1200/crop/900/noanimate/${project.liveUrl}`;
+}
+
 export default function Projects() {
   const { t, locale } = useI18n();
   const ref = useRef(null);
@@ -68,6 +80,7 @@ export default function Projects() {
 
 function ProjectCard({ project, locale, index }: { project: typeof projects[0]; locale: 'he' | 'en' | 'ru'; index: number }) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const previewSrc = getProjectPreviewSrc(project);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!cardRef.current) return;
@@ -137,7 +150,7 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
         </div>
 
         {/* Mini browser preview */}
-        {project.liveUrl && (
+        {project.liveUrl && previewSrc && (
           <a
             href={project.liveUrl}
             target="_blank"
@@ -145,34 +158,18 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
             className="relative block rounded-lg overflow-hidden border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors mb-4 group/preview"
             aria-label={`Open ${project.title[locale]}`}
           >
-            <div className="relative h-36 overflow-hidden bg-[var(--color-bg-tertiary)]">
-              {project.previewImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={project.previewImage}
-                  alt={project.title[locale]}
-                  className="w-full h-full object-cover object-top"
-                  loading="lazy"
-                />
-              ) : (
-                <iframe
-                  src={project.liveUrl}
-                  title={project.title[locale]}
-                  style={{
-                    width: '1440px',
-                    height: '900px',
-                    transform: 'scale(0.27)',
-                    transformOrigin: 'top left',
-                    border: 'none',
-                    pointerEvents: 'none',
-                  }}
-                  tabIndex={-1}
-                  aria-hidden="true"
-                  loading="lazy"
-                />
-              )}
+            <div className="relative h-40 overflow-hidden bg-[var(--color-bg-tertiary)] sm:h-36">
+              {/* Image previews are more reliable than iframes on mobile and cheaper to render. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewSrc}
+                alt={project.title[locale]}
+                className="w-full h-full object-cover object-top"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
               <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
-              <div className="absolute bottom-2 right-2 opacity-0 group-hover/preview:opacity-100 transition-opacity">
+              <div className="absolute bottom-2 right-2 opacity-100 transition-opacity md:opacity-0 md:group-hover/preview:opacity-100">
                 <span className="inline-flex items-center gap-1 text-[10px] text-white bg-black/60 rounded px-2 py-0.5 backdrop-blur-sm">
                   <ExternalLink size={9} /> פתח
                 </span>
