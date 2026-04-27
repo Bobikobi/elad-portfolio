@@ -25,11 +25,11 @@ const heebo = Heebo({
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.eladsaadon.dev"),
   title: {
-    default: "אלעד סעדון | Elad Saadon | Full-Stack Developer & AI Systems Architect",
+    default: "אלעד סעדון | מפתח Full-Stack וארכיטקט מערכות AI",
     template: "%s | Elad Saadon",
   },
   description:
-    "אלעד סעדון הוא מפתח Full-Stack וארכיטקט מערכות AI מישראל. Elad Saadon is a full-stack developer and AI systems architect from Israel, specializing in Next.js, React, TypeScript, AI integration, and cloud automation.",
+    "אלעד סעדון הוא מפתח Full-Stack וארכיטקט מערכות AI מישראל, עם התמחות ב-Next.js, React, TypeScript, אינטגרציית AI ואוטומציה בענן.",
   keywords: [
     "Elad Saadon",
     "אלעד סעדון",
@@ -58,20 +58,22 @@ export const metadata: Metadata = {
       "he-IL": "https://www.eladsaadon.dev",
       "en-US": "https://www.eladsaadon.dev/en",
       "ru-RU": "https://www.eladsaadon.dev/ru",
+      "x-default": "https://www.eladsaadon.dev",
     },
   },
   icons: {
     icon: [
       { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/favicon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/favicon.png", sizes: "512x512", type: "image/png" },
     ],
     shortcut: [{ url: "/favicon.ico", type: "image/x-icon" }],
     apple: [{ url: "/favicon.png", sizes: "512x512", type: "image/png" }],
   },
   openGraph: {
-    title: "אלעד סעדון | Elad Saadon | Full-Stack Developer & AI Systems Architect",
+    title: "אלעד סעדון | מפתח Full-Stack וארכיטקט מערכות AI",
     description:
-      "אלעד סעדון | Full-stack developer specializing in Next.js, AI integration, cloud automation, and civic-tech solutions.",
+      "אלעד סעדון הוא מפתח Full-Stack מישראל המתמחה ב-Next.js, אינטגרציית AI, אוטומציה בענן ופתרונות civic-tech.",
     type: "website",
     locale: "he_IL",
     alternateLocale: ["en_US", "ru_RU"],
@@ -81,9 +83,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "אלעד סעדון | Elad Saadon | Full-Stack Developer & AI Systems Architect",
+    title: "אלעד סעדון | מפתח Full-Stack וארכיטקט מערכות AI",
     description:
-      "אלעד סעדון | Full-stack developer specializing in Next.js, AI integration, cloud automation, and civic-tech solutions.",
+      "אלעד סעדון הוא מפתח Full-Stack מישראל המתמחה ב-Next.js, אינטגרציית AI, אוטומציה בענן ופתרונות civic-tech.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -132,9 +134,7 @@ const jsonLd = {
       url: "https://www.eladsaadon.dev",
       logo: {
         "@type": "ImageObject",
-        url: "https://www.eladsaadon.dev/icon.png",
-        width: 512,
-        height: 512
+        url: "https://www.eladsaadon.dev/logo.png"
       },
       sameAs: [
         "https://github.com/Bobikobi",
