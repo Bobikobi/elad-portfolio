@@ -62,7 +62,11 @@ def make_favicon():
     img.resize((180, 180), Image.LANCZOS).save(app_apple_icon, "PNG")
     print(f"Saved apple-icon.png: {app_apple_icon}")
 
-    # Save Google-friendly PNG favicon (192x192)
+    # Save Google-friendly PNG favicon (48x48 and 192x192)
+    out_png_48 = os.path.join(OUT_DIR, "favicon-48.png")
+    img.resize((48, 48), Image.LANCZOS).save(out_png_48, "PNG")
+    print(f"Saved favicon-48.png: {out_png_48}")
+
     out_png_192 = os.path.join(OUT_DIR, "favicon-192.png")
     img.resize((192, 192), Image.LANCZOS).save(out_png_192, "PNG")
     print(f"Saved favicon-192.png: {out_png_192}")
@@ -73,10 +77,10 @@ def make_favicon():
     img.save(out_ico, "ICO", sizes=icon_sizes)
     print(f"Saved favicon.ico: {out_ico}")
 
-    # Keep app favicon in sync with public/favicon.ico
-    app_favicon = os.path.join(os.path.dirname(__file__), "src", "app", "favicon.ico")
-    img.save(app_favicon, "ICO", sizes=icon_sizes)
-    print(f"Saved app favicon.ico: {app_favicon}")
+    # Keep app icon routes in sync with primary favicon design
+    app_favicon_png = os.path.join(os.path.dirname(__file__), "src", "app", "icon.png")
+    img.resize((512, 512), Image.LANCZOS).save(app_favicon_png, "PNG")
+    print(f"Saved app icon.png: {app_favicon_png}")
 
 
 if __name__ == "__main__":
