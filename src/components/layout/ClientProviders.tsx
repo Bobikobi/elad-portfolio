@@ -4,11 +4,13 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
 import ChatWidget from '@/components/ui/ChatWidget';
+import LocaleRouteSync from '@/components/seo/LocaleRouteSync';
 
 function InnerLayout({ children }: { children: React.ReactNode }) {
   const { locale } = useI18n();
   return (
     <>
+      <LocaleRouteSync />
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>

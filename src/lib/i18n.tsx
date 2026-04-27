@@ -22,7 +22,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('he');
 
   useEffect(() => {
+    const pathLocale = window.location.pathname.split('/')[1] as Locale | undefined;
     const saved = localStorage.getItem('locale') as Locale | null;
+
+    if (pathLocale && ['he', 'en', 'ru'].includes(pathLocale)) {
+      setLocaleState(pathLocale);
+      localStorage.setItem('locale', pathLocale);
+      return;
+    }
+
     if (saved && ['he', 'en', 'ru'].includes(saved)) {
       setLocaleState(saved);
     }

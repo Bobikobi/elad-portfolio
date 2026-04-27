@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = 'https://www.eladsaadon.dev';
-  const languages = { he: `${base}`, en: `${base}`, ru: `${base}` };
+  const languages = { he: `${base}`, en: `${base}/en`, ru: `${base}/ru` };
 
   return [
     {
@@ -13,12 +13,26 @@ export default function sitemap(): MetadataRoute.Sitemap {
       alternates: { languages },
     },
     {
+      url: `${base}/en`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.9,
+      alternates: { languages },
+    },
+    {
+      url: `${base}/ru`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+      alternates: { languages },
+    },
+    {
       url: `${base}/accessibility`,
       lastModified: new Date(),
       changeFrequency: 'yearly',
       priority: 0.3,
       alternates: { languages: { he: `${base}/accessibility`, en: `${base}/accessibility`, ru: `${base}/accessibility` } },
-    },
+    }
     {
       url: `${base}/privacy`,
       lastModified: new Date(),

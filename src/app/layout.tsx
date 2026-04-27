@@ -56,8 +56,8 @@ export const metadata: Metadata = {
     canonical: "https://www.eladsaadon.dev",
     languages: {
       "he-IL": "https://www.eladsaadon.dev",
-      "en-US": "https://www.eladsaadon.dev",
-      "ru-RU": "https://www.eladsaadon.dev",
+      "en-US": "https://www.eladsaadon.dev/en",
+      "ru-RU": "https://www.eladsaadon.dev/ru",
     },
   },
   icons: {
@@ -112,7 +112,7 @@ const jsonLd = {
       description:
         "Hebrew and English portfolio of Elad Saadon: full-stack web development, AI integration, cloud automation, and civic-tech solutions.",
       inLanguage: ["he", "en", "ru"],
-      publisher: { "@id": "https://www.eladsaadon.dev/#person" },
+      publisher: { "@id": "https://www.eladsaadon.dev/#organization" },
     },
     {
       "@type": "ProfilePage",
@@ -124,6 +124,22 @@ const jsonLd = {
       dateCreated: "2026-04-05",
       dateModified: new Date().toISOString().split("T")[0],
       inLanguage: ["he", "en", "ru"],
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://www.eladsaadon.dev/#organization",
+      name: "Elad Saadon",
+      url: "https://www.eladsaadon.dev",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://www.eladsaadon.dev/icon.png",
+        width: 512,
+        height: 512
+      },
+      sameAs: [
+        "https://github.com/Bobikobi",
+        "https://www.linkedin.com/in/elad-saadon-184809281/"
+      ]
     },
     {
       "@type": "Person",
