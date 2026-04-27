@@ -25,11 +25,11 @@ const heebo = Heebo({
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.eladsaadon.dev"),
   title: {
-    default: "Elad Saadon | Full-Stack Developer & AI Systems Architect",
+    default: "אלעד סעדון | Elad Saadon | Full-Stack Developer & AI Systems Architect",
     template: "%s | Elad Saadon",
   },
   description:
-    "Elad Saadon (אלעד סעדון) is a full-stack developer and AI systems architect from Israel. Specializes in Next.js, React, TypeScript, Google Gemini AI integration, cloud automation (GCP, Oracle Cloud, Vercel), and civic-tech solutions. Building real products that make a difference.",
+    "אלעד סעדון הוא מפתח Full-Stack וארכיטקט מערכות AI מישראל. Elad Saadon is a full-stack developer and AI systems architect from Israel, specializing in Next.js, React, TypeScript, AI integration, and cloud automation.",
   keywords: [
     "Elad Saadon",
     "אלעד סעדון",
@@ -60,10 +60,18 @@ export const metadata: Metadata = {
       "ru-RU": "https://www.eladsaadon.dev",
     },
   },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/favicon.png", sizes: "512x512", type: "image/png" },
+    ],
+    shortcut: [{ url: "/favicon.ico", type: "image/x-icon" }],
+    apple: [{ url: "/favicon.png", sizes: "512x512", type: "image/png" }],
+  },
   openGraph: {
-    title: "Elad Saadon | Full-Stack Developer & AI Systems Architect",
+    title: "אלעד סעדון | Elad Saadon | Full-Stack Developer & AI Systems Architect",
     description:
-      "Full-stack developer specializing in Next.js, AI integration, cloud automation, and civic-tech solutions. Building real products that make a difference.",
+      "אלעד סעדון | Full-stack developer specializing in Next.js, AI integration, cloud automation, and civic-tech solutions.",
     type: "website",
     locale: "he_IL",
     alternateLocale: ["en_US", "ru_RU"],
@@ -73,9 +81,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Elad Saadon | Full-Stack Developer & AI Systems Architect",
+    title: "אלעד סעדון | Elad Saadon | Full-Stack Developer & AI Systems Architect",
     description:
-      "Full-stack developer specializing in Next.js, AI integration, cloud automation, and civic-tech solutions.",
+      "אלעד סעדון | Full-stack developer specializing in Next.js, AI integration, cloud automation, and civic-tech solutions.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -98,10 +106,11 @@ const jsonLd = {
     {
       "@type": "WebSite",
       "@id": "https://www.eladsaadon.dev/#website",
-      name: "Elad Saadon Portfolio",
+      name: "Elad Saadon Portfolio | פורטפוליו אלעד סעדון",
+      alternateName: ["Elad Saadon", "אלעד סעדון"],
       url: "https://www.eladsaadon.dev",
       description:
-        "Full-stack web development, AI integration, cloud automation, and civic-tech solutions.",
+        "Hebrew and English portfolio of Elad Saadon: full-stack web development, AI integration, cloud automation, and civic-tech solutions.",
       inLanguage: ["he", "en", "ru"],
       publisher: { "@id": "https://www.eladsaadon.dev/#person" },
     },
@@ -109,18 +118,18 @@ const jsonLd = {
       "@type": "ProfilePage",
       "@id": "https://www.eladsaadon.dev/#profilepage",
       url: "https://www.eladsaadon.dev",
-      name: "Elad Saadon — Full-Stack Developer & AI Systems Architect",
+      name: "אלעד סעדון | Elad Saadon — Full-Stack Developer & AI Systems Architect",
       isPartOf: { "@id": "https://www.eladsaadon.dev/#website" },
       mainEntity: { "@id": "https://www.eladsaadon.dev/#person" },
       dateCreated: "2026-04-05",
       dateModified: new Date().toISOString().split("T")[0],
-      inLanguage: "he",
+      inLanguage: ["he", "en", "ru"],
     },
     {
       "@type": "Person",
       "@id": "https://www.eladsaadon.dev/#person",
-      name: "Elad Saadon",
-      alternateName: ["אלעד סעדון", "Элад Саадон"],
+      name: "אלעד סעדון (Elad Saadon)",
+      alternateName: ["Elad Saadon", "Элад Саадон"],
       url: "https://www.eladsaadon.dev",
       image: {
         "@type": "ImageObject",
@@ -340,7 +349,7 @@ export default function RootLayout({
         <link rel="me" href="https://www.linkedin.com/in/elad-saadon-184809281/" />
         <meta name="author" content="Elad Saadon" />
         {/* Person entity hint for search engines */}
-        <meta name="subject" content="Elad Saadon — Full-Stack Developer &amp; AI Systems Architect" />
+        <meta name="subject" content="אלעד סעדון | Elad Saadon — Full-Stack Developer &amp; AI Systems Architect" />
         <meta name="classification" content="Personal Portfolio" />
         <meta name="coverage" content="Israel" />
         <meta name="language" content="Hebrew, English, Russian" />
