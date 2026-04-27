@@ -25,6 +25,17 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      // Redirect non-www to www (canonical domain)
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'eladsaadon.dev' }],
+        destination: 'https://www.eladsaadon.dev/:path*',
+        permanent: true, // 308 redirect — preserves SEO juice
+      },
+    ];
+  },
   async headers() {
     return [
       {

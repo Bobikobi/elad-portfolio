@@ -15,20 +15,26 @@ export default function About() {
     <section id="about" className="relative py-20 px-6" ref={ref}>
       {/* Structured content for AI search engines (GEO) — visually hidden but crawlable */}
       <article className="sr-only" itemScope itemType="https://schema.org/Person">
-        <h2 itemProp="name">Elad Saadon (אלעד סעדון)</h2>
+        <h2 itemProp="name">Elad Saadon</h2>
+        <span itemProp="alternateName">אלעד סעדון</span>
         <p itemProp="jobTitle">Full-Stack Developer & AI Systems Architect</p>
         <p itemProp="description">
-          Elad Saadon is a full-stack developer based in Israel with a B.A. in Social Work.
-          He specializes in building production-grade web applications using Next.js, React, TypeScript, and Tailwind CSS,
-          with backend infrastructure on Supabase and Node.js. He integrates AI capabilities using Google Gemini
-          (including Vision AI and Function Calling) and deploys across Vercel, GCP, and Oracle Cloud.
-          His portfolio includes 10+ production projects spanning autonomous AI systems, municipal emergency management,
+          Elad Saadon (אלעד סעדון) is a full-stack developer and AI systems architect based in Israel.
+          He holds a B.A. in Social Work and specializes in building production-grade web applications
+          using Next.js, React, TypeScript, and Tailwind CSS, with backend infrastructure on Supabase
+          and Node.js. He integrates AI capabilities using Google Gemini (including Vision AI and
+          Function Calling) and deploys across Vercel, GCP, and Oracle Cloud. His portfolio includes
+          10+ production projects spanning autonomous AI systems, municipal emergency management,
           civic-tech tools, and community marketing platforms. He is fluent in Hebrew, English, and Russian.
         </p>
         <meta itemProp="email" content="eladeladsaa@gmail.com" />
-        <link itemProp="url" href="https://eladsaadon.dev" />
+        <link itemProp="url" href="https://www.eladsaadon.dev" />
         <link itemProp="sameAs" href="https://github.com/Bobikobi" />
         <link itemProp="sameAs" href="https://www.linkedin.com/in/elad-saadon-184809281/" />
+        <link itemProp="sameAs" href="https://www.eladsaadon.dev" />
+        <span itemProp="nationality" itemScope itemType="https://schema.org/Country">
+          <meta itemProp="name" content="Israel" />
+        </span>
       </article>
 
       <div className="mx-auto max-w-[1200px]">

@@ -1,17 +1,17 @@
 /**
- * Downloads project preview screenshots from thum.io and saves them locally.
+ * Captures project preview screenshots using system Chrome via puppeteer-core.
  * Run: node scripts/capture-previews.mjs
  */
-import https from 'https';
-import http from 'http';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.join(__dirname, '..', 'public', 'images', 'projects');
-
 fs.mkdirSync(outputDir, { recursive: true });
+
+const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const projects = [
   { id: 'political-compass', url: 'https://political-compass-il.vercel.app' },
@@ -20,42 +20,48 @@ const projects = [
   { id: 'elad-portfolio',    url: 'https://elad-s-portfolio.vercel.app' },
 ];
 
-function downloadImage(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    const protocol = url.startsWith('https') ? https : http;
-    const req = protocol.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (response) => {
-      if (response.statusCode === 301 || response.statusCode === 302) {
-        file.close();
-        fs.unlink(dest, () => {});
-        return downloadImage(response.headers.location, dest).then(resolve).catch(reject);
-      }
-      if (response.statusCode !== 200) {
-        file.close();
-        fs.unlink(dest, () => {});
-        return reject(new Error(`HTTP ${response.statusCode}`));
-      }
-      response.pipe(file);
-      file.on('finish', () => file.close(resolve));
+async function capture(browser, project) {
+  const page = await browser.newPage();
+  try {
+    // 1440x900 desktop viewport — same as the original iframe dimensions
+    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+    // Navigate and wait until network is idle (images/fonts loaded)
+    await page.goto(project.url, { waitUntil: 'networkidle2', timeout: 30000 });
+    // Extra wait for CSS animations / JS hydration to settle
+    await new Promise(r => setTimeout(r, 2500));
+    const dest = path.join(outputDir, `${project.id}-preview.jpg`);
+    await page.screenshot({
+      path: dest,
+      type: 'jpeg',
+      quality: 88,
+      clip: { x: 0, y: 0, width: 1440, height: 900 },
     });
-    req.on('error', (err) => { fs.unlink(dest, () => {}); reject(err); });
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error('timeout')); });
-  });
+    const kb = Math.round(fs.statSync(dest).size / 1024);
+    console.log(`✓  ${project.id}  (${kb} KB)`);
+  } finally {
+    await page.close();
+  }
 }
 
 async function main() {
-  for (const project of projects) {
-    const dest = path.join(outputDir, `${project.id}-preview.jpg`);
-    // width=1200, crop=630 → 1200×630 screenshot (same as OG image ratio)
-    const thumbUrl = `https://image.thum.io/get/width/1200/crop/630/noanimate/allowJPG/${project.url}`;
-    process.stdout.write(`Capturing ${project.id}... `);
-    try {
-      await downloadImage(thumbUrl, dest);
-      console.log('✓');
-    } catch (err) {
-      console.log(`✗ (${err.message})`);
+  const browser = await puppeteer.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+  try {
+    for (const project of projects) {
+      process.stdout.write(`Capturing ${project.id}... `);
+      try {
+        await capture(browser, project);
+      } catch (err) {
+        console.log(`✗  (${err.message})`);
+      }
     }
+  } finally {
+    await browser.close();
   }
 }
 
 main();
+

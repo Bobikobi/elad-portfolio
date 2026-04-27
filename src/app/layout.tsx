@@ -23,13 +23,13 @@ const heebo = Heebo({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://eladsaadon.dev"),
+  metadataBase: new URL("https://www.eladsaadon.dev"),
   title: {
     default: "Elad Saadon | Full-Stack Developer & AI Systems Architect",
     template: "%s | Elad Saadon",
   },
   description:
-    "Elad Saadon is a full-stack developer specializing in Next.js, React, TypeScript, AI integration with Google Gemini, cloud automation (GCP, Oracle Cloud, Vercel), and civic-tech solutions. Based in Israel, building real products that make a difference.",
+    "Elad Saadon (אלעד סעדון) is a full-stack developer and AI systems architect from Israel. Specializes in Next.js, React, TypeScript, Google Gemini AI integration, cloud automation (GCP, Oracle Cloud, Vercel), and civic-tech solutions. Building real products that make a difference.",
   keywords: [
     "Elad Saadon",
     "אלעד סעדון",
@@ -48,16 +48,16 @@ export const metadata: Metadata = {
     "מפתח ווב ישראל",
     "freelance developer Israel",
   ],
-  authors: [{ name: "Elad Saadon", url: "https://eladsaadon.dev" }],
+  authors: [{ name: "Elad Saadon", url: "https://www.eladsaadon.dev" }],
   creator: "Elad Saadon",
   publisher: "Elad Saadon",
   category: "Technology",
   alternates: {
-    canonical: "/",
+    canonical: "https://www.eladsaadon.dev",
     languages: {
-      "he-IL": "/",
-      "en-US": "/",
-      "ru-RU": "/",
+      "he-IL": "https://www.eladsaadon.dev",
+      "en-US": "https://www.eladsaadon.dev",
+      "ru-RU": "https://www.eladsaadon.dev",
     },
   },
   openGraph: {
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
     locale: "he_IL",
     alternateLocale: ["en_US", "ru_RU"],
     siteName: "Elad Saadon Portfolio",
-    url: "https://eladsaadon.dev",
+    url: "https://www.eladsaadon.dev",
     images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Elad Saadon — Full-Stack Developer & AI Systems Architect" }],
   },
   twitter: {
@@ -89,9 +89,7 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  other: {
-    "google-site-verification": "REPLACE_WITH_YOUR_VERIFICATION_CODE",
-  },
+
 };
 
 const jsonLd = {
@@ -99,41 +97,54 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "WebSite",
-      "@id": "https://eladsaadon.dev/#website",
+      "@id": "https://www.eladsaadon.dev/#website",
       name: "Elad Saadon Portfolio",
-      url: "https://eladsaadon.dev",
+      url: "https://www.eladsaadon.dev",
       description:
         "Full-stack web development, AI integration, cloud automation, and civic-tech solutions.",
       inLanguage: ["he", "en", "ru"],
-      publisher: { "@id": "https://eladsaadon.dev/#person" },
+      publisher: { "@id": "https://www.eladsaadon.dev/#person" },
     },
     {
       "@type": "ProfilePage",
-      "@id": "https://eladsaadon.dev/#profilepage",
-      url: "https://eladsaadon.dev",
+      "@id": "https://www.eladsaadon.dev/#profilepage",
+      url: "https://www.eladsaadon.dev",
       name: "Elad Saadon — Full-Stack Developer & AI Systems Architect",
-      isPartOf: { "@id": "https://eladsaadon.dev/#website" },
-      mainEntity: { "@id": "https://eladsaadon.dev/#person" },
+      isPartOf: { "@id": "https://www.eladsaadon.dev/#website" },
+      mainEntity: { "@id": "https://www.eladsaadon.dev/#person" },
       dateCreated: "2026-04-05",
       dateModified: new Date().toISOString().split("T")[0],
       inLanguage: "he",
     },
     {
       "@type": "Person",
-      "@id": "https://eladsaadon.dev/#person",
+      "@id": "https://www.eladsaadon.dev/#person",
       name: "Elad Saadon",
-      alternateName: "אלעד סעדון",
-      url: "https://eladsaadon.dev",
+      alternateName: ["אלעד סעדון", "Элад Саадон"],
+      url: "https://www.eladsaadon.dev",
       image: {
         "@type": "ImageObject",
-        url: "https://eladsaadon.dev/og-image.png",
+        url: "https://www.eladsaadon.dev/og-image.png",
         width: 1200,
         height: 630,
+        caption: "Elad Saadon — Full-Stack Developer & AI Systems Architect",
       },
       email: "eladeladsaa@gmail.com",
       jobTitle: "Full-Stack Developer & AI Systems Architect",
       description:
-        "Full-stack developer with a B.A. in Social Work, specializing in Next.js, React, TypeScript, AI integration with Google Gemini, cloud automation across GCP/Oracle Cloud/Vercel, and civic-tech solutions. Built 10+ production projects including autonomous AI systems, municipal emergency management platforms, and community marketing tools.",
+        "Elad Saadon (אלעד סעדון) is a full-stack developer and AI systems architect from Israel with a B.A. in Social Work. He builds production-grade web applications with Next.js, React, TypeScript, Tailwind CSS, and Supabase. He integrates AI capabilities using Google Gemini (Vision AI + Function Calling) and deploys across Vercel, GCP, and Oracle Cloud. His portfolio includes 10+ production projects: autonomous AI systems, municipal emergency management platforms, civic-tech tools, and community marketing solutions.",
+      hasOccupation: {
+        "@type": "Occupation",
+        name: "Full-Stack Developer",
+        occupationLocation: { "@type": "Country", name: "Israel" },
+        skills: "Next.js, React, TypeScript, Node.js, Python, Google Gemini, Supabase, Vercel, GCP, Oracle Cloud, Tailwind CSS, Electron",
+        estimatedSalary: [],
+      },
+      worksFor: {
+        "@type": "Organization",
+        name: "Self-Employed",
+        url: "https://www.eladsaadon.dev",
+      },
       knowsAbout: [
         "Full-Stack Development",
         "AI Integration",
@@ -146,6 +157,12 @@ const jsonLd = {
         "Supabase",
         "Node.js",
         "Python",
+        "Electron",
+        "Tailwind CSS",
+        "Docker",
+        "GCP",
+        "Oracle Cloud",
+        "Vercel",
       ],
       knowsLanguage: [
         { "@type": "Language", name: "Hebrew", alternateName: "he" },
@@ -154,47 +171,59 @@ const jsonLd = {
       ],
       alumniOf: {
         "@type": "EducationalOrganization",
-        name: "B.A. in Social Work",
+        name: "Ruppin Academic Center",
+        description: "B.A. in Social Work",
+        address: { "@type": "PostalAddress", addressCountry: "IL" },
       },
       nationality: { "@type": "Country", name: "Israel" },
+      address: {
+        "@type": "PostalAddress",
+        addressCountry: "IL",
+        addressRegion: "Center District",
+      },
+      identifier: [
+        { "@type": "PropertyValue", propertyID: "github", value: "Bobikobi" },
+        { "@type": "PropertyValue", propertyID: "linkedin", value: "elad-saadon-184809281" },
+      ],
       sameAs: [
         "https://github.com/Bobikobi",
         "https://www.linkedin.com/in/elad-saadon-184809281/",
+        "https://www.eladsaadon.dev",
       ],
     },
     // Service offerings — helps Google understand what the site offers
     {
       "@type": "Service",
-      "@id": "https://eladsaadon.dev/#service-web",
+      "@id": "https://www.eladsaadon.dev/#service-web",
       name: "Full-Stack Web Development",
       description:
         "End-to-end web applications using React, Next.js, TypeScript, Tailwind CSS, and Supabase. From design to deployment on Vercel.",
-      provider: { "@id": "https://eladsaadon.dev/#person" },
+      provider: { "@id": "https://www.eladsaadon.dev/#person" },
       serviceType: "Web Development",
       areaServed: { "@type": "Country", name: "Israel" },
     },
     {
       "@type": "Service",
-      "@id": "https://eladsaadon.dev/#service-ai",
+      "@id": "https://www.eladsaadon.dev/#service-ai",
       name: "AI Integration & Automation",
       description:
         "Custom AI solutions using Google Gemini, autonomous bots, intelligent pipelines, and workflow automation.",
-      provider: { "@id": "https://eladsaadon.dev/#person" },
+      provider: { "@id": "https://www.eladsaadon.dev/#person" },
       serviceType: "AI Development",
     },
     {
       "@type": "Service",
-      "@id": "https://eladsaadon.dev/#service-civic",
+      "@id": "https://www.eladsaadon.dev/#service-civic",
       name: "Civic-Tech Solutions",
       description:
         "Municipal and civic technology platforms including emergency management systems, political tools, and community platforms.",
-      provider: { "@id": "https://eladsaadon.dev/#person" },
+      provider: { "@id": "https://www.eladsaadon.dev/#person" },
       serviceType: "Civic Technology",
     },
     // FAQ — appears in "People also ask" + AI search citations
     {
       "@type": "FAQPage",
-      "@id": "https://eladsaadon.dev/#faq",
+      "@id": "https://www.eladsaadon.dev/#faq",
       mainEntity: [
         {
           "@type": "Question",
@@ -228,16 +257,48 @@ const jsonLd = {
             text: "אלעד סעדון מתמחה ב-Next.js, React, TypeScript, Tailwind CSS, Supabase, Node.js, Python, Google Gemini AI, ופלטפורמות ענן כולל Vercel, GCP ו-Oracle Cloud. הוא בונה אפליקציות ווב מקצה לקצה, מערכות AI אוטונומיות ופתרונות civic-tech.",
           },
         },
+        {
+          "@type": "Question",
+          name: "מה הניסיון של אלעד סעדון בפיתוח?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "אלעד סעדון הוא מפתח Full-Stack עם ניסיון ב-10+ פרויקטים בפרודקשן. הוא בנה מערכות AI אוטונומיות, פלטפורמות לניהול חירום עירוני, כלי civic-tech ופלטפורמות שיווק קהילתי. מתמחה ב-Next.js, React, TypeScript ואינטגרציה עם Google Gemini AI.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "כיצד ניתן ליצור קשר עם אלעד סעדון?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "ניתן ליצור קשר עם אלעד סעדון דרך האתר https://www.eladsaadon.dev, בדוא\"ל eladeladsaa@gmail.com, ב-LinkedIn בכתובת linkedin.com/in/elad-saadon-184809281, או ב-GitHub בשם Bobikobi.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "What is Elad Saadon's background?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Elad Saadon (אלעד סעדון) is a self-taught full-stack developer from Israel with a B.A. in Social Work. He combines technical expertise in Next.js, React, TypeScript, and AI systems with a human-centered approach to building products. His unique background enables him to build civic-tech solutions that are both technically sophisticated and socially impactful.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Where is Elad Saadon located?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Elad Saadon (אלעד סעדון) is a full-stack developer based in Israel. He works remotely and is available for projects worldwide.",
+          },
+        },
       ],
     },
     // Speakable — tells AI which parts of the page are most citable
     {
       "@type": "WebPage",
-      "@id": "https://eladsaadon.dev/#webpage",
-      url: "https://eladsaadon.dev",
+      "@id": "https://www.eladsaadon.dev/#webpage",
+      url: "https://www.eladsaadon.dev",
       name: "Elad Saadon — Full-Stack Developer & AI Systems Architect",
-      isPartOf: { "@id": "https://eladsaadon.dev/#website" },
-      about: { "@id": "https://eladsaadon.dev/#person" },
+      isPartOf: { "@id": "https://www.eladsaadon.dev/#website" },
+      about: { "@id": "https://www.eladsaadon.dev/#person" },
       speakable: {
         "@type": "SpeakableSpecification",
         cssSelector: ["#about", "#services", "#tech"],
@@ -251,7 +312,7 @@ const jsonLd = {
           "@type": "ListItem",
           position: 1,
           name: "Home",
-          item: "https://eladsaadon.dev",
+          item: "https://www.eladsaadon.dev",
         },
       ],
     },
@@ -274,6 +335,15 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://va.vercel-scripts.com" />
+        {/* Digital identity links — help search engines & AI connect social profiles to this entity */}
+        <link rel="me" href="https://github.com/Bobikobi" />
+        <link rel="me" href="https://www.linkedin.com/in/elad-saadon-184809281/" />
+        <meta name="author" content="Elad Saadon" />
+        {/* Person entity hint for search engines */}
+        <meta name="subject" content="Elad Saadon — Full-Stack Developer &amp; AI Systems Architect" />
+        <meta name="classification" content="Personal Portfolio" />
+        <meta name="coverage" content="Israel" />
+        <meta name="language" content="Hebrew, English, Russian" />
       </head>
       <body className="min-h-full flex flex-col">
         <script

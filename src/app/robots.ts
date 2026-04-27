@@ -7,13 +7,19 @@ export default function robots(): MetadataRoute.Robots {
       { userAgent: '*', allow: '/' },
       // Explicitly allow AI crawlers for GEO (Generative Engine Optimization)
       { userAgent: 'GPTBot', allow: '/' },
+      { userAgent: 'OAI-SearchBot', allow: '/' },
       { userAgent: 'Google-Extended', allow: '/' },
+      { userAgent: 'GoogleOther', allow: '/' },
       { userAgent: 'ChatGPT-User', allow: '/' },
       { userAgent: 'PerplexityBot', allow: '/' },
       { userAgent: 'ClaudeBot', allow: '/' },
+      { userAgent: 'anthropic-ai', allow: '/' },
       { userAgent: 'Applebot-Extended', allow: '/' },
+      { userAgent: 'Amazonbot', allow: '/' },
+      { userAgent: 'FacebookBot', allow: '/' },
       { userAgent: 'cohere-ai', allow: '/' },
     ],
-    sitemap: 'https://eladsaadon.dev/sitemap.xml',
+    host: 'https://www.eladsaadon.dev',
+    sitemap: 'https://www.eladsaadon.dev/sitemap.xml',
   };
 }

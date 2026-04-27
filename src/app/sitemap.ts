@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = 'https://eladsaadon.dev';
+  const base = 'https://www.eladsaadon.dev';
   const languages = { he: `${base}`, en: `${base}`, ru: `${base}` };
 
   return [
