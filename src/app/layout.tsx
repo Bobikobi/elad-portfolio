@@ -361,6 +361,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://va.vercel-scripts.com" />
+        {/* Explicit favicon links for search engine favicon discovery */}
+        <link rel="icon" href="/favicon-48.png" sizes="48x48" type="image/png" />
+        <link rel="icon" href="/favicon-192.png" sizes="192x192" type="image/png" />
+        <link rel="icon" href="/favicon.ico" type="image/x-icon" />
         {/* Digital identity links — help search engines & AI connect social profiles to this entity */}
         <link rel="me" href="https://github.com/Bobikobi" />
         <link rel="me" href="https://www.linkedin.com/in/elad-saadon-184809281/" />
