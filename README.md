@@ -47,3 +47,18 @@ Run locally:
 pnpm install
 pnpm dev
 ```
+
+## Public Safety
+
+This repository uses a public safety guard to reduce accidental secret leakage.
+
+Run before pushing:
+
+```bash
+pnpm repo:guard
+```
+
+Policy and rollout guidance for all repositories:
+
+- [PUBLIC_REPO_POLICY.md](PUBLIC_REPO_POLICY.md)
+- [.env.example](.env.example)

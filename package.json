@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "repo:guard": "node scripts/public-repo-guard.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

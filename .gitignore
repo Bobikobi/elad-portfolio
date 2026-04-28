@@ -43,3 +43,12 @@ next-env.d.ts
 .vercel
 .env*.local
 .venv/
+
+# security-sensitive files
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*service-account*.json
+*credentials*.json

@@ -1,0 +1,21 @@
+name: Public Repo Guard
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run public repo guard
+        run: node scripts/public-repo-guard.mjs
