@@ -4,6 +4,7 @@ import Services from '@/components/sections/Services';
 import Projects from '@/components/sections/Projects';
 import TechStack from '@/components/sections/TechStack';
 import Contact from '@/components/sections/Contact';
+import { JsonLd } from '@/components/JsonLd';
 
 // JSON-LD: ItemList of key projects — helps AI engines cite Elad Saadon's work
 const projectsJsonLd = {
@@ -81,10 +82,7 @@ const projectsJsonLd = {
 export default function Home() {
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(projectsJsonLd) }}
-      />
+      <JsonLd data={projectsJsonLd} />
       <Hero />
       <About />
       <Services />

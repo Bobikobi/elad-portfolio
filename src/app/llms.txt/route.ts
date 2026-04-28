@@ -5,6 +5,7 @@ const llmsTxt = `# Elad Saadon (אלעד סעדון)
 ## Main Pages
 
 - [Home](https://www.eladsaadon.dev/): Overview of Elad Saadon, core skills, featured projects, and direct contact options.
+- [Services](https://www.eladsaadon.dev/services): Dedicated services page with delivery scope, timelines, and FAQ for Next.js, AI, and automation projects.
 - [Accessibility Statement](https://www.eladsaadon.dev/accessibility): Accessibility commitments, standards, and support details for inclusive browsing.
 - [Privacy Policy](https://www.eladsaadon.dev/privacy): Explains data handling, analytics usage, and privacy practices on the portfolio website.
 - [Terms of Service](https://www.eladsaadon.dev/terms): Terms governing website usage, intellectual property, and limitations of liability.

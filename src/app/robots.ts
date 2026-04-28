@@ -1,10 +1,11 @@
 import type { MetadataRoute } from 'next';
+import { siteConfig } from '@/lib/seo';
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       // All search engines + AI crawlers
-      { userAgent: '*', allow: '/' },
+      { userAgent: '*', allow: '/', disallow: ['/api/', '/_next/'] },
       // Explicitly allow AI crawlers for GEO (Generative Engine Optimization)
       { userAgent: 'GPTBot', allow: '/' },
       { userAgent: 'OAI-SearchBot', allow: '/' },
@@ -19,7 +20,7 @@ export default function robots(): MetadataRoute.Robots {
       { userAgent: 'FacebookBot', allow: '/' },
       { userAgent: 'cohere-ai', allow: '/' },
     ],
-    host: 'https://www.eladsaadon.dev',
-    sitemap: 'https://www.eladsaadon.dev/sitemap.xml',
+    host: siteConfig.url,
+    sitemap: `${siteConfig.url}/sitemap.xml`,
   };
 }
