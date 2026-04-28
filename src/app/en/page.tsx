@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Home from '../page';
 
 export const metadata: Metadata = {
-  title: 'Elad Saadon | Full-Stack Developer & AI Systems Architect',
+  title: { absolute: 'Elad Saadon | Full-Stack Developer and AI Systems Architect' },
   description:
     'Elad Saadon is a full-stack developer and AI systems architect from Israel, specializing in Next.js, React, TypeScript, AI integration, and cloud automation.',
   alternates: {

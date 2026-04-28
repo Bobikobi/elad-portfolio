@@ -25,11 +25,11 @@ const heebo = Heebo({
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.eladsaadon.dev"),
   title: {
-    default: "אלעד סעדון | מפתח Full-Stack וארכיטקט מערכות AI",
-    template: "%s | Elad Saadon",
+    default: "אלעד סעדון | מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית",
+    template: "%s | אלעד סעדון",
   },
   description:
-    "אלעד סעדון הוא מפתח Full-Stack וארכיטקט מערכות AI מישראל, עם התמחות ב-Next.js, React, TypeScript, אינטגרציית AI ואוטומציה בענן.",
+    "אלעד סעדון הוא מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית מישראל, עם התמחות בפיתוח מערכות ווב, אינטגרציית בינה מלאכותית ואוטומציה בענן.",
   keywords: [
     "Elad Saadon",
     "אלעד סעדון",
@@ -72,9 +72,9 @@ export const metadata: Metadata = {
     apple: [{ url: "/favicon.png", sizes: "512x512", type: "image/png" }],
   },
   openGraph: {
-    title: "אלעד סעדון | מפתח Full-Stack וארכיטקט מערכות AI",
+    title: "אלעד סעדון | מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית",
     description:
-      "אלעד סעדון הוא מפתח Full-Stack מישראל המתמחה ב-Next.js, אינטגרציית AI, אוטומציה בענן ופתרונות civic-tech.",
+      "אלעד סעדון הוא מפתח פול-סטאק מישראל המתמחה בפיתוח מערכות, אינטגרציית בינה מלאכותית, אוטומציה בענן ופתרונות טכנולוגיים למגזר הציבורי.",
     type: "website",
     locale: "he_IL",
     alternateLocale: ["en_US", "ru_RU"],
@@ -84,9 +84,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "אלעד סעדון | מפתח Full-Stack וארכיטקט מערכות AI",
+    title: "אלעד סעדון | מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית",
     description:
-      "אלעד סעדון הוא מפתח Full-Stack מישראל המתמחה ב-Next.js, אינטגרציית AI, אוטומציה בענן ופתרונות civic-tech.",
+      "אלעד סעדון הוא מפתח פול-סטאק מישראל המתמחה בפיתוח מערכות, אינטגרציית בינה מלאכותית ואוטומציה בענן.",
     images: ["/og-image.png"],
   },
   robots: {

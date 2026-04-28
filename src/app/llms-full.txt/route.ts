@@ -6,6 +6,11 @@ const llmsFullTxt = `# Elad Saadon (אלעד סעדון)
 
 - [Home](https://www.eladsaadon.dev/): Landing page introducing Elad Saadon, key capabilities, project highlights, and contact channels for collaborations.
 - [Services](https://www.eladsaadon.dev/services): Dedicated services page with concrete deliverables, timeline ranges, and FAQ answers for common pre-sales questions.
+- [Next.js Development Service](https://www.eladsaadon.dev/services/nextjs-development): Production-focused full-stack Next.js service for business applications and high-performance websites.
+- [AI Integration Service](https://www.eladsaadon.dev/services/ai-integration): LLM integration service for automation, document workflows, and product intelligence.
+- [Automation Service](https://www.eladsaadon.dev/services/automation-workflows): Business workflow automation service for reducing repetitive operational work.
+- [Growth Marketing Automation Service](https://www.eladsaadon.dev/services/growth-marketing): Marketing automation service combining lead operations, messaging systems, and measurable conversion pipelines.
+- [Next.js SEO + GEO Guide](https://www.eladsaadon.dev/guides/nextjs-seo-geo-2026): Long-form practical guide combining classic SEO with AI citation optimization.
 - [Accessibility Statement](https://www.eladsaadon.dev/accessibility): Accessibility policy, support channel, and commitment to WCAG-aligned inclusive user experience.
 - [Privacy Policy](https://www.eladsaadon.dev/privacy): Data usage and privacy handling details, including analytics scope and user rights.
 - [Terms of Service](https://www.eladsaadon.dev/terms): Legal usage terms for the website, content ownership context, and liability boundaries.

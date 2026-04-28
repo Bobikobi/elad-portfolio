@@ -74,15 +74,15 @@ export const translations: Record<string, Record<Locale, string>> = {
   'hero.name': { he: 'אלעד סעדון', en: 'Elad Saadon', ru: 'Элад Саадон' },
   'hero.cta.work': { he: 'הפרויקטים שלי', en: 'View My Work', ru: 'Мои проекты' },
   'hero.cta.contact': { he: 'צור קשר', en: 'Get in Touch', ru: 'Связаться' },
-  'hero.title.0': { he: 'מפתח Full-Stack', en: 'Full-Stack Developer', ru: 'Full-Stack Разработчик' },
-  'hero.title.1': { he: 'בונה עם AI', en: 'Builds with AI', ru: 'Разрабатывает с AI' },
+  'hero.title.0': { he: 'מפתח פול-סטאק', en: 'Full-Stack Developer', ru: 'Full-Stack Разработчик' },
+  'hero.title.1': { he: 'בונה עם בינה מלאכותית', en: 'Builds with AI', ru: 'Разрабатывает с AI' },
   'hero.title.2': { he: 'אוטומציה וכלים', en: 'Automation & Tools', ru: 'Автоматизация и Инструменты' },
   'hero.title.3': { he: 'פרויקטים שעושים הבדל', en: 'Projects That Matter', ru: 'Проекты Которые Важны' },
 
   // About
   'about.title': { he: 'אודות', en: 'About Me', ru: 'Обо мне' },
   'about.bio': {
-    he: 'מפתח Full-Stack עם רקע קצת שונה - B.A. בעבודה סוציאלית ואהבה אמיתית לבנות דברים עם קוד. נהנה מבניית אפליקציות ווב, אוטומציה של תהליכים, וניסויים עם AI. הרקע הסוציאלי עוזר לי להישאר ממוקד בלבנות דברים שבאמת שימושיים.',
+    he: 'מפתח פול-סטאק עם רקע קצת שונה - תואר ראשון בעבודה סוציאלית ואהבה אמיתית לבנות דברים עם קוד. נהנה מבניית אפליקציות ווב, אוטומציה של תהליכים וניסויים עם בינה מלאכותית. הרקע החברתי עוזר לי להישאר ממוקד בלבנות דברים שבאמת שימושיים.',
     en: 'Full-Stack developer with an uncommon background - B.A. in Social Work and a genuine love for building things with code. I enjoy creating web apps, automating workflows, and experimenting with AI. The social work side keeps me grounded in building things that are actually useful.',
     ru: 'Full-Stack разработчик с нестандартным бэкграундом - бакалавр социальной работы и искренний интерес к программированию. Люблю создавать веб-приложения, автоматизировать процессы и экспериментировать с AI. Социальный фон помогает строить вещи, которые действительно полезны.',
   },
@@ -94,13 +94,13 @@ export const translations: Record<string, Record<Locale, string>> = {
   // Services
   'services.title': { he: 'שירותים', en: 'Services', ru: 'Услуги' },
   'services.subtitle': { he: 'מה אני מציע', en: 'What I Offer', ru: 'Что я предлагаю' },
-  'services.web.title': { he: 'פיתוח Full-Stack', en: 'Full-Stack Web Dev', ru: 'Full-Stack Разработка' },
+  'services.web.title': { he: 'פיתוח פול-סטאק', en: 'Full-Stack Web Dev', ru: 'Full-Stack Разработка' },
   'services.web.desc': {
-    he: 'אפליקציות ווב מקצה לקצה - HTML/CSS/JS/TS, React, Next.js, Tailwind, Supabase, REST APIs ו-OAuth. מעיצוב ועד deploy בVercel.',
+    he: 'אפליקציות ווב מקצה לקצה - React, Next.js, Tailwind, Supabase, ממשקי API ואימות משתמשים. משלב תכנון ועד פריסה מלאה לפרודקשן.',
     en: 'End-to-end web apps in HTML, CSS, JavaScript & TypeScript - React, Next.js, Tailwind CSS, Supabase, REST APIs, and OAuth flows. From design to Vercel.',
     ru: 'Веб-приложения на HTML/CSS/JS/TS - React, Next.js, Tailwind, Supabase, REST API и OAuth. От дизайна до деплоя.',
   },
-  'services.ai.title': { he: 'AI ואוטומציה', en: 'AI & Automation', ru: 'ИИ и Автоматизация' },
+  'services.ai.title': { he: 'בינה מלאכותית ואוטומציה', en: 'AI & Automation', ru: 'ИИ и Автоматизация' },
   'services.ai.desc': {
     he: 'פתרונות מותאמים עם Google Gemini, בוטים אוטונומיים ו-pipelines חכמים.',
     en: 'Custom AI-powered solutions using Google Gemini, autonomous bots, and intelligent pipelines.',

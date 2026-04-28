@@ -42,6 +42,36 @@ export default function sitemap(): MetadataRoute.Sitemap {
       alternates: { languages: { he: `${base}/services`, en: `${base}/en`, ru: `${base}/ru` } },
     },
     {
+      url: `${base}/services/nextjs-development`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${base}/services/ai-integration`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${base}/services/automation-workflows`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.78,
+    },
+    {
+      url: `${base}/services/growth-marketing`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.78,
+    },
+    {
+      url: `${base}/guides/nextjs-seo-geo-2026`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
       url: `${base}/privacy`,
       lastModified: new Date(),
       changeFrequency: 'yearly',

@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
 import { Mail, ChevronDown } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { GithubIcon, LinkedinIcon, WhatsAppIcon } from '@/components/ui/SocialIcons';
@@ -122,6 +123,19 @@ export default function Hero() {
                 <s.icon size={20} strokeWidth={1.5} />
               </a>
             ))}
+          </div>
+
+          {/* Crawlable internal links for SEO/GEO */}
+          <div className="mt-6 flex flex-wrap gap-3 text-sm">
+            <Link href="/services" className="text-[var(--color-accent)] hover:underline">
+              שירותי פיתוח
+            </Link>
+            <Link href="/services/ai-integration" className="text-[var(--color-accent)] hover:underline">
+              אינטגרציית AI
+            </Link>
+            <Link href="/guides/nextjs-seo-geo-2026" className="text-[var(--color-accent)] hover:underline">
+              מדריך SEO + GEO 2026
+            </Link>
           </div>
         </motion.div>
       </div>

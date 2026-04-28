@@ -1,8 +1,10 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import { useI18n, Locale } from '@/lib/i18n';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 
 const navItems = ['about', 'services', 'projects', 'tech', 'contact'] as const;
 const locales: { code: Locale; label: string }[] = [
@@ -13,9 +15,14 @@ const locales: { code: Locale; label: string }[] = [
 
 export default function Navbar() {
   const { t, locale, setLocale } = useI18n();
+  const router = useRouter();
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+
+  const homePath = locale === 'he' ? '/' : `/${locale}`;
+  const isOnHome = pathname === homePath;
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 50);
@@ -54,9 +61,21 @@ export default function Navbar() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [mobileOpen]);
 
-  const scrollTo = (id: string) => {
+  const goToSection = (id: string) => {
     setMobileOpen(false);
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    if (isOnHome) {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    router.push(`${homePath}#${id}`);
+  };
+
+  const goToHome = () => {
+    if (isOnHome) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    router.push(homePath);
   };
 
   return (
@@ -71,7 +90,7 @@ export default function Navbar() {
         <nav className="mx-auto max-w-[1200px] px-6 flex items-center justify-between h-16">
           {/* Logo */}
           <button
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            onClick={goToHome}
             className="flex items-center opacity-90 hover:opacity-100 transition-opacity"
             aria-label="Back to top"
           >
@@ -88,7 +107,7 @@ export default function Navbar() {
             {navItems.map((item) => (
               <li key={item}>
                 <button
-                  onClick={() => scrollTo(item)}
+                  onClick={() => goToSection(item)}
                   className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors"
                 >
                   {t(`nav.${item}`)}
@@ -103,7 +122,13 @@ export default function Navbar() {
               {locales.map((l) => (
                 <button
                   key={l.code}
-                  onClick={() => setLocale(l.code)}
+                    onClick={() => {
+                      setLocale(l.code);
+                      const targetHome = l.code === 'he' ? '/' : `/${l.code}`;
+                      if (pathname === '/' || pathname === '/en' || pathname === '/ru') {
+                        router.push(targetHome);
+                      }
+                    }}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                     locale === l.code
                       ? 'bg-[var(--color-accent)] text-white'
@@ -157,7 +182,7 @@ export default function Navbar() {
                 {navItems.map((item) => (
                   <li key={item}>
                     <button
-                      onClick={() => scrollTo(item)}
+                      onClick={() => goToSection(item)}
                       className="text-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
                     >
                       {t(`nav.${item}`)}
@@ -169,7 +194,14 @@ export default function Navbar() {
                 {locales.map((l) => (
                   <button
                     key={l.code}
-                    onClick={() => { setLocale(l.code); setMobileOpen(false); }}
+                    onClick={() => {
+                      setLocale(l.code);
+                      setMobileOpen(false);
+                      const targetHome = l.code === 'he' ? '/' : `/${l.code}`;
+                      if (pathname === '/' || pathname === '/en' || pathname === '/ru') {
+                        router.push(targetHome);
+                      }
+                    }}
                     className={`flex-1 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
                       locale === l.code
                         ? 'bg-[var(--color-accent)] text-white'
@@ -184,6 +216,12 @@ export default function Navbar() {
           </>
         )}
       </AnimatePresence>
+
+      <div className="sr-only">
+        <Link href="/">Home</Link>
+        <Link href="/en">English Home</Link>
+        <Link href="/ru">Russian Home</Link>
+      </div>
     </>
   );
 }

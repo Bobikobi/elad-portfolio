@@ -133,6 +133,20 @@ export default function ServicesPage() {
           </p>
         </article>
       </section>
+
+      <section className="mt-12 space-y-4 rounded-xl border border-white/15 bg-white/5 p-6">
+        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">יכולות שיווק וצמיחה שהוספנו</h2>
+        <p className="text-[var(--color-text-secondary)] leading-8">
+          מעבר לפיתוח הטכני, אפשר להקים שכבת שיווק מבוססת נתונים שמחברת בין כניסת לידים, תסריטי מסרים, מדדי המרה ואוטומציה של מעקב.
+          כך תהליך המכירה עובד בצורה עקבית ולא תלוי בעבודה ידנית מתמשכת.
+        </p>
+        <a
+          href="/services/growth-marketing"
+          className="inline-flex rounded-lg border border-[var(--color-border-default)] px-4 py-2 text-sm text-[var(--color-accent)] hover:border-[var(--color-accent)]"
+        >
+          מעבר לעמוד אוטומציית שיווק וצמיחה
+        </a>
+      </section>
     </main>
   );
 }

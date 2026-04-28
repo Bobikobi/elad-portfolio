@@ -2,6 +2,7 @@
 import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { Globe, Bot, Monitor, Users } from 'lucide-react';
+import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
 import { services } from '@/lib/constants';
 import GradientBar from '@/components/ui/GradientBar';
@@ -12,6 +13,12 @@ export default function Services() {
   const { t } = useI18n();
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: '-100px' });
+  const serviceLinks = [
+    { href: '/services/nextjs-development', label: 'פיתוח Next.js' },
+    { href: '/services/ai-integration', label: 'אינטגרציית AI' },
+    { href: '/services/automation-workflows', label: 'אוטומציה עסקית' },
+    { href: '/services/growth-marketing', label: 'אוטומציית שיווק וצמיחה' },
+  ];
 
   return (
     <section id="services" className="relative py-20 px-6" ref={ref}>
@@ -52,6 +59,23 @@ export default function Services() {
             );
           })}
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, delay: 0.45 }}
+          className="mt-8 flex flex-wrap gap-3"
+        >
+          {serviceLinks.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="rounded-lg border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </motion.div>
       </div>
     </section>
   );
