@@ -124,8 +124,8 @@ const jsonLd = {
       name: "אלעד סעדון | Elad Saadon — Full-Stack Developer & AI Systems Architect",
       isPartOf: { "@id": "https://www.eladsaadon.dev/#website" },
       mainEntity: { "@id": "https://www.eladsaadon.dev/#person" },
-      dateCreated: "2026-04-05",
-      dateModified: new Date().toISOString().split("T")[0],
+      dateCreated: "2026-04-05T00:00:00Z",
+      dateModified: new Date().toISOString(),
       inLanguage: ["he", "en", "ru"],
     },
     {
