@@ -53,3 +53,8 @@ next-env.d.ts
 *.pfx
 *service-account*.json
 *credentials*.json
+
+# security scan reports
+gitleaks-workingtree.json
+gitleaks-history.json
+security-reports/

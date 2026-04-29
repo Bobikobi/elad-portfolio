@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "repo:guard": "node scripts/public-repo-guard.mjs"
+    "repo:guard": "node scripts/public-repo-guard.mjs",
+    "security:scan": "gitleaks detect --source . --no-git --redact --report-format json --report-path gitleaks-workingtree.json --verbose",
+    "security:scan:history": "gitleaks git --redact --report-format json --report-path gitleaks-history.json --verbose ."
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
