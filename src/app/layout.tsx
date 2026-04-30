@@ -245,77 +245,6 @@ const jsonLd = {
       provider: { "@id": "https://www.eladsaadon.dev/#person" },
       serviceType: "Civic Technology",
     },
-    // FAQ — appears in "People also ask" + AI search citations
-    {
-      "@type": "FAQPage",
-      "@id": "https://www.eladsaadon.dev/#faq",
-      mainEntity: [
-        {
-          "@type": "Question",
-          name: "What technologies does Elad Saadon specialize in?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Elad Saadon specializes in Next.js, React, TypeScript, Tailwind CSS, Supabase, Node.js, Python, Google Gemini AI, and cloud platforms including Vercel, GCP, and Oracle Cloud.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "What services does Elad Saadon offer?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Elad offers full-stack web development, AI integration and automation using Google Gemini, desktop application development with Electron, and civic-tech solutions for municipalities and communities.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "What notable projects has Elad Saadon built?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Notable projects include OpenClaw (a multi-node autonomous AI system spanning 3 cloud providers with 11+ services), Netanya Emergency Teams (municipal emergency management platform), Political Compass IL (civic-tech tool with Bayesian scoring), and SHAPERZ (community marketing platform connecting brands with content creators).",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "באילו טכנולוגיות אלעד סעדון מתמחה?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "אלעד סעדון מתמחה ב-Next.js, React, TypeScript, Tailwind CSS, Supabase, Node.js, Python, Google Gemini AI, ופלטפורמות ענן כולל Vercel, GCP ו-Oracle Cloud. הוא בונה אפליקציות ווב מקצה לקצה, מערכות AI אוטונומיות ופתרונות civic-tech.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "מה הניסיון של אלעד סעדון בפיתוח?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "אלעד סעדון הוא מפתח Full-Stack עם ניסיון ב-10+ פרויקטים בפרודקשן. הוא בנה מערכות AI אוטונומיות, פלטפורמות לניהול חירום עירוני, כלי civic-tech ופלטפורמות שיווק קהילתי. מתמחה ב-Next.js, React, TypeScript ואינטגרציה עם Google Gemini AI.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "כיצד ניתן ליצור קשר עם אלעד סעדון?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "ניתן ליצור קשר עם אלעד סעדון דרך האתר https://www.eladsaadon.dev, בדוא\"ל eladeladsaa@gmail.com, ב-LinkedIn בכתובת linkedin.com/in/elad-saadon-184809281, או ב-GitHub בשם Bobikobi.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "What is Elad Saadon's background?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Elad Saadon (אלעד סעדון) is a self-taught full-stack developer from Israel with a B.A. in Social Work. He combines technical expertise in Next.js, React, TypeScript, and AI systems with a human-centered approach to building products. His unique background enables him to build civic-tech solutions that are both technically sophisticated and socially impactful.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Where is Elad Saadon located?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Elad Saadon (אלעד סעדון) is a full-stack developer based in Israel. He works remotely and is available for projects worldwide.",
-          },
-        },
-      ],
-    },
     // Speakable — tells AI which parts of the page are most citable
     {
       "@type": "WebPage",
@@ -344,15 +273,29 @@ const jsonLd = {
   ],
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+import { usePathname } from 'next/navigation';
+import { useMemo } from 'react';
+
+function getLocaleFromPath(path: string): { lang: string; dir: string } {
+  const seg = path.split('/')[1];
+  if (seg === 'en') return { lang: 'en', dir: 'ltr' };
+  if (seg === 'ru') return { lang: 'ru', dir: 'ltr' };
+  return { lang: 'he', dir: 'rtl' };
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // This hook only runs on client, so fallback to he/rtl for SSR, but hydrate instantly.
+  let lang = 'he';
+  let dir = 'rtl';
+  if (typeof window !== 'undefined') {
+    const { lang: l, dir: d } = getLocaleFromPath(window.location.pathname);
+    lang = l;
+    dir = d;
+  }
   return (
     <html
-      lang="he"
-      dir="rtl"
+      lang={lang}
+      dir={dir}
       className={`${geistSans.variable} ${geistMono.variable} ${heebo.variable} h-full antialiased`}
     >
       <head>
