@@ -124,16 +124,16 @@ export default function Hero() {
             ))}
           </div>
 
-          {/* Crawlable internal links for SEO/GEO — locale-aware text, Hebrew pages */}
+          {/* Crawlable internal links for SEO/GEO — locale-aware text and hrefs */}
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
             <Link
-              href="/services"
+              href={locale === 'he' ? '/services' : `/${locale}/services`}
               className="text-[var(--color-accent)] hover:underline"
             >
               {t('hero.links.services')}
             </Link>
             <Link
-              href="/services/ai-integration"
+              href={locale === 'he' ? '/services/ai-integration' : `/${locale}/services/ai-integration`}
               className="text-[var(--color-accent)] hover:underline"
             >
               {t('hero.links.ai')}
