@@ -273,9 +273,6 @@ const jsonLd = {
   ],
 };
 
-import { usePathname } from 'next/navigation';
-import { useMemo } from 'react';
-
 function getLocaleFromPath(path: string): { lang: string; dir: string } {
   const seg = path.split('/')[1];
   if (seg === 'en') return { lang: 'en', dir: 'ltr' };
