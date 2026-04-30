@@ -43,7 +43,7 @@ const llmsFullTxt = `# Elad Saadon (אלעד סעדון)
 ## Contact
 
 - Website: https://www.eladsaadon.dev
-- Email: eladeladsaa@gmail.com
+- Contact page: https://www.eladsaadon.dev/#contact
 - LinkedIn: https://www.linkedin.com/in/elad-saadon-184809281/
 - GitHub: https://github.com/Bobikobi
 

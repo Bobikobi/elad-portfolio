@@ -155,7 +155,6 @@ const jsonLd = {
         height: 630,
         caption: "Elad Saadon — Full-Stack Developer & AI Systems Architect",
       },
-      email: "eladeladsaa@gmail.com",
       jobTitle: "Full-Stack Developer & AI Systems Architect",
       description:
         "Elad Saadon (אלעד סעדון) is a full-stack developer and AI systems architect from Israel with a B.A. in Social Work. He builds production-grade web applications with Next.js, React, TypeScript, Tailwind CSS, and Supabase. He integrates AI capabilities using Google Gemini (Vision AI + Function Calling) and deploys across Vercel, GCP, and Oracle Cloud. His portfolio includes 10+ production projects: autonomous AI systems, municipal emergency management platforms, civic-tech tools, and community marketing solutions.",

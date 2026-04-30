@@ -27,7 +27,6 @@ export default function About() {
           10+ production projects spanning autonomous AI systems, municipal emergency management,
           civic-tech tools, and community marketing platforms. He is fluent in Hebrew, English, and Russian.
         </p>
-        <meta itemProp="email" content="eladeladsaa@gmail.com" />
         <link itemProp="url" href="https://www.eladsaadon.dev" />
         <link itemProp="sameAs" href="https://github.com/Bobikobi" />
         <link itemProp="sameAs" href="https://www.linkedin.com/in/elad-saadon-184809281/" />

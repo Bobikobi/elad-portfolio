@@ -4,14 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { Mail, ChevronDown } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import { GithubIcon, LinkedinIcon, WhatsAppIcon } from '@/components/ui/SocialIcons';
+import { GithubIcon, LinkedinIcon } from '@/components/ui/SocialIcons';
 
 const titles = ['hero.title.0', 'hero.title.1', 'hero.title.2', 'hero.title.3'];
 
 const socials = [
   { icon: GithubIcon, href: 'https://github.com/Bobikobi', label: 'GitHub' },
   { icon: LinkedinIcon, href: 'https://www.linkedin.com/in/elad-saadon-184809281/', label: 'LinkedIn' },
-  { icon: WhatsAppIcon, href: 'https://wa.me/972545423380', label: 'WhatsApp' },
   { icon: Mail, href: 'mailto:eladeladsaa@gmail.com', label: 'Email' },
 ];
 
