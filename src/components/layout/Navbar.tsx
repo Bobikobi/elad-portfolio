@@ -78,6 +78,25 @@ export default function Navbar() {
     router.push(homePath);
   };
 
+  const changeLocale = (newLocale: Locale) => {
+    // Extract current locale prefix from pathname
+    const pathSegments = pathname.split('/').filter(Boolean);
+    const currentPrefix = (pathSegments[0] === 'en' || pathSegments[0] === 'ru') ? pathSegments[0] : null;
+    
+    // Remove current locale prefix if exists
+    const pathWithoutLocale = currentPrefix 
+      ? '/' + pathSegments.slice(1).join('/')
+      : pathname;
+    
+    // Build new path with new locale prefix
+    const newPath = newLocale === 'he' 
+      ? pathWithoutLocale 
+      : `/${newLocale}${pathWithoutLocale}`;
+    
+    setLocale(newLocale);
+    router.push(newPath);
+  };
+
   return (
     <>
       <header
@@ -122,13 +141,7 @@ export default function Navbar() {
               {locales.map((l) => (
                 <button
                   key={l.code}
-                    onClick={() => {
-                      setLocale(l.code);
-                      const targetHome = l.code === 'he' ? '/' : `/${l.code}`;
-                      if (pathname === '/' || pathname === '/en' || pathname === '/ru') {
-                        router.push(targetHome);
-                      }
-                    }}
+                  onClick={() => changeLocale(l.code)}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                     locale === l.code
                       ? 'bg-[var(--color-accent)] text-white'
@@ -195,12 +208,8 @@ export default function Navbar() {
                   <button
                     key={l.code}
                     onClick={() => {
-                      setLocale(l.code);
+                      changeLocale(l.code);
                       setMobileOpen(false);
-                      const targetHome = l.code === 'he' ? '/' : `/${l.code}`;
-                      if (pathname === '/' || pathname === '/en' || pathname === '/ru') {
-                        router.push(targetHome);
-                      }
                     }}
                     className={`flex-1 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
                       locale === l.code

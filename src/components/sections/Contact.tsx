@@ -48,7 +48,7 @@ export default function Contact() {
 
             <div className="flex flex-col gap-4">
               <a
-                href="mailto:eladeladsaa@gmail.com"
+                href="mailto:eladeladsaa@gmail.com?subject=פנייה מאתר eladsaadon.dev&body=שלום אלעד,%0D%0A%0D%0Aהייתי רוצה לש chit בנושא:%0D%0A%0D%0Aבברכה,%0D%0A[שם המלא]"
                 className="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors"
               >
                 <Mail size={18} strokeWidth={1.5} className="text-[var(--color-accent)]" />
@@ -72,12 +72,7 @@ export default function Contact() {
                 <LinkedinIcon size={18} className="text-[var(--color-accent)]" />
                 <span className="text-sm text-[var(--color-text-secondary)]">LinkedIn</span>
               </a>
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
-                <Shield size={18} strokeWidth={1.5} className="text-[var(--color-accent)]" />
-                <span className="text-sm text-[var(--color-text-secondary)]">
-                  WhatsApp is shared after initial screening to reduce spam.
-                </span>
-              </div>
+
             </div>
           </motion.div>
 
