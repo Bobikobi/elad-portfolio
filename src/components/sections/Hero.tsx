@@ -124,21 +124,21 @@ export default function Hero() {
             ))}
           </div>
 
-          {/* Crawlable internal links for SEO/GEO — locale-aware */}
+          {/* Crawlable internal links for SEO/GEO — locale-aware text, Hebrew pages */}
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
             <Link
-              href={locale === 'he' ? '/services' : `/${locale}/services`}
+              href="/services"
               className="text-[var(--color-accent)] hover:underline"
             >
               {t('hero.links.services')}
             </Link>
             <Link
-              href={locale === 'he' ? '/services/ai-integration' : `/${locale}/services/ai-integration`}
+              href="/services/ai-integration"
               className="text-[var(--color-accent)] hover:underline"
             >
               {t('hero.links.ai')}
             </Link>
-            {/* Guide page exists only in Hebrew — hide for EN/RU */}
+            {/* Guide page exists only in Hebrew */}
             {locale === 'he' && (
               <Link
                 href="/guides/nextjs-seo-geo-2026"
