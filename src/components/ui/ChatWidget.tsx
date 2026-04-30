@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import Script from 'next/script';
 import { MessageCircle, X, Send } from 'lucide-react';
 
 type Locale = 'he' | 'en' | 'ru';
@@ -7,6 +8,23 @@ type Locale = 'he' | 'en' | 'ru';
 interface Message {
   role: 'user' | 'assistant';
   text: string;
+}
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement,
+        options: {
+          sitekey: string;
+          callback: (token: string) => void;
+          'expired-callback'?: () => void;
+          'error-callback'?: () => void;
+        }
+      ) => string;
+      reset: (widgetId?: string) => void;
+    };
+  }
 }
 
 const LABELS = {
@@ -29,23 +47,27 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
   const isRTL = locale === 'he';
   const sideClass = isRTL ? 'left-6' : 'right-6';
   const panelAlignClass = isRTL ? 'left-0' : 'right-0';
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const turnstileRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
 
-  const t = (key: keyof typeof LABELS) => LABELS[key][locale];
+  const t = useCallback((key: keyof typeof LABELS) => LABELS[key][locale], [locale]);
 
   useEffect(() => {
     if (open && !initialized) {
       setMessages([{ role: 'assistant', text: t('greeting') }]);
       setInitialized(true);
     }
-  }, [open, initialized, locale]);
+  }, [open, initialized, locale, t]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,9 +77,29 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
+  const mountTurnstile = useCallback(() => {
+    if (!open || !turnstileSiteKey || !turnstileRef.current || !window.turnstile) return;
+    if (turnstileWidgetIdRef.current) return;
+
+    turnstileWidgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+      sitekey: turnstileSiteKey,
+      callback: (token: string) => setTurnstileToken(token),
+      'expired-callback': () => setTurnstileToken(''),
+      'error-callback': () => setTurnstileToken(''),
+    });
+  }, [open, turnstileSiteKey]);
+
+  useEffect(() => {
+    mountTurnstile();
+  }, [mountTurnstile]);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
+    if (!turnstileToken) {
+      setMessages((prev) => [...prev, { role: 'assistant', text: t('error') }]);
+      return;
+    }
 
     const userMsg: Message = { role: 'user', text };
     const next = [...messages, userMsg];
@@ -69,19 +111,26 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({ messages: next, turnstileToken }),
       });
+
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'request_failed');
+      }
+
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', text: data.text || t('error') },
       ]);
+      setTurnstileToken('');
+      window.turnstile?.reset(turnstileWidgetIdRef.current || undefined);
     } catch {
       setMessages((prev) => [...prev, { role: 'assistant', text: t('error') }]);
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, locale]);
+  }, [input, loading, messages, turnstileToken, t]);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -92,6 +141,14 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
 
   return (
     <div className={`fixed bottom-20 ${sideClass} z-[9998]`} dir={isRTL ? 'rtl' : 'ltr'}>
+      {turnstileSiteKey && (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          strategy="afterInteractive"
+          onLoad={mountTurnstile}
+        />
+      )}
+
       {/* Panel */}
       {open && (
         <div
@@ -159,12 +216,20 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
             />
             <button
               onClick={sendMessage}
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || !turnstileToken}
               aria-label="Send"
               className="p-2 rounded-xl bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               <Send size={16} />
             </button>
+          </div>
+
+          <div className="px-3 pb-3">
+            {turnstileSiteKey ? (
+              <div ref={turnstileRef} className="min-h-[65px]" />
+            ) : (
+              <p className="text-xs text-[var(--color-text-tertiary)]">Chat protection is not configured.</p>
+            )}
           </div>
         </div>
       )}

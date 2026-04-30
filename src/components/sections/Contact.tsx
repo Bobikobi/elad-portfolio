@@ -1,8 +1,8 @@
 'use client';
 import { useRef, useState, FormEvent } from 'react';
 import { motion, useInView } from 'framer-motion';
-import { Send, Mail } from 'lucide-react';
-import { GithubIcon, LinkedinIcon, WhatsAppIcon } from '@/components/ui/SocialIcons';
+import { Send, Mail, Shield } from 'lucide-react';
+import { GithubIcon, LinkedinIcon } from '@/components/ui/SocialIcons';
 import { useI18n } from '@/lib/i18n';
 import GradientBar from '@/components/ui/GradientBar';
 
@@ -72,15 +72,12 @@ export default function Contact() {
                 <LinkedinIcon size={18} className="text-[var(--color-accent)]" />
                 <span className="text-sm text-[var(--color-text-secondary)]">LinkedIn</span>
               </a>
-              <a
-                href="https://wa.me/972545423380"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors"
-              >
-                <WhatsAppIcon size={18} className="text-[var(--color-accent)]" />
-                <span className="text-sm text-[var(--color-text-secondary)]">WhatsApp</span>
-              </a>
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
+                <Shield size={18} strokeWidth={1.5} className="text-[var(--color-accent)]" />
+                <span className="text-sm text-[var(--color-text-secondary)]">
+                  WhatsApp is shared after initial screening to reduce spam.
+                </span>
+              </div>
             </div>
           </motion.div>
 

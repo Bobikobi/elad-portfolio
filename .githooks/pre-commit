@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+
+echo "[security] Running gitleaks on staged changes..."
+gitleaks git --staged --redact --verbose

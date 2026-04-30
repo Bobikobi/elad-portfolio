@@ -48,8 +48,17 @@ next-env.d.ts
 # security-sensitive files
 *.key
 *.crt
+
+# internal ops — not for public repo
+/scripts/
+PRIVATE_REPO_LIMITATION_AND_NEXT_STEP.md
 *.cer
 *.p12
 *.pfx
 *service-account*.json
 *credentials*.json
+
+# security scan reports
+gitleaks-workingtree.json
+gitleaks-history.json
+security-reports/
