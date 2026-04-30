@@ -15,7 +15,7 @@ const socials = [
 ];
 
 export default function Hero() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [titleIdx, setTitleIdx] = useState(0);
   const spotlightRef = useRef<HTMLDivElement>(null);
 
@@ -124,17 +124,29 @@ export default function Hero() {
             ))}
           </div>
 
-          {/* Crawlable internal links for SEO/GEO */}
+          {/* Crawlable internal links for SEO/GEO — locale-aware */}
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
-            <Link href="/services" className="text-[var(--color-accent)] hover:underline">
-              שירותי פיתוח
+            <Link
+              href={locale === 'he' ? '/services' : `/${locale}/services`}
+              className="text-[var(--color-accent)] hover:underline"
+            >
+              {t('hero.links.services')}
             </Link>
-            <Link href="/services/ai-integration" className="text-[var(--color-accent)] hover:underline">
-              אינטגרציית AI
+            <Link
+              href={locale === 'he' ? '/services/ai-integration' : `/${locale}/services/ai-integration`}
+              className="text-[var(--color-accent)] hover:underline"
+            >
+              {t('hero.links.ai')}
             </Link>
-            <Link href="/guides/nextjs-seo-geo-2026" className="text-[var(--color-accent)] hover:underline">
-              מדריך SEO + GEO 2026
-            </Link>
+            {/* Guide page exists only in Hebrew — hide for EN/RU */}
+            {locale === 'he' && (
+              <Link
+                href="/guides/nextjs-seo-geo-2026"
+                className="text-[var(--color-accent)] hover:underline"
+              >
+                {t('hero.links.guide')}
+              </Link>
+            )}
           </div>
         </motion.div>
       </div>
