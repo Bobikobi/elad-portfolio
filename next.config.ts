@@ -16,7 +16,7 @@ const securityHeaders = [
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https: https://image.thum.io",
       "connect-src 'self' https: https://www.google-analytics.com https://*.analytics.google.com",
-      "frame-src 'self' https://*.vercel.app https://netanya-civil.vercel.app https://political-compass-il.vercel.app https://honey-site-seven.vercel.app https://www.shaperz.co.il",
+      "frame-src 'self' https://netanya-civil.vercel.app https://political-compass-il.vercel.app https://honey-site-seven.vercel.app https://www.shaperz.co.il",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Bot, FileText, MessageSquare, Zap, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 export const metadata: Metadata = {
   title: 'AI Integration for Existing and New Systems',
@@ -81,11 +82,18 @@ const useCases = [
 ];
 
 export default function AiIntegrationPage() {
+  const breadcrumbs = [
+    { label: 'Home', href: '/en' },
+    { label: 'Services', href: '/en/services' },
+    { label: 'AI Integration', href: '/en/services/ai-integration' },
+  ];
+
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-16 sm:px-8">
       <JsonLd data={schemas} />
 
       <GradientBar />
+      <Breadcrumbs items={breadcrumbs} locale="en" />
       <h1 className="text-3xl font-bold text-[var(--color-text-primary)] sm:text-4xl">
         AI Integration for Digital Products
       </h1>

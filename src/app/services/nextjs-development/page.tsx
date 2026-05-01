@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Globe, ShieldCheck, Gauge, Database, ArrowLeft } from 'lucide-react';
+import { Globe, ShieldCheck, Gauge, Database, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 export const metadata: Metadata = {
   title: 'פיתוח Next.js לעסקים וסטארטאפים',
@@ -10,6 +11,12 @@ export const metadata: Metadata = {
     'פיתוח מערכות Next.js מקצה לקצה: ארכיטקטורה, ביצועים, SEO, אינטגרציות API ופריסה מאובטחת לפרודקשן עם TypeScript ו-Supabase.',
   alternates: {
     canonical: 'https://www.eladsaadon.dev/services/nextjs-development',
+    languages: {
+      'he-IL': 'https://www.eladsaadon.dev/services/nextjs-development',
+      'en-US': 'https://www.eladsaadon.dev/en/services/nextjs-development',
+      'ru-RU': 'https://www.eladsaadon.dev/ru/services/nextjs-development',
+      'x-default': 'https://www.eladsaadon.dev/services/nextjs-development',
+    },
   },
 };
 
@@ -75,18 +82,59 @@ const features = [
   },
 ];
 
+const deliverables = [
+  'אפליקציית Next.js מלאה — מוכנה לפרודקשן',
+  'ארכיטקטורה מתועדת עם תרשימי זרימה',
+  'מערכת ניהול תוכן (CMS) מותאמת אישית',
+  'אינטגרציות API — Supabase, Stripe, OpenAI ועוד',
+  'SEO טכני מלא: metadata, sitemap, schema, hreflang',
+  'בדיקות אוטומטיות (Unit + E2E)',
+  'פריסה מאובטחת עם CI/CD, ניטור ולוגים',
+  'קוד מקור מלא + גישה לריפוזיטורי פרטי',
+];
+
+const faqExtra = [
+  {
+    q: 'כמה זמן לוקח פרויקט Next.js טיפוסי?',
+    a: 'פרויקט ראשוני (MVP או אתר תדמית) לוקח 2–4 שבועות. מערכת מורכבת עם דשבורד, אינטגרציות והרשאות — 4–8 שבועות. תמיד מתחילים באבחון מהיר ומתעדפים לפי ערך.',
+  },
+  {
+    q: 'מה קורה אחרי שהפרויקט עולה לאוויר?',
+    a: 'אתם מקבלים גישה מלאה לקוד,文档 ותיעוד טכני. אני זמין לתחזוקה שוטפת, שדרוגים ותיקונים לפי צורך — בלי חוזים סגורים, בלי התחייבות מיותרת.',
+  },
+  {
+    q: 'האם אתם עובדים עם טכנולוגיות נוספות חוץ מ-Next.js?',
+    a: 'כן. הסטACK העיקרי הוא Next.js + TypeScript + Supabase + Tailwind CSS, אבל אני משלב גם Python לאוטומציות, Node.js ל-microservices, ו-React Native לאפליקציות מובייל לפי הצורך.',
+  },
+];
+
 export default function NextJsDevelopmentPage() {
+  const breadcrumbs = [
+    { label: 'דף הבית', href: '/' },
+    { label: 'שירותים', href: '/services' },
+    { label: 'פיתוח Next.js', href: '/services/nextjs-development' },
+  ];
+
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-16 sm:px-8">
       <JsonLd data={schemas} />
 
       <GradientBar />
+      <Breadcrumbs items={breadcrumbs} locale="he" />
       <h1 className="text-3xl font-bold text-[var(--color-text-primary)] sm:text-4xl">
         פיתוח Next.js לעסקים וסטארטאפים
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
         מוצר Next.js שנבנה נכון — מהיר למשתמש, ידידותי לגוגל, בטוח בפרודקשן ונוח לתחזוקה. מאפס ועד פריסה מלאה.
       </p>
+
+      {/* Direct answer for featured snippet */}
+      <div className="mt-8 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
+        <p className="text-sm leading-7 text-[var(--color-text-secondary)]">
+          <strong className="text-[var(--color-text-primary)]">תשובה קצרה:</strong>{' '}
+          פיתוח Next.js מקצה לקצה — מתכנון ארכיטקטורה ועד פריסה מאובטחת לפרודקשן. כולל ממשק משתמש, שרת, בסיס נתונים, אינטגרציות API, SEO טכני, נגישות ותחזוקה שוטפת. מתאים לעסקים שצריכים מוצר דיגיטלי מהיר, מאובטח וידידותי לגוגל.
+        </p>
+      </div>
 
       {/* Feature cards */}
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
@@ -107,21 +155,34 @@ export default function NextJsDevelopmentPage() {
         })}
       </div>
 
-      {/* FAQ */}
+      {/* Deliverables */}
+      <section className="mt-14">
+        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">מה אתם מקבלים</h2>
+        <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+          {deliverables.map((item) => (
+            <li
+              key={item}
+              className="flex items-start gap-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 text-sm text-[var(--color-text-secondary)]"
+            >
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[var(--color-accent)]" />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Expanded FAQ */}
       <section className="mt-14 space-y-4">
         <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">שאלות נפוצות</h2>
-        <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
-          <h3 className="text-base font-medium text-[var(--color-text-primary)]">מה כולל שירות פיתוח Next.js?</h3>
-          <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-            תכנון ארכיטקטורה, ממשק משתמש, לוגיקת שרת, בסיס נתונים, אינטגרציות API, SEO טכני ופריסה מלאה לפרודקשן.
-          </p>
-        </article>
-        <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
-          <h3 className="text-base font-medium text-[var(--color-text-primary)]">אפשר לשדרג מה שיש בלי לבנות מחדש?</h3>
-          <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-            כן. מאבחנים קודם: ביצועים, ארכיטקטורה, SEO. משפרים בשלבים ממוקדים שלא שוברים את מה שעובד.
-          </p>
-        </article>
+        {faqExtra.map((item) => (
+          <article
+            key={item.q}
+            className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5"
+          >
+            <h3 className="text-base font-medium text-[var(--color-text-primary)]">{item.q}</h3>
+            <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">{item.a}</p>
+          </article>
+        ))}
       </section>
 
       {/* CTA */}
