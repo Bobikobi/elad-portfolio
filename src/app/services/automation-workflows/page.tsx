@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { RefreshCw, Bell, BarChart2, Link2, ArrowLeft } from 'lucide-react';
+import { RefreshCw, Bell, BarChart2, Link2, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 export const metadata: Metadata = {
   title: 'אוטומציה של תהליכים עסקיים',
@@ -10,6 +11,12 @@ export const metadata: Metadata = {
     'תכנון ופיתוח אוטומציות שמקצרות עבודה ידנית: חיבור מערכות, טריגרים, עיבוד נתונים ודו"חות אוטומטיים עם Node.js, Python ו-APIs.',
   alternates: {
     canonical: 'https://www.eladsaadon.dev/services/automation-workflows',
+    languages: {
+      'he-IL': 'https://www.eladsaadon.dev/services/automation-workflows',
+      'en-US': 'https://www.eladsaadon.dev/en/services/automation-workflows',
+      'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
+      'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
+    },
   },
 };
 
@@ -75,18 +82,59 @@ const outcomes = [
   },
 ];
 
+const deliverables = [
+  'תהליך אוטומטי ראשון — מהגדרה ועד ריצה בפרודקשן',
+  'חיבור מערכות: CRM, דוא"ל, גיליונות, APIs חיצוניים',
+  'לוגים מלאים + התראות על שגיאות בזמן אמת',
+  'דשבורד ניטור ביצועים ומדדי ROI',
+  'תיעוד טכני מלא + קוד מקור בגישה פרטית',
+  'תוכנית הרחבה: אוטומציות נוספות לפי סדר עדיפות',
+  'גיבוי ושחזור אוטומטיים',
+  'תמיכה ותחזוקה שוטפת לפי צורך',
+];
+
+const faqExtra = [
+  {
+    q: 'כמה זמן לוקח להקים אוטומציה עסקית?',
+    a: 'אוטומציה פשוטה (חיבור בין שתי מערכות, טריגר לשליחת מייל) — 3–7 ימים. אוטומציה מורכבת (רב-שלבית עם עיבוד נתונים ותנאים) — 2–4 שבועות. תמיד מתחילים בתהליך הקטן ביותר שנותן ערך מיידי.',
+  },
+  {
+    q: 'מה קורה אם האוטומציה נכשלת?',
+    a: 'כל אוטומציה בנויה עם מנגנוני retry, התראות על כשל, ולוגים מפורטים. אם משהו לא עובד — מקבלים הודעה מיידית ויודעים בדיוק איפה לתקן. אין מצב של "שקט תעשייתי" שבו תהליך נופל בלי שאף אחד יודע.',
+  },
+  {
+    q: 'האם האוטומציות עובדות עם מערכות קיימות כמו Monday, Salesforce או Shopify?',
+    a: 'כן. רוב האוטומציות מתבססות על APIs ציבוריים או Webhooks. אם למערכת יש API — אפשר להתחבר. אם אין — אפשר דרך Zaps, גיליונות או קבצים. אין מערכת שאני לא יכול לחבר.',
+  },
+];
+
 export default function AutomationWorkflowsPage() {
+  const breadcrumbs = [
+    { label: 'דף הבית', href: '/' },
+    { label: 'שירותים', href: '/services' },
+    { label: 'אוטומציה עסקית', href: '/services/automation-workflows' },
+  ];
+
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-16 sm:px-8">
       <JsonLd data={schemas} />
 
       <GradientBar />
+      <Breadcrumbs items={breadcrumbs} locale="he" />
       <h1 className="text-3xl font-bold text-[var(--color-text-primary)] sm:text-4xl">
         אוטומציה לתהליכים עסקיים
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
         כשתהליכים רצים לבד, הצוות מתפנה לעבודה שדורשת חשיבה אמיתית. בונים אוטומציות ממוקדות שמתחילות מה-bottleneck הכי כואב ומייצרות תוצאה מיידית.
       </p>
+
+      {/* Direct answer for featured snippet */}
+      <div className="mt-8 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
+        <p className="text-sm leading-7 text-[var(--color-text-secondary)]">
+          <strong className="text-[var(--color-text-primary)]">תשובה קצרה:</strong>{' '}
+          אוטומציה של תהליכים עסקיים — חיבור מערכות, סנכרון נתונים אוטומטי, שליחת התראות בזמן אמת, ויצירת דו"חות ללא מגע יד אדם. מתחילים מהתהליך הכי חוזר וכואב, ומודדים הצלחה בזמן שנחסך, ירידה בטעויות ועלייה בתפוקה.
+        </p>
+      </div>
 
       {/* Outcome cards */}
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
@@ -107,21 +155,34 @@ export default function AutomationWorkflowsPage() {
         })}
       </div>
 
-      {/* FAQ */}
+      {/* Deliverables */}
+      <section className="mt-14">
+        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">מה אתם מקבלים</h2>
+        <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+          {deliverables.map((item) => (
+            <li
+              key={item}
+              className="flex items-start gap-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 text-sm text-[var(--color-text-secondary)]"
+            >
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[var(--color-accent)]" />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Expanded FAQ */}
       <section className="mt-14 space-y-4">
         <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">שאלות נפוצות</h2>
-        <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
-          <h3 className="text-base font-medium text-[var(--color-text-primary)]">מאיפה מתחילים?</h3>
-          <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-            מתחילים מהתהליך שחוזר הכי הרבה פעמים בשבוע וגוזל הכי הרבה זמן ידני. שם ה-ROI המהיר ביותר.
-          </p>
-        </article>
-        <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
-          <h3 className="text-base font-medium text-[var(--color-text-primary)]">איך יודעים שהאוטומציה עובדת?</h3>
-          <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-            כל תהליך מגיע עם לוגים, התראות על שגיאות ומדדים ברורים — זמן שנחסך, ירידה בטעויות, עלייה בתפוקה.
-          </p>
-        </article>
+        {faqExtra.map((item) => (
+          <article
+            key={item.q}
+            className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5"
+          >
+            <h3 className="text-base font-medium text-[var(--color-text-primary)]">{item.q}</h3>
+            <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">{item.a}</p>
+          </article>
+        ))}
       </section>
 
       {/* CTA */}

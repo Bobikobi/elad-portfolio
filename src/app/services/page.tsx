@@ -12,8 +12,8 @@ export const metadata: Metadata = {
     canonical: 'https://www.eladsaadon.dev/services',
     languages: {
       'he-IL': 'https://www.eladsaadon.dev/services',
-      'en-US': 'https://www.eladsaadon.dev/en',
-      'ru-RU': 'https://www.eladsaadon.dev/ru',
+      'en-US': 'https://www.eladsaadon.dev/en/services',
+      'ru-RU': 'https://www.eladsaadon.dev/ru/services',
       'x-default': 'https://www.eladsaadon.dev/services',
     },
   },
