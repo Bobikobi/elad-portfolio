@@ -64,6 +64,10 @@ const MAX_MESSAGES = 10;
 const MAX_REQUESTS_PER_WINDOW = 10;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const BLOCK_DURATION_MS = 5 * 60_000;
+const RATE_LIMIT_WINDOW_SECONDS = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
+
+const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 type RateLimitEntry = {
   count: number;
@@ -114,7 +118,7 @@ function getClientIp(req: NextRequest) {
   return 'unknown';
 }
 
-function checkRateLimit(key: string) {
+function checkRateLimitInMemory(key: string) {
   const now = Date.now();
   pruneRateLimitStore(now);
   const current = rateLimitStore.get(key);
@@ -149,6 +153,49 @@ function checkRateLimit(key: string) {
     remaining: Math.max(0, MAX_REQUESTS_PER_WINDOW - current.count),
     resetMs: RATE_LIMIT_WINDOW_MS - (now - current.windowStart),
   };
+}
+
+async function checkRateLimit(key: string) {
+  const now = Date.now();
+
+  if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
+    const bucket = Math.floor(now / RATE_LIMIT_WINDOW_MS);
+    const redisKey = `rl:chat:${key}:${bucket}`;
+
+    try {
+      const response = await fetch(`${UPSTASH_REDIS_REST_URL}/pipeline`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          ['INCR', redisKey],
+          ['EXPIRE', redisKey, RATE_LIMIT_WINDOW_SECONDS],
+        ]),
+        cache: 'no-store',
+      });
+
+      if (response.ok) {
+        const payload = (await response.json()) as Array<{ result?: number | string }>;
+        const count = Number(payload?.[0]?.result ?? 0);
+
+        if (count > MAX_REQUESTS_PER_WINDOW) {
+          return { allowed: false, remaining: 0, resetMs: RATE_LIMIT_WINDOW_MS - (now % RATE_LIMIT_WINDOW_MS) };
+        }
+
+        return {
+          allowed: true,
+          remaining: Math.max(0, MAX_REQUESTS_PER_WINDOW - count),
+          resetMs: RATE_LIMIT_WINDOW_MS - (now % RATE_LIMIT_WINDOW_MS),
+        };
+      }
+    } catch {
+      // Fall back to in-memory limiter when Redis is unavailable.
+    }
+  }
+
+  return checkRateLimitInMemory(key);
 }
 
 function validateRequestSource(req: NextRequest) {
@@ -227,7 +274,7 @@ function jsonWithRateHeaders(body: Record<string, unknown>, init: { status: numb
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  const rateInfo = checkRateLimit(ip);
+  const rateInfo = await checkRateLimit(ip);
 
   if (!rateInfo.allowed) {
     return jsonWithRateHeaders(
@@ -290,8 +337,9 @@ export async function POST(req: NextRequest) {
     const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     if (!text) {
       const errMsg = data?.error?.message ?? JSON.stringify(data).slice(0, 200);
-      console.error('Gemini empty response:', errMsg);
-      return jsonWithRateHeaders({ error: 'Empty response', detail: errMsg }, { status: 500 }, rateInfo);
+      console.error('Gemini empty response');
+      console.error('Gemini error summary:', errMsg.slice(0, 120));
+      return jsonWithRateHeaders({ error: 'Chat service temporarily unavailable' }, { status: 500 }, rateInfo);
     }
 
     return jsonWithRateHeaders({ text }, { status: 200 }, rateInfo);
