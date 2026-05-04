@@ -93,7 +93,7 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1], delay: index * 0.08 }}
       onMouseMove={handleMouseMove}
-      className="group relative p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] hover:-translate-y-0.5 hover:shadow-[0_0_0_1px_rgba(139,92,246,0.1),0_8px_40px_rgba(0,0,0,0.3)] transition-all duration-300 overflow-hidden"
+      className="group relative p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-transparent hover:-translate-y-1 hover:shadow-[0_0_0_1px_rgba(139,92,246,0.3),0_12px_50px_rgba(0,0,0,0.4),0_0_60px_rgba(139,92,246,0.06)] transition-all duration-350 overflow-hidden gradient-border shimmer-hover"
     >
       {/* Hover spotlight */}
       <div
