@@ -72,6 +72,12 @@ export const translations: Record<string, Record<Locale, string>> = {
   // Hero
   'hero.greeting': { he: 'היי, אני', en: "Hi, I'm", ru: 'Привет, я' },
   'hero.name': { he: 'אלעד סעדון', en: 'Elad Saadon', ru: 'Элад Саадон' },
+  'hero.available': { he: 'זמין לפרויקטים חדשים', en: 'Available for new projects', ru: 'Открыт для новых проектов' },
+  'hero.subtitle': {
+    he: 'אני בונה מוצרי Web ו-AI מהירים, נגישים ויציבים לפרודקשן, עם דגש על תוצאות עסקיות אמיתיות.',
+    en: 'I build fast, accessible, production-grade Web and AI products with a sharp focus on business outcomes.',
+    ru: 'Я создаю быстрые, доступные и production-ready Web и AI продукты с фокусом на реальный бизнес-результат.',
+  },
   'hero.cta.work': { he: 'הפרויקטים שלי', en: 'View My Work', ru: 'Мои проекты' },
   'hero.cta.contact': { he: 'צור קשר', en: 'Get in Touch', ru: 'Связаться' },
   'hero.links.services': { he: 'שירותי פיתוח', en: 'Development Services', ru: 'Услуги разработки' },

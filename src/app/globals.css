@@ -105,21 +105,50 @@ body::before {
   0%   { background-position: -500px 0; }
   100% { background-position: 500px 0; }
 }
-@keyframes pulse-dot {
-  0%, 100% { transform: scale(1); opacity: 0.75; }
-  50%       { transform: scale(1.5); opacity: 0; }
+@keyframes scan-down {
+  0%   { top: -2px;  opacity: 0.8; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { top: 100%;  opacity: 0; }
 }
-@keyframes border-glow {
-  0%, 100% { opacity: 0.3; }
-  50%       { opacity: 0.7; }
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.15; }
+  50%       { opacity: 0.45; }
+}
+@keyframes badge-border {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(139,92,246,0.25), 0 0 12px rgba(139,92,246,0.08); }
+  50%       { box-shadow: 0 0 0 1px rgba(139,92,246,0.55), 0 0 24px rgba(139,92,246,0.20); }
 }
 
 /* ===== Utility classes ===== */
 .animate-aurora   { animation: aurora 14s ease-in-out infinite; }
 .animate-aurora-b { animation: aurora-b 18s ease-in-out infinite; }
 .animate-float    { animation: float-y 6s ease-in-out infinite; }
+.animate-glow-pulse { animation: glow-pulse 3s ease-in-out infinite; }
+.animate-badge    { animation: badge-border 3s ease-in-out infinite; }
 
-/* Gradient animated border — add `gradient-border` to any card */
+/* ── Scan line ── */
+.has-scan { position: relative; overflow: hidden; }
+.has-scan::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  top: -2px; height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(139,92,246,0.0) 15%,
+    rgba(139,92,246,0.7) 40%,
+    rgba(6,182,212,0.7) 60%,
+    rgba(6,182,212,0.0) 85%,
+    transparent 100%
+  );
+  filter: blur(1px);
+  animation: scan-down 9s linear infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ── Gradient animated border ── */
 .gradient-border {
   position: relative;
   isolation: isolate;
@@ -138,19 +167,53 @@ body::before {
 }
 .gradient-border:hover::before { opacity: 1; }
 
-/* Shimmer sweep on hover */
+/* ── Shimmer sweep — purple tint, NOT white ── */
 .shimmer-hover { position: relative; overflow: hidden; }
 .shimmer-hover::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 25%, rgba(255,255,255,0.05) 50%, transparent 75%);
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    rgba(139, 92, 246, 0.08) 45%,
+    rgba(6, 182, 212, 0.06) 55%,
+    transparent 80%
+  );
   background-size: 500px 100%;
   background-repeat: no-repeat;
   background-position: -500px 0;
   pointer-events: none;
 }
-.shimmer-hover:hover::after { animation: shimmer-sweep 0.75s ease forwards; }
+.shimmer-hover:hover::after { animation: shimmer-sweep 0.85s ease forwards; }
+
+/* ── Glassmorphism card ── */
+.card-glass {
+  background: rgba(24, 24, 27, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(139, 92, 246, 0.14);
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.04) inset,
+              0 8px 40px rgba(0, 0, 0, 0.45);
+}
+.card-glass:hover {
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.06) inset,
+              0 8px 60px rgba(0, 0, 0, 0.55),
+              0 0 40px rgba(139, 92, 246, 0.08);
+}
+
+/* ── Always-on glow border ── */
+.glow-border {
+  box-shadow: 0 0 0 1px rgba(139,92,246,0.18),
+              0 0 16px rgba(139,92,246,0.06);
+  transition: box-shadow 0.3s ease;
+}
+.glow-border:hover {
+  box-shadow: 0 0 0 1px rgba(139,92,246,0.45),
+              0 0 32px rgba(139,92,246,0.18),
+              0 0 64px rgba(6,182,212,0.06);
+}
 
 /* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {

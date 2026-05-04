@@ -3,8 +3,9 @@ import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { useI18n } from '@/lib/i18n';
 import { metrics } from '@/lib/constants';
-import Counter from '@/components/ui/Counter';
+import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 import GradientBar from '@/components/ui/GradientBar';
+import AboutTimeline from '@/components/sections/AboutTimeline';
 
 export default function About() {
   const { t } = useI18n();
@@ -48,30 +49,42 @@ export default function About() {
           </h2>
         </motion.div>
 
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6, ease: [0.25, 0.4, 0, 1], delay: 0.1 }}
-          className="text-lg text-[var(--color-text-secondary)] leading-relaxed max-w-2xl mb-16"
-        >
-          {t('about.bio')}
-        </motion.p>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {metrics.map((m, i) => (
-            <motion.div
-              key={m.label}
-              initial={{ opacity: 0, y: 30 }}
+        <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr] items-start">
+          <div>
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1], delay: 0.2 + i * 0.1 }}
-              className="gradient-border shimmer-hover p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-transparent hover:shadow-[0_4px_40px_rgba(139,92,246,0.12)] transition-all duration-300 cursor-default"
+              transition={{ duration: 0.6, ease: [0.25, 0.4, 0, 1], delay: 0.1 }}
+              className="text-lg text-[var(--color-text-secondary)] leading-relaxed max-w-2xl mb-10"
             >
-              <div className="text-4xl md:text-5xl font-bold bg-gradient-to-br from-[var(--color-text-primary)] to-[var(--color-text-secondary)] bg-clip-text text-transparent mb-2">
-                <Counter target={m.value} inView={inView} />+
-              </div>
-              <div className="text-sm text-[var(--color-text-tertiary)] font-medium leading-snug">{t(m.label)}</div>
-            </motion.div>
-          ))}
+              {t('about.bio')}
+            </motion.p>
+
+            <div className="grid grid-cols-2 gap-6">
+              {metrics.map((m, i) => (
+                <motion.div
+                  key={m.label}
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={inView ? { opacity: 1, y: 0 } : {}}
+                  transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1], delay: 0.2 + i * 0.1 }}
+                  className="gradient-border shimmer-hover p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-transparent hover:shadow-[0_4px_40px_rgba(139,92,246,0.12)] transition-all duration-300 cursor-default"
+                >
+                  <div className="text-4xl md:text-5xl font-bold bg-gradient-to-br from-[var(--color-text-primary)] to-[var(--color-text-secondary)] bg-clip-text text-transparent mb-2">
+                    <AnimatedCounter target={m.value} suffix="+" />
+                  </div>
+                  <div className="text-sm text-[var(--color-text-tertiary)] font-medium leading-snug">{t(m.label)}</div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={inView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.55, delay: 0.16 }}
+          >
+            <AboutTimeline />
+          </motion.div>
         </div>
       </div>
     </section>

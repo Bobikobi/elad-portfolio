@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useSpring, useMotionValueEvent } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import { useI18n, Locale } from '@/lib/i18n';
 import Link from 'next/link';
@@ -14,21 +14,55 @@ const locales: { code: Locale; label: string }[] = [
 ];
 
 export default function Navbar() {
-  const { t, locale, setLocale } = useI18n();
+  const { t, locale, setLocale, dir } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
+  const [activeSection, setActiveSection] = useState<(typeof navItems)[number]>('about');
   const [mobileOpen, setMobileOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const { scrollY, scrollYProgress } = useScroll();
+  const progressScale = useSpring(scrollYProgress, { stiffness: 120, damping: 28, mass: 0.2 });
 
   const homePath = locale === 'he' ? '/' : `/${locale}`;
   const isOnHome = pathname === homePath;
+  const sectionIdMap: Record<(typeof navItems)[number], string> = {
+    about: 'about',
+    services: 'services',
+    projects: 'projects',
+    tech: 'technologies',
+    contact: 'contact',
+  };
+
+  useMotionValueEvent(scrollY, 'change', (value) => {
+    setScrolled(value > 80);
+  });
 
   useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handler, { passive: true });
-    return () => window.removeEventListener('scroll', handler);
-  }, []);
+    if (!isOnHome) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+        if (!visible?.target?.id) return;
+        const matched = (Object.entries(sectionIdMap).find(([, id]) => id === visible.target.id)?.[0] ?? null) as
+          | (typeof navItems)[number]
+          | null;
+        if (matched) setActiveSection(matched);
+      },
+      { rootMargin: '-35% 0px -50% 0px', threshold: [0.2, 0.45, 0.7] }
+    );
+
+    Object.values(sectionIdMap).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, [isOnHome]);
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : '';
@@ -99,10 +133,18 @@ export default function Navbar() {
 
   return (
     <>
+      <motion.div
+        className="fixed top-0 left-0 right-0 h-[2px] z-[9999] bg-amber-400"
+        style={{
+          scaleX: progressScale,
+          transformOrigin: dir === 'rtl' ? 'right center' : 'left center',
+        }}
+        aria-hidden="true"
+      />
       <header
         className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
           scrolled
-            ? 'bg-[var(--color-surface-glass)] backdrop-blur-2xl border-b border-[var(--color-border-default)]'
+            ? 'bg-[color:rgba(9,9,11,0.68)] backdrop-blur-xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
             : 'bg-transparent'
         }`}
       >
@@ -126,10 +168,21 @@ export default function Navbar() {
             {navItems.map((item) => (
               <li key={item}>
                 <button
-                  onClick={() => goToSection(item)}
-                  className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors"
+                  onClick={() => goToSection(sectionIdMap[item])}
+                  className={`relative text-sm px-1 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors ${
+                    activeSection === item
+                      ? 'text-[var(--color-text-primary)]'
+                      : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
+                  }`}
                 >
                   {t(`nav.${item}`)}
+                  {activeSection === item && (
+                    <motion.span
+                      layoutId="nav-indicator"
+                      className="absolute inset-x-0 -bottom-[2px] h-[2px] rounded-full bg-[var(--color-accent)]"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    />
+                  )}
                 </button>
               </li>
             ))}
@@ -195,8 +248,12 @@ export default function Navbar() {
                 {navItems.map((item) => (
                   <li key={item}>
                     <button
-                      onClick={() => goToSection(item)}
-                      className="text-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+                      onClick={() => goToSection(sectionIdMap[item])}
+                      className={`text-lg transition-colors ${
+                        activeSection === item
+                          ? 'text-[var(--color-text-primary)]'
+                          : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                      }`}
                     >
                       {t(`nav.${item}`)}
                     </button>
