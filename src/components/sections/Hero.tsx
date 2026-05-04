@@ -78,15 +78,6 @@ export default function Hero() {
           transition={{ duration: 0.8, ease: [0.25, 0.4, 0, 1] }}
           className="max-w-2xl"
         >
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-bg-secondary)] mb-6 text-xs font-medium text-[var(--color-text-secondary)] animate-badge"
-          >
-            {t('hero.available')}
-          </motion.div>
-
           <motion.p
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
