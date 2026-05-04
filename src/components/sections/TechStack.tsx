@@ -32,10 +32,13 @@ export default function TechStack() {
               initial={{ opacity: 0, y: 30 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1], delay: 0.1 + catIdx * 0.1 }}
-              className="p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] gradient-border hover:shadow-[0_4px_30px_rgba(139,92,246,0.08)] hover:border-transparent transition-all duration-300"
+              className="p-6 rounded-2xl card-glass gradient-border hover:shadow-[0_4px_40px_rgba(0,0,0,0.5)] hover:border-transparent transition-all duration-400"
             >
-              <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />
+              <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-4 flex items-center gap-2">
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: 'linear-gradient(135deg, #8B5CF6, #06B6D4)', boxShadow: '0 0 8px rgba(139,92,246,0.7)' }}
+                />
                 {t(`tech.cat.${cat.key}`)}
               </h3>
               <div className="flex flex-wrap gap-2">

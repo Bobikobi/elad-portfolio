@@ -44,12 +44,28 @@ export default function Services() {
                 initial={{ opacity: 0, y: 30 }}
                 animate={inView ? { opacity: 1, y: 0 } : {}}
                 transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1], delay: 0.1 + i * 0.1 }}
-                className="group p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] hover:shadow-[0_0_0_1px_rgba(139,92,246,0.1),0_8px_40px_rgba(0,0,0,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)] transition-all duration-300"
+                className="group relative p-7 rounded-2xl card-glass gradient-border shimmer-hover overflow-hidden transition-all duration-400 cursor-default"
               >
-                <div className="w-10 h-10 rounded-lg bg-[var(--color-bg-tertiary)] flex items-center justify-center mb-4 group-hover:bg-[var(--color-accent-glow)] transition-colors">
-                  <Icon size={20} strokeWidth={1.5} className="text-[var(--color-accent)]" />
+                {/* Corner number */}
+                <span className="absolute top-5 end-5 text-[10px] font-mono text-[var(--color-text-tertiary)] opacity-40 group-hover:opacity-70 transition-opacity">
+                  0{i + 1}
+                </span>
+
+                {/* Icon with halo */}
+                <div className="relative w-14 h-14 rounded-2xl flex items-center justify-center mb-5">
+                  <div className="absolute inset-0 rounded-2xl bg-[var(--color-accent)] opacity-10 group-hover:opacity-20 transition-opacity duration-400" />
+                  <div
+                    className="absolute inset-0 rounded-2xl group-hover:opacity-100 opacity-0 transition-opacity duration-400"
+                    style={{ boxShadow: '0 0 24px rgba(139,92,246,0.5) inset' }}
+                  />
+                  <Icon
+                    size={24}
+                    strokeWidth={1.5}
+                    className="relative text-[var(--color-accent)] group-hover:drop-shadow-[0_0_8px_rgba(139,92,246,0.8)] transition-all duration-400"
+                  />
                 </div>
-                <h3 className="text-lg font-medium text-[var(--color-text-primary)] mb-2">
+
+                <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2 group-hover:text-white transition-colors">
                   {t(`services.${s.key}.title`)}
                 </h3>
                 <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">

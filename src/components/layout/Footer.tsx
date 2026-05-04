@@ -15,7 +15,7 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="relative z-10 border-t border-[var(--color-border-default)]">
+    <footer className="relative z-10" style={{ borderTop: '1px solid transparent', borderImage: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.4) 30%, rgba(6,182,212,0.4) 70%, transparent) 1' }}>
       <div className="mx-auto max-w-[1200px] px-6 py-12">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Logo */}
