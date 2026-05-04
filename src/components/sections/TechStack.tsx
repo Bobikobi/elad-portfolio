@@ -32,7 +32,7 @@ export default function TechStack() {
               initial={{ opacity: 0, y: 30 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1], delay: 0.1 + catIdx * 0.1 }}
-              className="p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]"
+              className="p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] gradient-border hover:shadow-[0_4px_30px_rgba(139,92,246,0.08)] hover:border-transparent transition-all duration-300"
             >
               <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4 flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />
@@ -50,7 +50,7 @@ export default function TechStack() {
                       damping: 10,
                       delay: 0.3 + catIdx * 0.1 + itemIdx * 0.03,
                     }}
-                    className="text-xs font-mono px-3 py-1.5 rounded-full bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:border-[var(--color-border-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors"
+                    className="text-xs font-mono px-3 py-1.5 rounded-full bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)] hover:bg-[rgba(139,92,246,0.08)] hover:shadow-[0_0_12px_rgba(139,92,246,0.2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-all duration-200 cursor-default"
                   >
                     {item}
                   </motion.span>

@@ -44,9 +44,10 @@ export default function Hero() {
         background: `radial-gradient(ellipse at var(--spotlight-x, 50%) var(--spotlight-y, 50%), var(--color-accent-glow) 0%, transparent 60%)`,
       }}
     >
-      {/* Glow orbs */}
-      <div className="absolute top-1/4 start-1/4 w-[500px] h-[500px] rounded-full bg-[var(--color-gradient-start)] opacity-[0.07] blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-1/4 end-1/3 w-[400px] h-[400px] rounded-full bg-[var(--color-gradient-end)] opacity-[0.05] blur-[120px] pointer-events-none" />
+      {/* Animated aurora orbs */}
+      <div className="animate-aurora absolute top-1/4 start-1/4 w-[600px] h-[600px] rounded-full bg-[var(--color-gradient-start)] blur-[140px] pointer-events-none" />
+      <div className="animate-aurora-b absolute bottom-1/4 end-1/3 w-[480px] h-[480px] rounded-full bg-[var(--color-gradient-end)] blur-[130px] pointer-events-none" />
+      <div className="animate-aurora absolute top-3/4 start-2/3 w-[300px] h-[300px] rounded-full bg-[var(--color-accent)] opacity-[0.04] blur-[100px] pointer-events-none" />
 
       {/* Dot grid */}
       <div
@@ -64,14 +65,21 @@ export default function Hero() {
           transition={{ duration: 0.8, ease: [0.25, 0.4, 0, 1] }}
           className="max-w-2xl"
         >
-          {/* Greeting */}
-          <p className="text-sm text-[var(--color-text-tertiary)] mb-4 font-mono">
+          {/* Availability badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-bg-secondary)] border border-[var(--color-border-subtle)] mb-6 text-xs text-[var(--color-text-secondary)]">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-success)] opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--color-success)]" />
+            </span>
             {t('hero.greeting')}
-          </p>
+          </div>
 
           {/* Name */}
-          <h1 className="text-[clamp(2.5rem,5vw,4.5rem)] font-bold leading-tight tracking-tight">
-            <span className="bg-gradient-to-r from-[var(--color-gradient-start)] to-[var(--color-gradient-end)] bg-clip-text text-transparent">
+          <h1 className="text-[clamp(3rem,7vw,6rem)] font-bold leading-[0.95] tracking-tight mb-2">
+            <span
+              className="bg-gradient-to-r from-[var(--color-gradient-start)] via-[var(--color-accent-hover)] to-[var(--color-gradient-end)] bg-clip-text text-transparent"
+              style={{ backgroundSize: '200% 200%', animation: 'gradient-rotate 8s ease infinite' }}
+            >
               {t('hero.name')}
             </span>
           </h1>
@@ -96,7 +104,7 @@ export default function Hero() {
           <div className="flex flex-wrap gap-4 mb-10">
             <a
               href="#projects"
-              className="px-6 py-3 rounded-lg bg-[var(--color-accent)] text-white font-medium text-sm hover:bg-[var(--color-accent-hover)] hover:shadow-[0_0_20px_var(--color-accent-glow)] hover:-translate-y-0.5 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)] transition-all"
+              className="relative px-6 py-3 rounded-lg bg-[var(--color-accent)] text-white font-medium text-sm hover:bg-[var(--color-accent-hover)] hover:shadow-[0_0_30px_rgba(139,92,246,0.4),0_0_60px_rgba(139,92,246,0.15)] hover:-translate-y-0.5 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)] transition-all duration-300 overflow-hidden shimmer-hover"
             >
               {t('hero.cta.work')}
             </a>

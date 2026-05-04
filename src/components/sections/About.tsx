@@ -64,12 +64,12 @@ export default function About() {
               initial={{ opacity: 0, y: 30 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1], delay: 0.2 + i * 0.1 }}
-              className="p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]"
+              className="gradient-border shimmer-hover p-6 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] hover:border-transparent hover:shadow-[0_4px_40px_rgba(139,92,246,0.12)] transition-all duration-300 cursor-default"
             >
-              <div className="text-3xl md:text-4xl font-bold text-[var(--color-text-primary)] mb-1">
+              <div className="text-4xl md:text-5xl font-bold bg-gradient-to-br from-[var(--color-text-primary)] to-[var(--color-text-secondary)] bg-clip-text text-transparent mb-2">
                 <Counter target={m.value} inView={inView} />+
               </div>
-              <div className="text-sm text-[var(--color-text-tertiary)]">{t(m.label)}</div>
+              <div className="text-sm text-[var(--color-text-tertiary)] font-medium leading-snug">{t(m.label)}</div>
             </motion.div>
           ))}
         </div>

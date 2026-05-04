@@ -81,6 +81,77 @@ body::before {
 ::-webkit-scrollbar-thumb { background: var(--color-border-subtle); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
 
+/* ===== Premium Animations ===== */
+@keyframes aurora {
+  0%, 100% { transform: translate(0%, 0%) scale(1); opacity: 0.07; }
+  33%       { transform: translate(-8%, 6%) scale(1.12); opacity: 0.11; }
+  66%       { transform: translate(6%, -8%) scale(0.92); opacity: 0.06; }
+}
+@keyframes aurora-b {
+  0%, 100% { transform: translate(0%, 0%) scale(1); opacity: 0.05; }
+  33%       { transform: translate(10%, -6%) scale(1.08); opacity: 0.09; }
+  66%       { transform: translate(-6%, 10%) scale(0.94); opacity: 0.04; }
+}
+@keyframes float-y {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-14px); }
+}
+@keyframes gradient-rotate {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes shimmer-sweep {
+  0%   { background-position: -500px 0; }
+  100% { background-position: 500px 0; }
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 0.75; }
+  50%       { transform: scale(1.5); opacity: 0; }
+}
+@keyframes border-glow {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 0.7; }
+}
+
+/* ===== Utility classes ===== */
+.animate-aurora   { animation: aurora 14s ease-in-out infinite; }
+.animate-aurora-b { animation: aurora-b 18s ease-in-out infinite; }
+.animate-float    { animation: float-y 6s ease-in-out infinite; }
+
+/* Gradient animated border — add `gradient-border` to any card */
+.gradient-border {
+  position: relative;
+  isolation: isolate;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--color-gradient-start), var(--color-gradient-end), var(--color-gradient-start));
+  background-size: 300% 300%;
+  animation: gradient-rotate 5s ease infinite;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  z-index: -1;
+}
+.gradient-border:hover::before { opacity: 1; }
+
+/* Shimmer sweep on hover */
+.shimmer-hover { position: relative; overflow: hidden; }
+.shimmer-hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 25%, rgba(255,255,255,0.05) 50%, transparent 75%);
+  background-size: 500px 100%;
+  background-repeat: no-repeat;
+  background-position: -500px 0;
+  pointer-events: none;
+}
+.shimmer-hover:hover::after { animation: shimmer-sweep 0.75s ease forwards; }
+
 /* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
