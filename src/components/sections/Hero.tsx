@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
 import Link from 'next/link';
 import { Mail, ChevronDown } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
@@ -15,9 +15,15 @@ const socials = [
 ];
 
 export default function Hero() {
-  const { t, locale } = useI18n();
+  const { t, locale, dir } = useI18n();
   const [titleIdx, setTitleIdx] = useState(0);
+  const [hideScrollCue, setHideScrollCue] = useState(false);
   const spotlightRef = useRef<HTMLDivElement>(null);
+  const { scrollY } = useScroll();
+
+  useMotionValueEvent(scrollY, 'change', (value) => {
+    setHideScrollCue(value > 100);
+  });
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -72,17 +78,31 @@ export default function Hero() {
           transition={{ duration: 0.8, ease: [0.25, 0.4, 0, 1] }}
           className="max-w-2xl"
         >
-          {/* Availability badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-bg-secondary)] mb-8 text-xs font-medium text-[var(--color-text-secondary)] animate-badge">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-success)] opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--color-success)]" />
-            </span>
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0 }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-bg-secondary)] mb-6 text-xs font-medium text-[var(--color-text-secondary)] animate-badge"
+          >
+            {t('hero.available')}
+          </motion.div>
+
+          <motion.p
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.12 }}
+            className="text-sm text-[var(--color-text-tertiary)] mb-3"
+          >
             {t('hero.greeting')}
-          </div>
+          </motion.p>
 
           {/* Name */}
-          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-bold leading-[0.9] tracking-tighter mb-4">
+          <motion.h1
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.24 }}
+            className="text-[clamp(3.5rem,8vw,7rem)] font-bold leading-[0.9] tracking-tighter mb-4"
+          >
             <span
               className="bg-gradient-to-r from-[var(--color-gradient-start)] via-[var(--color-accent-hover)] to-[var(--color-gradient-end)] bg-clip-text text-transparent"
               style={{
@@ -93,26 +113,45 @@ export default function Hero() {
             >
               {t('hero.name')}
             </span>
-          </h1>
+          </motion.h1>
 
           {/* Rotating titles */}
-          <div className="h-14 mb-10 overflow-hidden">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.36 }}
+            className="h-14 mb-5 overflow-hidden"
+          >
             <AnimatePresence mode="wait">
               <motion.p
                 key={titleIdx}
-                initial={{ opacity: 0, y: 24, filter: 'blur(4px)' }}
+                initial={{ opacity: 0, y: dir === 'rtl' ? -18 : 18, filter: 'blur(4px)' }}
                 animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, y: -24, filter: 'blur(4px)' }}
+                exit={{ opacity: 0, y: dir === 'rtl' ? 18 : -18, filter: 'blur(4px)' }}
                 transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1] }}
                 className="text-2xl md:text-3xl text-[var(--color-text-secondary)] font-light"
               >
                 {t(titles[titleIdx])}
               </motion.p>
             </AnimatePresence>
-          </div>
+          </motion.div>
+
+          <motion.p
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.48 }}
+            className="text-base md:text-lg text-[var(--color-text-tertiary)] mb-10 max-w-xl"
+          >
+            {t('hero.subtitle')}
+          </motion.p>
 
           {/* CTA */}
-          <div className="flex flex-wrap gap-4 mb-10">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+            className="flex flex-wrap gap-4 mb-10"
+          >
             <a
               href="#projects"
               className="relative px-7 py-3.5 rounded-xl font-semibold text-sm text-white overflow-hidden shimmer-hover"
@@ -129,7 +168,7 @@ export default function Hero() {
             >
               {t('hero.cta.contact')}
             </a>
-          </div>
+          </motion.div>
 
           {/* Social icons */}
           <div className="flex items-center gap-5 mb-12">
@@ -152,7 +191,7 @@ export default function Hero() {
             {[
               { num: '10+', key: 'about.metric.projects' },
               { num: '3', key: 'about.metric.languages' },
-              { num: '5+', key: 'about.metric.years' },
+              { num: '5+', key: 'about.metric.cloud' },
             ].map(({ num, key }, i) => (
               <div
                 key={key}
@@ -194,13 +233,26 @@ export default function Hero() {
       </div>
 
       {/* Scroll indicator */}
-      <motion.div
-        className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        animate={{ y: [0, 8, 0] }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-      >
-        <ChevronDown size={20} className="text-[var(--color-text-tertiary)] opacity-30" />
-      </motion.div>
+      <AnimatePresence>
+        {!hideScrollCue && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 0.7, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.35 }}
+            className="absolute bottom-8 left-1/2 -translate-x-1/2"
+          >
+            <motion.div
+              animate={{ y: [0, 8, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              className="flex flex-col items-center gap-1"
+            >
+              <ChevronDown size={20} className="text-[var(--color-text-tertiary)]" />
+              <span className="w-px h-5 bg-gradient-to-b from-[var(--color-text-tertiary)] to-transparent" />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
