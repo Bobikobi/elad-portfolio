@@ -27,7 +27,12 @@ const skills: Skill[] = [
   { name: 'Node.js', level: 'advanced', years: 2, projects: 7, category: 'Backend' },
   { name: 'Google Gemini', level: 'expert', years: 2, projects: 6, category: 'AI & ML' },
   { name: 'Prompt Engineering', level: 'expert', years: 2, projects: 9, category: 'AI & ML' },
+  { name: 'React Hook Form', level: 'advanced', years: 2, projects: 2, category: 'Frontend' },
+  { name: 'Recharts', level: 'intermediate', years: 1, projects: 2, category: 'Frontend' },
+  { name: 'Vitest', level: 'advanced', years: 1, projects: 3, category: 'Frontend' },
+  { name: 'Zod', level: 'advanced', years: 2, projects: 3, category: 'Backend' },
   { name: 'Electron', level: 'advanced', years: 1, projects: 2, category: 'Desktop' },
+  { name: 'Puppeteer', level: 'advanced', years: 2, projects: 2, category: 'Desktop' },
   { name: 'Docker', level: 'intermediate', years: 1, projects: 3, category: 'DevOps' },
   { name: 'Vercel', level: 'expert', years: 3, projects: 10, category: 'DevOps' },
 ];
