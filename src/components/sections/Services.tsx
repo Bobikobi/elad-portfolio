@@ -68,7 +68,7 @@ export default function Services() {
                 <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2 group-hover:text-white transition-colors">
                   {t(`services.${s.key}.title`)}
                 </h3>
-                <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed group-hover:text-white/80 transition-colors duration-300">
                   {t(`services.${s.key}.desc`)}
                 </p>
               </motion.div>
