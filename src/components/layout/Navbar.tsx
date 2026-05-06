@@ -181,14 +181,14 @@ export default function Navbar() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 end-0 z-50 h-full w-72 bg-[var(--color-bg-secondary)] border-s border-[var(--color-border-default)] p-6 flex flex-col"
+              className="fixed top-0 end-0 z-50 h-full w-full sm:w-72 bg-[var(--color-bg-secondary)] border-s border-[var(--color-border-default)] p-4 sm:p-6 flex flex-col"
               role="dialog"
               aria-modal="true"
               aria-label="Navigation menu"
             >
-              <div className="flex justify-end mb-8">
-                <button onClick={() => setMobileOpen(false)} className="text-[var(--color-text-secondary)]">
-                  <X size={20} />
+              <div className="flex justify-end mb-6 sm:mb-8">
+                <button onClick={() => setMobileOpen(false)} className="text-[var(--color-text-secondary)] p-2">
+                  <X size={24} />
                 </button>
               </div>
               <ul className="flex flex-col gap-6">
@@ -211,7 +211,7 @@ export default function Navbar() {
                       changeLocale(l.code);
                       setMobileOpen(false);
                     }}
-                    className={`flex-1 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                    className={`flex-1 px-3 py-3 rounded-md text-xs font-medium transition-all ${
                       locale === l.code
                         ? 'bg-[var(--color-accent)] text-white'
                         : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
