@@ -77,7 +77,7 @@ const components = [
 
 export default function GrowthMarketingPage() {
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-16 sm:px-8">
+    <main className="mx-auto w-full max-w-4xl px-4 py-16 sm:px-6 lg:px-8 overflow-x-hidden">
       <JsonLd data={schemas} />
 
       <GradientBar />

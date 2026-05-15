@@ -148,7 +148,7 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
             href={project.liveUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="relative block rounded-lg overflow-hidden border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors mb-4 group/preview"
+            className="relative block w-full rounded-lg overflow-hidden border border-[var(--color-border-default)] hover:border-[var(--color-border-subtle)] transition-colors mb-4 group"
             aria-label={`Open ${project.title[locale]}`}
           >
             <div className="relative h-40 overflow-hidden bg-[var(--color-bg-tertiary)] sm:h-36">
@@ -188,12 +188,12 @@ function ProjectCard({ project, locale, index }: { project: typeof projects[0]; 
                     referrerPolicy="no-referrer"
                     onError={() => setPreviewUnavailable(true)}
                   />
-                  <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(9,9,11,0.28),transparent_45%)]" />
+                  <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(9,9,11,0.28),transparent_45%)] pointer-events-none" />
                 </>
               )}
-              <div className="absolute inset-0 group-hover/preview:bg-[var(--color-accent)]/5 transition-colors" />
-              <div className="absolute bottom-2 right-2 opacity-100 transition-opacity md:opacity-0 md:group-hover/preview:opacity-100">
-                <span className="inline-flex items-center gap-1 text-[10px] text-white bg-black/60 rounded px-2 py-0.5 backdrop-blur-sm">
+              <div className="absolute inset-0 group-hover:bg-[var(--color-accent)]/5 transition-colors pointer-events-none" />
+              <div className="absolute bottom-2 right-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 pointer-events-none">
+                <span className="inline-flex items-center gap-1 text-[10px] text-white bg-black/60 rounded px-2 py-0.5 backdrop-blur-sm pointer-events-none">
                   <ExternalLink size={9} /> פתח
                 </span>
               </div>

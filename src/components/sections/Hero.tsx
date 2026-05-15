@@ -39,7 +39,7 @@ export default function Hero() {
     <section
       ref={spotlightRef}
       onMouseMove={handleMouseMove}
-      className="relative min-h-dvh flex items-center overflow-hidden"
+      className="relative min-h-dvh flex items-center overflow-hidden bg-[var(--color-bg-primary)]"
       style={{
         background: `radial-gradient(ellipse at var(--spotlight-x, 50%) var(--spotlight-y, 50%), var(--color-accent-glow) 0%, transparent 60%)`,
       }}

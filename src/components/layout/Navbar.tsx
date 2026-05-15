@@ -106,7 +106,7 @@ export default function Navbar() {
             : 'bg-transparent'
         }`}
       >
-        <nav className="mx-auto max-w-[1200px] px-6 flex items-center justify-between h-16">
+        <nav className={`mx-auto max-w-[1200px] px-6 flex items-center justify-between h-16 ${locale === 'he' ? 'flex-row-reverse' : ''}`}>
           {/* Logo */}
           <button
             onClick={goToHome}
