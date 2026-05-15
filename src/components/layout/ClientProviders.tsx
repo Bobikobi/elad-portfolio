@@ -1,4 +1,5 @@
 'use client';
+import { useEffect } from 'react';
 import { I18nProvider, useI18n } from '@/lib/i18n';
 import Navbar from './Navbar';
 import Footer from './Footer';
@@ -8,6 +9,14 @@ import LocaleRouteSync from '@/components/seo/LocaleRouteSync';
 
 function InnerLayout({ children }: { children: React.ReactNode }) {
   const { locale } = useI18n();
+  
+  // Update html lang and dir attributes when locale changes
+  useEffect(() => {
+    const dir = locale === 'he' ? 'rtl' : 'ltr';
+    document.documentElement.lang = locale;
+    document.documentElement.dir = dir;
+  }, [locale]);
+  
   return (
     <>
       <LocaleRouteSync />

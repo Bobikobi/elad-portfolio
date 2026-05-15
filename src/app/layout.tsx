@@ -1,4 +1,3 @@
-"use client";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Heebo } from "next/font/google";
@@ -274,9 +273,6 @@ const jsonLd = {
   ],
 };
 
-import { usePathname } from 'next/navigation';
-import { useMemo } from 'react';
-
 function getLocaleFromPath(path: string): { lang: string; dir: string } {
   const seg = path.split('/')[1];
   if (seg === 'en') return { lang: 'en', dir: 'ltr' };
@@ -285,14 +281,9 @@ function getLocaleFromPath(path: string): { lang: string; dir: string } {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // This hook only runs on client, so fallback to he/rtl for SSR, but hydrate instantly.
+  // SSR defaults to he/rtl, ClientProviders will update these on mount
   let lang = 'he';
   let dir = 'rtl';
-  if (typeof window !== 'undefined') {
-    const { lang: l, dir: d } = getLocaleFromPath(window.location.pathname);
-    lang = l;
-    dir = d;
-  }
   return (
     <html
       lang={lang}
