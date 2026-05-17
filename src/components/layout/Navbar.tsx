@@ -14,7 +14,7 @@ const locales: { code: Locale; label: string }[] = [
 ];
 
 export default function Navbar() {
-  const { t, locale, setLocale } = useI18n();
+  const { t, locale, setLocale, dir } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -106,7 +106,7 @@ export default function Navbar() {
             : 'bg-transparent'
         }`}
       >
-        <nav className="mx-auto max-w-[1200px] px-6 flex items-center justify-between h-16">
+        <nav className={`mx-auto max-w-[1200px] px-6 flex items-center justify-between h-16 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
           {/* Logo */}
           <button
             onClick={goToHome}
@@ -136,7 +136,7 @@ export default function Navbar() {
           </ul>
 
           {/* Language + mobile toggle */}
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
             <div className="hidden md:flex items-center gap-1 bg-[var(--color-bg-tertiary)] rounded-lg p-0.5">
               {locales.map((l) => (
                 <button
