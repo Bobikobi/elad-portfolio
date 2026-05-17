@@ -19,9 +19,9 @@ const timeline = [
     he: 'קוד ראשון',
     en: 'First code',
     ru: 'Первый код',
-    sub_he: 'HTML, CSS, JS — אהבה ממבט ראשון',
-    sub_en: 'HTML, CSS, JS — love at first sight',
-    sub_ru: 'HTML, CSS, JS — любовь с первого взгляда',
+    sub_he: 'HTML, CSS, JS',
+    sub_en: 'HTML, CSS, JS',
+    sub_ru: 'HTML, CSS, JS',
   },
   {
     year: '2023',
