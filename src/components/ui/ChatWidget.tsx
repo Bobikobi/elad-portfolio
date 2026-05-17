@@ -45,8 +45,8 @@ interface ChatWidgetProps {
 
 export default function ChatWidget({ locale }: ChatWidgetProps) {
   const isRTL = locale === 'he';
-  const sideClass = isRTL ? 'left-6' : 'right-6';
-  const panelAlignClass = isRTL ? 'left-0' : 'right-0';
+  const sideClass = 'start-6';
+  const panelAlignClass = 'start-0';
   const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
   const [open, setOpen] = useState(false);
