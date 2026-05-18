@@ -7,6 +7,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 const navItems = ['about', 'services', 'projects', 'tech', 'contact'] as const;
+const sectionIds: Record<typeof navItems[number], string> = {
+  about: 'about',
+  services: 'services',
+  projects: 'projects',
+  tech: 'technologies',
+  contact: 'contact',
+};
 const locales: { code: Locale; label: string }[] = [
   { code: 'he', label: 'עב' },
   { code: 'en', label: 'EN' },
@@ -26,13 +33,6 @@ export default function Navbar() {
 
   const homePath = locale === 'he' ? '/' : `/${locale}`;
   const isOnHome = pathname === homePath;
-  const sectionIdMap: Record<(typeof navItems)[number], string> = {
-    about: 'about',
-    services: 'services',
-    projects: 'projects',
-    tech: 'technologies',
-    contact: 'contact',
-  };
 
   useMotionValueEvent(scrollY, 'change', (value) => {
     setScrolled(value > 80);
@@ -48,7 +48,7 @@ export default function Navbar() {
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
 
         if (!visible?.target?.id) return;
-        const matched = (Object.entries(sectionIdMap).find(([, id]) => id === visible.target.id)?.[0] ?? null) as
+        const matched = (Object.entries(sectionIds).find(([, id]) => id === visible.target.id)?.[0] ?? null) as
           | (typeof navItems)[number]
           | null;
         if (matched) setActiveSection(matched);
@@ -56,7 +56,7 @@ export default function Navbar() {
       { rootMargin: '-35% 0px -50% 0px', threshold: [0.2, 0.45, 0.7] }
     );
 
-    Object.values(sectionIdMap).forEach((id) => {
+    Object.values(sectionIds).forEach((id) => {
       const el = document.getElementById(id);
       if (el) observer.observe(el);
     });
@@ -168,7 +168,7 @@ export default function Navbar() {
             {navItems.map((item) => (
               <li key={item}>
                 <button
-                  onClick={() => goToSection(sectionIdMap[item])}
+                  onClick={() => goToSection(sectionIds[item])}
                   className={`relative text-sm px-1 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors ${
                     activeSection === item
                       ? 'text-[var(--color-text-primary)]'
@@ -248,7 +248,7 @@ export default function Navbar() {
                 {navItems.map((item) => (
                   <li key={item}>
                     <button
-                      onClick={() => goToSection(sectionIdMap[item])}
+                      onClick={() => goToSection(sectionIds[item])}
                       className={`text-lg transition-colors ${
                         activeSection === item
                           ? 'text-[var(--color-text-primary)]'
