@@ -135,7 +135,8 @@ function ProjectCardFeatured({
       transition={{ duration: 0.45, ease: [0.25, 0.4, 0, 1] }}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
-      className={`group relative overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] gradient-border shimmer-hover ${className ?? ''}`}
+      onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
+      className={`group relative overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] gradient-border shimmer-hover cursor-pointer ${className ?? ''}`}
     >
       <div className="absolute inset-0">
         {previewSrc && !previewUnavailable ? (
@@ -231,7 +232,8 @@ function ProjectCardSmall({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -12, scale: 0.98 }}
       transition={{ duration: 0.35 }}
-      className={`group relative overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 gradient-border shimmer-hover ${className ?? ''}`}
+      onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
+      className={`group relative overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 gradient-border shimmer-hover cursor-pointer ${className ?? ''}`}
     >
       <div className="mb-3 h-24 overflow-hidden rounded-lg bg-[var(--color-bg-tertiary)]">
         {previewSrc && !previewUnavailable ? (

@@ -30,12 +30,14 @@
 /* ===== Base ===== */
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
   background: var(--color-bg-primary);
   color: var(--color-text-secondary);
   font-family: var(--font-sans), var(--font-hebrew), sans-serif;
+  overflow-x: hidden;
 }
 
 /* ===== Noise overlay ===== */
