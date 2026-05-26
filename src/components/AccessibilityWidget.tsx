@@ -171,7 +171,8 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
           role="dialog"
           aria-label={t('title')}
           aria-modal="false"
-          className={`fixed bottom-20 ${side} z-[9999] w-72 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden animate-fadeIn`}
+          className={`fixed bottom-20 ${side} z-[9999] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden animate-fadeIn`}
+          style={{ width: 'min(90vw, 18rem)' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white">
