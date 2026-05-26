@@ -125,6 +125,21 @@ function ProjectCardFeatured({
   const previewSrc = getProjectPreviewSrc(project);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const { challenge, result } = getCaseStudy(locale);
+  const cardLink = project.liveUrl ?? project.githubUrl;
+
+  const handleCardClick = () => {
+    if (cardLink) {
+      window.open(cardLink, '_blank', 'noopener noreferrer');
+    }
+  };
+
+  const handleCardKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (!cardLink) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleCardClick();
+    }
+  };
 
   return (
     <motion.div
@@ -135,7 +150,11 @@ function ProjectCardFeatured({
       transition={{ duration: 0.45, ease: [0.25, 0.4, 0, 1] }}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
-      className={`group relative overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] gradient-border shimmer-hover ${className ?? ''}`}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      role={cardLink ? 'link' : undefined}
+      tabIndex={cardLink ? 0 : -1}
+      className={`group relative cursor-pointer overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] gradient-border shimmer-hover ${className ?? ''}`}
     >
       <div className="absolute inset-0">
         {previewSrc && !previewUnavailable ? (
@@ -190,6 +209,7 @@ function ProjectCardFeatured({
                 href={project.liveUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-xs font-medium text-white"
               >
                 <ExternalLink size={14} /> Live
@@ -200,6 +220,7 @@ function ProjectCardFeatured({
                 href={project.githubUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)]"
               >
                 <GithubIcon size={14} /> GitHub
@@ -223,6 +244,21 @@ function ProjectCardSmall({
 }) {
   const previewSrc = getProjectPreviewSrc(project);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
+  const cardLink = project.liveUrl ?? project.githubUrl;
+
+  const handleCardClick = () => {
+    if (cardLink) {
+      window.open(cardLink, '_blank', 'noopener noreferrer');
+    }
+  };
+
+  const handleCardKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (!cardLink) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleCardClick();
+    }
+  };
 
   return (
     <motion.article
@@ -231,7 +267,11 @@ function ProjectCardSmall({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -12, scale: 0.98 }}
       transition={{ duration: 0.35 }}
-      className={`group relative overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 gradient-border shimmer-hover ${className ?? ''}`}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      role={cardLink ? 'link' : undefined}
+      tabIndex={cardLink ? 0 : -1}
+      className={`group relative cursor-pointer overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 gradient-border shimmer-hover ${className ?? ''}`}
     >
       <div className="mb-3 h-24 overflow-hidden rounded-lg bg-[var(--color-bg-tertiary)]">
         {previewSrc && !previewUnavailable ? (
@@ -262,6 +302,7 @@ function ProjectCardSmall({
               href={project.liveUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
               aria-label={`Open ${project.title[locale]}`}
             >
@@ -273,8 +314,9 @@ function ProjectCardSmall({
             href={project.githubUrl}
             target="_blank"
             rel="noopener noreferrer"
-              className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
-              aria-label={`Open GitHub for ${project.title[locale]}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+            aria-label={`Open GitHub for ${project.title[locale]}`}
           >
               <GithubIcon size={14} />
           </a>
