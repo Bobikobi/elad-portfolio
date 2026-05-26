@@ -7,6 +7,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 const navItems = ['about', 'services', 'projects', 'tech', 'contact'] as const;
+const sectionIds: Record<typeof navItems[number], string> = {
+  about: 'about',
+  services: 'services',
+  projects: 'projects',
+  tech: 'technologies',
+  contact: 'contact',
+};
 const locales: { code: Locale; label: string }[] = [
   { code: 'he', label: 'עב' },
   { code: 'en', label: 'EN' },
@@ -106,7 +113,7 @@ export default function Navbar() {
             : 'bg-transparent'
         }`}
       >
-        <nav className={`mx-auto max-w-[1200px] px-6 flex items-center justify-between h-16 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
+        <nav className="mx-auto max-w-[1200px] w-full px-4 sm:px-6 flex items-center justify-between h-16">
           {/* Logo */}
           <button
             onClick={goToHome}
@@ -126,7 +133,7 @@ export default function Navbar() {
             {navItems.map((item) => (
               <li key={item}>
                 <button
-                  onClick={() => goToSection(item)}
+                  onClick={() => goToSection(sectionIds[item])}
                   className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors"
                 >
                   {t(`nav.${item}`)}
@@ -181,7 +188,7 @@ export default function Navbar() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 end-0 z-50 h-full w-full sm:w-72 bg-[var(--color-bg-secondary)] border-s border-[var(--color-border-default)] p-4 sm:p-6 flex flex-col"
+              className="fixed top-0 end-0 z-50 h-full w-full max-w-[320px] bg-[var(--color-bg-secondary)] border-s border-[var(--color-border-default)] p-6 flex flex-col"
               role="dialog"
               aria-modal="true"
               aria-label="Navigation menu"
@@ -195,7 +202,7 @@ export default function Navbar() {
                 {navItems.map((item) => (
                   <li key={item}>
                     <button
-                      onClick={() => goToSection(item)}
+                      onClick={() => goToSection(sectionIds[item])}
                       className="text-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
                     >
                       {t(`nav.${item}`)}
