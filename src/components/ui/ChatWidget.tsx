@@ -152,8 +152,8 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
       {/* Panel */}
       {open && (
         <div
-          className={`absolute bottom-full mb-3 ${panelAlignClass} w-80 flex flex-col rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] shadow-2xl overflow-hidden`}
-          style={{ height: '420px' }}
+          className={`absolute bottom-full mb-3 ${panelAlignClass} w-80 max-w-[90vw] flex flex-col rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] shadow-2xl overflow-hidden`}
+          style={{ height: 'min(420px, calc(100vh - 5rem))' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-[var(--color-accent)] shrink-0">

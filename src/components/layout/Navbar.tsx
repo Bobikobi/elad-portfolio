@@ -148,7 +148,7 @@ export default function Navbar() {
             : 'bg-transparent'
         }`}
       >
-        <nav className="mx-auto max-w-[1200px] px-6 flex items-center justify-between h-16">
+        <nav className="mx-auto max-w-[1200px] w-full px-4 sm:px-6 flex items-center justify-between h-16">
           {/* Logo */}
           <button
             onClick={goToHome}
@@ -234,7 +234,7 @@ export default function Navbar() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 end-0 z-50 h-full w-72 bg-[var(--color-bg-secondary)] border-s border-[var(--color-border-default)] p-6 flex flex-col"
+              className="fixed top-0 end-0 z-50 h-full w-full max-w-[320px] bg-[var(--color-bg-secondary)] border-s border-[var(--color-border-default)] p-6 flex flex-col"
               role="dialog"
               aria-modal="true"
               aria-label="Navigation menu"
