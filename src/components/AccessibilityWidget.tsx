@@ -56,6 +56,7 @@ interface AccessibilityWidgetProps {
 export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidgetProps) {
   const t = (key: string) => labels[key]?.[locale] ?? labels[key]?.['he'] ?? key;
   const isRTL = locale === 'he';
+  const side = isRTL ? 'start-6' : 'end-6';
 
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<A11yState>(DEFAULT_STATE);
