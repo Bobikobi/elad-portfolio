@@ -18,7 +18,8 @@ export default function Projects() {
   const [filter, setFilter] = useState<FilterCategory>('web-app');
 
   const filtered = projects.filter((p) => p.category === filter);
-  const featuredProject = filtered.find((p) => p.id === 'openclaw') ?? filtered[0];
+  const featuredId = filter === 'web-app' ? 'yaar-ad' : filter === 'ai-bot' ? 'openclaw' : undefined;
+  const featuredProject = (featuredId ? filtered.find((p) => p.id === featuredId) : undefined) ?? filtered[0];
   const regularProjects = filtered.filter((p) => p.id !== featuredProject?.id);
   const sideStack = regularProjects.slice(0, 2);
   const bottomRow = regularProjects.slice(2, 5);
