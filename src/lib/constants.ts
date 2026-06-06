@@ -62,6 +62,24 @@ export const projects: Project[] = [
     featured: true,
   },
   {
+    id: 'yaar-ad',
+    title: {
+      he: 'יער עד - ייעור ישראל',
+      en: 'Yaar Ad - Israel Afforestation',
+      ru: 'Yaar Ad - Лесовосстановление Израиля',
+    },
+    description: {
+      he: 'אתר מגייס תרומות לעמותת ייעור ישראל. עיצוב טבעי-ירוק עם אנימציות Framer Motion, תמיכת i18n, ועמוד הלכה, חזון, מחקר ויצירת קשר - כולם RTL-first.',
+      en: 'Fundraising site for an Israeli afforestation nonprofit. Nature-themed design with Framer Motion animations, full i18n support, and pages covering halacha, vision, research, and contact — all RTL-first.',
+      ru: 'Сайт для сбора пожертвований в пользу израильской организации по лесовосстановлению. Природная тематика, анимации Framer Motion, полная i18n-поддержка и RTL-макет.',
+    },
+    category: 'web-app',
+    techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion', 'i18n'],
+    liveUrl: 'https://yaar-ad.org.il',
+    previewImage: '/images/projects/yaar-ad-preview.jpg',
+    featured: true,
+  },
+  {
     id: 'political-compass',
     title: {
       he: 'מצפן פוליטי ישראלי',
@@ -205,7 +223,7 @@ export const techCategories = [
 ];
 
 export const metrics = [
-  { value: 8, label: 'about.metric.projects' },
+  { value: 9, label: 'about.metric.projects' },
   { value: 12, label: 'about.metric.tech' },
   { value: 3, label: 'about.metric.languages' },
   { value: 3, label: 'about.metric.cloud' },
