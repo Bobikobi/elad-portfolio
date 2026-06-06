@@ -75,7 +75,7 @@ export const projects: Project[] = [
     },
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion', 'i18n'],
-    liveUrl: 'https://yaar-ad.vercel.app/he',
+    liveUrl: 'https://yaar-ad.org.il',
     previewImage: '/images/projects/yaar-ad-preview.jpg',
     featured: true,
   },
