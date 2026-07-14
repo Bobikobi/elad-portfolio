@@ -94,7 +94,7 @@ export const projects: Project[] = [
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Supabase', 'Recharts', 'Framer Motion'],
     liveUrl: 'https://political-compass-il.vercel.app',
-    previewImage: '/images/projects/political-compass-preview.jpg?v=3',
+    previewImage: '/images/projects/political-compass-preview.jpg',
     featured: true,
   },
   {
@@ -130,7 +130,7 @@ export const projects: Project[] = [
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion'],
     liveUrl: 'https://honey-site-seven.vercel.app',
-    previewImage: '/images/projects/honey-shor-preview.jpg?v=3',
+    previewImage: '/images/projects/honey-shor-preview.jpg',
     featured: false,
   },
   {
@@ -149,7 +149,7 @@ export const projects: Project[] = [
     techStack: ['Next.js 16', 'TypeScript', 'Tailwind CSS v4', 'Framer Motion', 'i18n'],
     liveUrl: 'https://elad-s-portfolio.vercel.app',
     githubUrl: 'https://github.com/Bobikobi/elad-portfolio',
-    previewImage: '/images/projects/elad-portfolio-preview.jpg?v=3',
+    previewImage: '/images/projects/elad-portfolio-preview.jpg',
     featured: true,
   },
   {
@@ -167,7 +167,7 @@ export const projects: Project[] = [
     category: 'web-app',
     techStack: ['Next.js', 'TypeScript', 'Tailwind', 'Framer Motion', 'i18n'],
     liveUrl: 'https://www.shaperz.co.il/',
-    previewImage: '/images/projects/shaperz-preview.jpg?v=3',
+    previewImage: '/images/projects/shaperz-preview.jpg',
     featured: true,
   },
   {
@@ -202,7 +202,7 @@ export const techCategories = [
   },
   {
     key: 'frontend',
-    items: ['React 19', 'Next.js 14', 'Tailwind CSS v4', 'Framer Motion', 'Recharts', 'shadcn/ui'],
+    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Framer Motion', 'Recharts', 'shadcn/ui'],
   },
   {
     key: 'backend',

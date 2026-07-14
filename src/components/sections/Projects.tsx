@@ -1,5 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
+import Image from 'next/image';
 import { motion, useInView, AnimatePresence } from 'framer-motion';
 import { ExternalLink } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
@@ -159,13 +160,12 @@ function ProjectCardFeatured({
     >
       <div className="absolute inset-0">
         {previewSrc && !previewUnavailable ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={previewSrc}
             alt={project.title[locale]}
-            className="h-full w-full object-cover object-top"
-            loading="lazy"
-            referrerPolicy="no-referrer"
+            fill
+            sizes="(max-width: 768px) 100vw, 66vw"
+            className="object-cover object-top"
             onError={() => setPreviewUnavailable(true)}
           />
         ) : (
@@ -274,15 +274,14 @@ function ProjectCardSmall({
       tabIndex={cardLink ? 0 : -1}
       className={`group relative cursor-pointer overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 gradient-border shimmer-hover ${className ?? ''}`}
     >
-      <div className="mb-3 h-24 overflow-hidden rounded-lg bg-[var(--color-bg-tertiary)]">
+      <div className="relative mb-3 h-24 overflow-hidden rounded-lg bg-[var(--color-bg-tertiary)]">
         {previewSrc && !previewUnavailable ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={previewSrc}
             alt={project.title[locale]}
-            className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
-            referrerPolicy="no-referrer"
+            fill
+            sizes="(max-width: 768px) 100vw, 33vw"
+            className="object-cover object-top transition-transform duration-300 group-hover:scale-105"
             onError={() => setPreviewUnavailable(true)}
           />
         ) : (
