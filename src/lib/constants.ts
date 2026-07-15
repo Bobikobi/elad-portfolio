@@ -238,11 +238,11 @@ export const techCategories = [
   },
   {
     key: 'frontend',
-    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Framer Motion', 'PWA / Web Push', 'Recharts', 'shadcn/ui'],
+    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Framer Motion', 'Three.js / R3F', 'PWA / Web Push', 'Recharts', 'shadcn/ui'],
   },
   {
     key: 'backend',
-    items: ['Node.js', 'Django', 'Supabase', 'PostgreSQL', 'Neon', 'REST APIs', 'Zod', 'OAuth 2.0', 'Server Actions'],
+    items: ['Node.js', 'Django', 'Django REST Framework', 'PostgreSQL', 'Supabase', 'Neon', 'SQLite', 'Redis', 'Prisma', 'NextAuth', 'Zod', 'OAuth 2.0', 'Server Actions'],
   },
   {
     key: 'ai',
@@ -250,11 +250,11 @@ export const techCategories = [
   },
   {
     key: 'automation',
-    items: ['Electron', 'Puppeteer', 'Playwright', 'Cron Jobs', 'systemd', 'Telegram Bot API'],
+    items: ['Electron', 'Puppeteer', 'Playwright', 'Cron Jobs', 'systemd', 'Telegram Bot API', 'WhatsApp API'],
   },
   {
     key: 'cloud',
-    items: ['Vercel', 'GCP', 'Oracle Cloud', 'nginx', 'gunicorn', 'pm2', 'Docker', 'GitHub Actions', 'AWS SES', 'Google Sheets API', 'Facebook Graph API'],
+    items: ['Vercel', 'GCP', 'Oracle Cloud', 'nginx', 'gunicorn', 'pm2', 'Docker', 'GitHub Actions', 'AWS SES', 'Sentry', 'Google Sheets API', 'Facebook Graph API'],
   },
 ];
 
