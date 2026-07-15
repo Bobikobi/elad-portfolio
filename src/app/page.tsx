@@ -13,11 +13,37 @@ const projectsJsonLd = {
   name: "Projects by Elad Saadon (אלעד סעדון)",
   description: "Selected production projects built by Elad Saadon — full-stack developer and AI systems architect from Israel.",
   url: "https://www.eladsaadon.dev/#projects",
-  numberOfItems: 5,
+  numberOfItems: 7,
   itemListElement: [
     {
       "@type": "ListItem",
       position: 1,
+      item: {
+        "@type": "SoftwareApplication",
+        name: "CEOS - CEOs Israel Website",
+        url: "https://v1.ceos.co.il",
+        description: "Public website of the CEOs Israel venture, fully developed by Elad Saadon end-to-end with Next.js 16, React 19, TypeScript, and Tailwind CSS v4.",
+        author: { "@id": "https://www.eladsaadon.dev/#person" },
+        applicationCategory: "Web / Business",
+        inLanguage: ["he"],
+      },
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      item: {
+        "@type": "SoftwareApplication",
+        name: "CEOS Method - Business Management Platform",
+        url: "https://method.ceos.co.il",
+        description: "Multi-tenant SaaS platform for managing small and medium businesses - tasks, meetings, metrics, and workflows. Built by Elad Saadon in collaboration, with Django and PostgreSQL.",
+        author: { "@id": "https://www.eladsaadon.dev/#person" },
+        applicationCategory: "SaaS / Business Management",
+        inLanguage: ["he"],
+      },
+    },
+    {
+      "@type": "ListItem",
+      position: 3,
       item: {
         "@type": "SoftwareApplication",
         name: "OpenClaw — Autonomous AI System",
@@ -30,7 +56,7 @@ const projectsJsonLd = {
     },
     {
       "@type": "ListItem",
-      position: 2,
+      position: 4,
       item: {
         "@type": "SoftwareApplication",
         name: "Netanya Emergency Teams — Municipal Emergency Management",
@@ -43,7 +69,7 @@ const projectsJsonLd = {
     },
     {
       "@type": "ListItem",
-      position: 3,
+      position: 5,
       item: {
         "@type": "SoftwareApplication",
         name: "Political Compass IL — Israeli Political Compass",
@@ -55,7 +81,7 @@ const projectsJsonLd = {
     },
     {
       "@type": "ListItem",
-      position: 4,
+      position: 6,
       item: {
         "@type": "SoftwareApplication",
         name: "AI Visual Web Scraper",
@@ -66,7 +92,7 @@ const projectsJsonLd = {
     },
     {
       "@type": "ListItem",
-      position: 5,
+      position: 7,
       item: {
         "@type": "SoftwareApplication",
         name: "SHAPERZ — Community Marketing Platform",

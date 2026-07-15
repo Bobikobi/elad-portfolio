@@ -1,5 +1,6 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { motion, useInView, AnimatePresence } from 'framer-motion';
 import { ExternalLink } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
@@ -22,10 +23,10 @@ export default function Projects() {
   const featuredProject = (featuredId ? filtered.find((p) => p.id === featuredId) : undefined) ?? filtered[0];
   const regularProjects = filtered.filter((p) => p.id !== featuredProject?.id);
   const sideStack = regularProjects.slice(0, 2);
-  const bottomRow = regularProjects.slice(2, 5);
+  const bottomRow = regularProjects.slice(2); // show all remaining — never silently drop projects
 
   return (
-    <section id="projects" className="relative py-20 px-6" ref={ref}>
+    <section id="projects" className="relative py-14 md:py-20 px-6" ref={ref}>
       <div className="mx-auto max-w-[1200px]">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -72,7 +73,7 @@ export default function Projects() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.35 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-[220px]"
+            className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-[minmax(220px,auto)]"
           >
             {featuredProject && (
               <ProjectCardFeatured
@@ -113,6 +114,20 @@ function getCaseStudy(locale: 'he' | 'en' | 'ru') {
   };
 }
 
+function useCanHover() {
+  // matchMedia('(hover: hover)') — true for mouse/trackpad devices, false for touch.
+  // Touch devices get the details inline instead of a hover-reveal panel.
+  const [canHover, setCanHover] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: hover)');
+    setCanHover(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setCanHover(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return canHover;
+}
+
 function ProjectCardFeatured({
   project,
   locale,
@@ -123,6 +138,7 @@ function ProjectCardFeatured({
   className?: string;
 }) {
   const [hovered, setHovered] = useState(false);
+  const canHover = useCanHover();
   const previewSrc = getProjectPreviewSrc(project);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const { challenge, result } = getCaseStudy(locale);
@@ -159,19 +175,19 @@ function ProjectCardFeatured({
     >
       <div className="absolute inset-0">
         {previewSrc && !previewUnavailable ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={previewSrc}
             alt={project.title[locale]}
-            className="h-full w-full object-cover object-top"
-            loading="lazy"
-            referrerPolicy="no-referrer"
+            fill
+            sizes="(max-width: 768px) 100vw, 66vw"
+            className="object-cover object-top"
             onError={() => setPreviewUnavailable(true)}
           />
         ) : (
           <div className="h-full w-full bg-[linear-gradient(135deg,rgba(139,92,246,0.28),rgba(6,182,212,0.18))]" />
         )}
-        <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(9,9,11,0.92)_0%,rgba(9,9,11,0.58)_45%,rgba(9,9,11,0.2)_100%)]" />
+        {/* Stronger scrim so card text stays readable over preview images that contain text */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(9,9,11,0.97)_0%,rgba(9,9,11,0.78)_50%,rgba(9,9,11,0.42)_100%)]" />
       </div>
 
       <div className="relative z-10 flex h-full flex-col justify-end p-6 text-start">
@@ -181,54 +197,81 @@ function ProjectCardFeatured({
         <h3 className="text-2xl font-semibold text-[var(--color-text-primary)]">{project.title[locale]}</h3>
         <p className="mt-2 max-w-xl text-sm text-[var(--color-text-secondary)] line-clamp-2">{project.description[locale]}</p>
 
-        <motion.div
-          className="absolute inset-x-0 bottom-0 bg-[color:rgba(9,9,11,0.95)] p-6 flex flex-col gap-3"
-          initial={{ y: '100%' }}
-          animate={{ y: hovered ? 0 : '100%' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 220 }}
-        >
-          <div className="flex flex-wrap gap-2">
-            {project.techStack.slice(0, 5).map((tech) => (
-              <span
-                key={tech}
-                className="rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-tertiary)] px-2.5 py-1 text-[10px] text-[var(--color-text-secondary)]"
-              >
-                {tech}
-              </span>
-            ))}
-          </div>
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            <span className="font-semibold text-[var(--color-text-primary)]">Challenge:</span> {challenge}
-          </p>
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            <span className="font-semibold text-[var(--color-text-primary)]">Result:</span> {result}
-          </p>
+        {canHover ? (
+          <motion.div
+            className="absolute inset-x-0 bottom-0 bg-[color:rgba(9,9,11,0.95)] p-6 flex flex-col gap-3"
+            initial={{ y: '100%' }}
+            animate={{ y: hovered ? 0 : '100%' }}
+            transition={{ type: 'spring', damping: 20, stiffness: 220 }}
+          >
+            <div className="flex flex-wrap gap-2">
+              {project.techStack.slice(0, 5).map((tech) => (
+                <span
+                  key={tech}
+                  className="rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-tertiary)] px-2.5 py-1 text-[10px] text-[var(--color-text-secondary)]"
+                >
+                  {tech}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              <span className="font-semibold text-[var(--color-text-primary)]">Challenge:</span> {challenge}
+            </p>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              <span className="font-semibold text-[var(--color-text-primary)]">Result:</span> {result}
+            </p>
 
-          <div className="mt-1 flex flex-wrap gap-2">
+            <div className="mt-1 flex flex-wrap gap-2">
+              {project.liveUrl && (
+                <a
+                  href={project.liveUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-xs font-medium text-white"
+                >
+                  <ExternalLink size={14} /> Live
+                </a>
+              )}
+              {project.githubUrl && (
+                <a
+                  href={project.githubUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)]"
+                >
+                  <GithubIcon size={14} /> GitHub
+                </a>
+              )}
+            </div>
+          </motion.div>
+        ) : (
+          // Touch devices: no hover — show tech + links inline instead of a reveal panel.
+          <div className="mt-4 flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              {project.techStack.slice(0, 4).map((tech) => (
+                <span
+                  key={tech}
+                  className="rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] text-[var(--color-text-secondary)]"
+                >
+                  {tech}
+                </span>
+              ))}
+            </div>
             {project.liveUrl && (
               <a
                 href={project.liveUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-xs font-medium text-white"
+                className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-xs font-medium text-white"
               >
                 <ExternalLink size={14} /> Live
               </a>
             )}
-            {project.githubUrl && (
-              <a
-                href={project.githubUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)]"
-              >
-                <GithubIcon size={14} /> GitHub
-              </a>
-            )}
           </div>
-        </motion.div>
+        )}
       </div>
     </motion.div>
   );
@@ -274,15 +317,14 @@ function ProjectCardSmall({
       tabIndex={cardLink ? 0 : -1}
       className={`group relative cursor-pointer overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 gradient-border shimmer-hover ${className ?? ''}`}
     >
-      <div className="mb-3 h-24 overflow-hidden rounded-lg bg-[var(--color-bg-tertiary)]">
+      <div className="relative mb-3 h-24 overflow-hidden rounded-lg bg-[var(--color-bg-tertiary)]">
         {previewSrc && !previewUnavailable ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={previewSrc}
             alt={project.title[locale]}
-            className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
-            referrerPolicy="no-referrer"
+            fill
+            sizes="(max-width: 768px) 100vw, 33vw"
+            className="object-cover object-top transition-transform duration-300 group-hover:scale-105"
             onError={() => setPreviewUnavailable(true)}
           />
         ) : (

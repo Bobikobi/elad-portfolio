@@ -18,8 +18,14 @@ export function useI18n() {
   return ctx;
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>('he');
+export function I18nProvider({
+  children,
+  initialLocale = 'he',
+}: {
+  children: React.ReactNode;
+  initialLocale?: Locale;
+}) {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
 
   useEffect(() => {
     const pathLocale = window.location.pathname.split('/')[1] as Locale | undefined;

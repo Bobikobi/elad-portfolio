@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import ClientProviders from "@/components/layout/ClientProviders";
+import type { Locale } from "@/lib/i18n";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -273,25 +275,15 @@ const jsonLd = {
   ],
 };
 
-function getLocaleFromPath(path: string): { lang: string; dir: string } {
-  const seg = path.split('/')[1];
-  if (seg === 'en') return { lang: 'en', dir: 'ltr' };
-  if (seg === 'ru') return { lang: 'ru', dir: 'ltr' };
-  return { lang: 'he', dir: 'rtl' };
-}
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // This hook only runs on client, so fallback to he/rtl for SSR, but hydrate instantly.
-  let lang = 'he';
-  let dir = 'rtl';
-  if (typeof window !== 'undefined') {
-    const { lang: l, dir: d } = getLocaleFromPath(window.location.pathname);
-    lang = l;
-    dir = d;
-  }
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Locale is resolved server-side from the `x-locale` header set by the proxy (proxy.ts),
+  // so the initial SSR HTML — content, <html lang> and dir — is correct for /en and /ru
+  // instead of always defaulting to Hebrew/RTL and only correcting after hydration.
+  const locale = (((await headers()).get("x-locale") as Locale | null) ?? "he");
+  const dir = locale === "he" ? "rtl" : "ltr";
   return (
     <html
-      lang={lang}
+      lang={locale}
       dir={dir}
       className={`${geistSans.variable} ${geistMono.variable} ${heebo.variable} h-full antialiased`}
     >
@@ -319,7 +311,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <ClientProviders>{children}</ClientProviders>
+        <ClientProviders initialLocale={locale}>{children}</ClientProviders>
         <Analytics />
         <SpeedInsights />
       </body>

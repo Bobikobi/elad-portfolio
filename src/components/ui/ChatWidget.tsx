@@ -45,8 +45,10 @@ interface ChatWidgetProps {
 
 export default function ChatWidget({ locale }: ChatWidgetProps) {
   const isRTL = locale === 'he';
-  const sideClass = 'start-6';
-  const panelAlignClass = 'start-0';
+  // Opposite corner from the accessibility widget (start-6) so the two floating
+  // buttons don't stack on one side and cover content on mobile.
+  const sideClass = 'end-6';
+  const panelAlignClass = 'end-0';
   const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
   const [open, setOpen] = useState(false);
@@ -140,7 +142,7 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
   };
 
   return (
-    <div className={`fixed bottom-20 ${sideClass} z-[9998]`} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className={`fixed bottom-6 ${sideClass} z-[9998]`} dir={isRTL ? 'rtl' : 'ltr'}>
       {turnstileSiteKey && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
