@@ -47,7 +47,7 @@ export default function Contact() {
   };
 
   return (
-    <section id="contact" className="relative py-20 px-6" ref={ref}>
+    <section id="contact" className="relative py-14 md:py-20 px-6" ref={ref}>
       <div className="mx-auto max-w-[1200px]">
         <div className="grid md:grid-cols-2 gap-14">
           <motion.div

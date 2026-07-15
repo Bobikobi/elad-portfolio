@@ -90,7 +90,7 @@ export default function TechStack() {
   }, [activeCategory]);
 
   return (
-    <section id="technologies" className="relative py-20 px-6" ref={ref}>
+    <section id="technologies" className="relative py-14 md:py-20 px-6" ref={ref}>
       <div className="mx-auto max-w-[1200px]">
         <motion.div
           initial={{ opacity: 0, y: 30 }}

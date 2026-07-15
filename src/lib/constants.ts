@@ -80,6 +80,42 @@ export const projects: Project[] = [
     featured: true,
   },
   {
+    id: 'ceos-site',
+    title: {
+      he: 'CEOS - אתר מנכ"לים ישראל',
+      en: 'CEOS - CEOs Israel Website',
+      ru: 'CEOS - Сайт CEOs Israel',
+    },
+    description: {
+      he: 'האתר הציבורי של מיזם מנכ"לים ישראל - פיתוח מלא שלי מקצה לקצה. Next.js 16 עם React 19, עיצוב רספונסיבי מלא, מרכז ידע, קורסים ומסלולים, מצב בהיר/כהה ונגישות.',
+      en: 'The public website of the CEOs Israel venture - fully developed by me end-to-end. Next.js 16 with React 19, fully responsive design, knowledge center, courses and tracks, light/dark mode, and accessibility.',
+      ru: 'Публичный сайт проекта CEOs Israel - полностью моя разработка. Next.js 16 с React 19, адаптивный дизайн, центр знаний, курсы, светлая/тёмная тема и доступность.',
+    },
+    category: 'web-app',
+    techStack: ['Next.js 16', 'React 19', 'TypeScript', 'Tailwind CSS v4'],
+    liveUrl: 'https://v1.ceos.co.il',
+    previewImage: '/images/projects/ceos-site-preview.jpg',
+    featured: true,
+  },
+  {
+    id: 'ceos-method',
+    title: {
+      he: 'CEOS Method - מערכת ניהול עסקית',
+      en: 'CEOS Method - Business Management Platform',
+      ru: 'CEOS Method - Платформа управления бизнесом',
+    },
+    description: {
+      he: 'מערכת SaaS לניהול עסקים קטנים ובינוניים לפי מתודת ניהול סדורה - משימות, פגישות, מדדים ותהליכי עבודה. שיתוף פעולה בהקמה: Django, PostgreSQL ובקאופיס מלא רב-ארגוני.',
+      en: 'SaaS platform for managing small and medium businesses with a structured management method - tasks, meetings, metrics, and workflows. Built in collaboration: Django, PostgreSQL, and a full multi-tenant back office.',
+      ru: 'SaaS-платформа для управления малым и средним бизнесом - задачи, встречи, метрики и процессы. Создана в сотрудничестве: Django, PostgreSQL и полный multi-tenant бэк-офис.',
+    },
+    category: 'web-app',
+    techStack: ['Django', 'PostgreSQL', 'Python', 'Multi-tenant SaaS'],
+    liveUrl: 'https://method.ceos.co.il',
+    previewImage: '/images/projects/ceos-method-preview.jpg',
+    featured: true,
+  },
+  {
     id: 'political-compass',
     title: {
       he: 'מצפן פוליטי ישראלי',
@@ -220,13 +256,6 @@ export const techCategories = [
     key: 'cloud',
     items: ['Vercel', 'GCP', 'Oracle Cloud', 'Docker', 'GitHub Actions', 'Google Sheets API', 'Facebook Graph API'],
   },
-];
-
-export const metrics = [
-  { value: 9, label: 'about.metric.projects' },
-  { value: 12, label: 'about.metric.tech' },
-  { value: 3, label: 'about.metric.languages' },
-  { value: 3, label: 'about.metric.cloud' },
 ];
 
 export const filterCategories = ['web-app', 'desktop', 'ai-bot'] as const;

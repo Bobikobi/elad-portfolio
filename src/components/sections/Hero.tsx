@@ -45,31 +45,13 @@ export default function Hero() {
     <section
       ref={spotlightRef}
       onMouseMove={handleMouseMove}
-      className="relative min-h-dvh flex items-center overflow-hidden has-scan"
+      className="relative min-h-dvh flex items-center overflow-hidden"
       style={{
         background: `radial-gradient(ellipse at var(--spotlight-x, 50%) var(--spotlight-y, 50%), var(--color-accent-glow) 0%, transparent 60%)`,
       }}
     >
-      {/* Animated aurora orbs */}
-      <div className="animate-aurora absolute top-1/4 start-1/4 w-[600px] h-[600px] rounded-full bg-[var(--color-gradient-start)] blur-[140px] pointer-events-none" />
-      <div className="animate-aurora-b absolute bottom-1/4 end-1/3 w-[480px] h-[480px] rounded-full bg-[var(--color-gradient-end)] blur-[130px] pointer-events-none" />
-      <div className="animate-aurora absolute top-3/4 start-2/3 w-[300px] h-[300px] rounded-full bg-[var(--color-accent)] opacity-[0.04] blur-[100px] pointer-events-none" />
-
-      {/* Line grid background */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(rgba(139,92,246,0.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(139,92,246,0.04) 1px, transparent 1px)
-          `,
-          backgroundSize: '60px 60px',
-        }}
-      />
-      {/* Horizon line glow */}
-      <div className="absolute top-1/2 left-0 right-0 h-px pointer-events-none animate-glow-pulse"
-        style={{ background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.25) 30%, rgba(6,182,212,0.25) 70%, transparent)' }}
-      />
+      {/* A single restrained ambient glow — anchored to the content side */}
+      <div className="animate-aurora absolute -top-1/4 end-0 w-[520px] h-[520px] max-w-[80vw] rounded-full bg-[var(--color-gradient-start)] opacity-[0.06] blur-[150px] pointer-events-none" />
 
       <div className="relative z-10 mx-auto max-w-[1200px] w-full px-6 py-32">
         <motion.div
@@ -98,8 +80,8 @@ export default function Hero() {
               className="bg-gradient-to-r from-[var(--color-gradient-start)] via-[var(--color-accent-hover)] to-[var(--color-gradient-end)] bg-clip-text text-transparent"
               style={{
                 backgroundSize: '200% 200%',
-                animation: 'gradient-rotate 8s ease infinite',
-                filter: 'drop-shadow(0 0 40px rgba(139,92,246,0.35)) drop-shadow(0 0 80px rgba(139,92,246,0.12))',
+                animation: 'gradient-rotate 10s ease infinite',
+                filter: 'drop-shadow(0 0 32px rgba(139,92,246,0.18))',
               }}
             >
               {t('hero.name')}
@@ -177,27 +159,8 @@ export default function Hero() {
             ))}
           </div>
 
-          {/* Stats strip */}
-          <div className="flex items-center gap-0 border border-[var(--color-border-default)] rounded-xl overflow-hidden w-fit">
-            {[
-              { num: '10+', key: 'about.metric.projects' },
-              { num: '3', key: 'about.metric.languages' },
-              { num: '5+', key: 'about.metric.cloud' },
-            ].map(({ num, key }, i) => (
-              <div
-                key={key}
-                className={`flex flex-col items-center px-6 py-3 ${
-                  i > 0 ? 'border-s border-[var(--color-border-default)]' : ''
-                } bg-[var(--color-bg-secondary)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-default`}
-              >
-                <span className="text-xl font-bold bg-gradient-to-r from-[var(--color-gradient-start)] to-[var(--color-gradient-end)] bg-clip-text text-transparent leading-none">{num}</span>
-                <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1 whitespace-nowrap">{t(key)}</span>
-              </div>
-            ))}
-          </div>
-
           {/* Crawlable internal links for SEO/GEO — locale-aware text and hrefs */}
-          <div className="mt-6 flex flex-wrap gap-3 text-sm">
+          <div className="flex flex-wrap gap-3 text-sm">
             <Link
               href={locale === 'he' ? '/services' : `/${locale}/services`}
               className="text-[var(--color-accent)] hover:underline"
