@@ -238,15 +238,15 @@ export const techCategories = [
   },
   {
     key: 'frontend',
-    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Framer Motion', 'Recharts', 'shadcn/ui'],
+    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Framer Motion', 'PWA / Web Push', 'Recharts', 'shadcn/ui'],
   },
   {
     key: 'backend',
-    items: ['Node.js', 'Supabase', 'PostgreSQL', 'REST APIs', 'Zod', 'OAuth 2.0', 'Server Actions'],
+    items: ['Node.js', 'Django', 'Supabase', 'PostgreSQL', 'Neon', 'REST APIs', 'Zod', 'OAuth 2.0', 'Server Actions'],
   },
   {
     key: 'ai',
-    items: ['Google Gemini', 'Vision AI', 'Function Calling', 'Pollinations.ai', 'Prompt Engineering', 'Freqtrade'],
+    items: ['Claude (Anthropic)', 'Google Gemini', 'AI Agents', 'MCP', 'Vision AI', 'Function Calling', 'Prompt Engineering', 'Freqtrade'],
   },
   {
     key: 'automation',
@@ -254,7 +254,7 @@ export const techCategories = [
   },
   {
     key: 'cloud',
-    items: ['Vercel', 'GCP', 'Oracle Cloud', 'Docker', 'GitHub Actions', 'Google Sheets API', 'Facebook Graph API'],
+    items: ['Vercel', 'GCP', 'Oracle Cloud', 'nginx', 'gunicorn', 'pm2', 'Docker', 'GitHub Actions', 'AWS SES', 'Google Sheets API', 'Facebook Graph API'],
   },
 ];
 
