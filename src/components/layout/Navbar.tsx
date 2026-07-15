@@ -134,7 +134,7 @@ export default function Navbar() {
   return (
     <>
       <motion.div
-        className="fixed top-0 left-0 right-0 h-[2px] z-[9999] bg-amber-400"
+        className="fixed top-0 left-0 right-0 h-[2px] z-[9999] bg-gradient-to-r from-[var(--color-gradient-start)] to-[var(--color-gradient-end)]"
         style={{
           scaleX: progressScale,
           transformOrigin: dir === 'rtl' ? 'right center' : 'left center',

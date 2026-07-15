@@ -1,6 +1,6 @@
 'use client';
 import { useEffect } from 'react';
-import { I18nProvider, useI18n } from '@/lib/i18n';
+import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
@@ -32,9 +32,15 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function ClientProviders({ children }: { children: React.ReactNode }) {
+export default function ClientProviders({
+  children,
+  initialLocale = 'he',
+}: {
+  children: React.ReactNode;
+  initialLocale?: Locale;
+}) {
   return (
-    <I18nProvider>
+    <I18nProvider initialLocale={initialLocale}>
       <InnerLayout>{children}</InnerLayout>
     </I18nProvider>
   );
