@@ -1,212 +1,192 @@
 'use client';
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
+import { motion, useScroll, useMotionValueEvent, useMotionValue } from 'framer-motion';
 import Link from 'next/link';
-import { Mail, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import { GithubIcon, LinkedinIcon } from '@/components/ui/SocialIcons';
+import { useMotionDisabled } from '@/hooks/useMotionDisabled';
+import { useWebGLAvailable } from '@/hooks/useWebGLAvailable';
+import { useScene } from '@/lib/sceneStore';
+import About from '@/components/sections/About';
+import Services from '@/components/sections/Services';
+import Projects from '@/components/sections/Projects';
+import TechStack from '@/components/sections/TechStack';
+import Contact from '@/components/sections/Contact';
 
-const titles = ['hero.title.0', 'hero.title.1', 'hero.title.2', 'hero.title.3'];
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
-const socials = [
-  { icon: GithubIcon, href: 'https://github.com/Bobikobi', label: 'GitHub' },
-  { icon: LinkedinIcon, href: 'https://www.linkedin.com/in/elad-saadon-184809281/', label: 'LinkedIn' },
-  { icon: Mail, href: 'mailto:eladeladsaa@gmail.com', label: 'Email' },
-];
+const GALAXY_POSTER = '/images/galaxy/poster.webp';
 
-export default function Hero() {
-  const { t, locale, dir } = useI18n();
-  const [titleIdx, setTitleIdx] = useState(0);
-  const [hideScrollCue, setHideScrollCue] = useState(false);
-  const spotlightRef = useRef<HTMLDivElement>(null);
-  const { scrollY } = useScroll();
+/**
+ * SSR'd semantic hero copy + links so crawlers/LLMs see the content even though the
+ * visual layer is a client-only WebGL scene. Visually hidden, fully in the DOM.
+ */
+function SeoContent() {
+  const { t, locale } = useI18n();
+  const p = (s: string) => (locale === 'he' ? `/${s}` : `/${locale}/${s}`);
+  return (
+    <div className="sr-only">
+      <h1>{t('hero.name')}</h1>
+      <p>{t('hero.subtitle')}</p>
+      <Link href={p('about')}>{t('nav.about')}</Link>
+      <Link href={p('services')}>{t('nav.services')}</Link>
+      <Link href={p('projects')}>{t('nav.projects')}</Link>
+      <Link href={p('technologies')}>{t('nav.tech')}</Link>
+      <Link href={p('contact')}>{t('nav.contact')}</Link>
+    </div>
+  );
+}
 
-  useMotionValueEvent(scrollY, 'change', (value) => {
-    setHideScrollCue(value > 100);
-  });
+/** Static fallback (reduced-motion / no-WebGL): the classic sectioned site, so those
+ *  visitors and crawlers get the full content without any WebGL. */
+function StaticHero() {
+  const { t } = useI18n();
+  return (
+    <>
+      <section className="relative min-h-dvh flex items-center overflow-hidden py-32 px-6">
+        <Image src={GALAXY_POSTER} alt="" fill priority unoptimized className="object-cover -z-10" />
+        <div className="absolute inset-0 -z-10" style={{ background: 'rgba(5,7,20,0.6)' }} />
+        <div className="relative z-10 mx-auto w-full max-w-2xl text-center">
+          <h1 className="text-[clamp(2.5rem,6vw,5rem)] leading-[1.05] text-[var(--color-star-white)]" style={{ fontFamily: 'var(--font-display)', fontWeight: 300, letterSpacing: '0.04em' }}>
+            {t('hero.name')}
+          </h1>
+          <p className="mt-6 text-base text-[var(--color-star-white)]/70">{t('hero.subtitle')}</p>
+        </div>
+      </section>
+      <div className="relative z-10 bg-[var(--color-bg-primary)]">
+        <About />
+        <Services />
+        <Projects />
+        <TechStack />
+        <Contact />
+      </div>
+    </>
+  );
+}
+
+// Lives for the SPA session (survives client-side navigation, reset by a full page
+// load / refresh). Lets us tell a fresh visit apart from an in-session return.
+let sessionEntered = false;
+
+/**
+ * Home experience: a tall scroll driver whose progress (0..1) drives the persistent
+ * WebGL camera on a dive into the galactic core, a warm dust-veil crossing, and —
+ * behind that veil — the swap to the solar system. The canvas itself lives in the
+ * root layout (CosmicStage); here we only own the DOM overlays (welcome + veil) and
+ * feed scrollProgress to the store. A FRESH load / refresh always plays the galaxy
+ * dive (the signature experience); only an in-session return from a world lands
+ * straight in the solar overview (no jarring re-dive).
+ */
+function GalaxyHome() {
+  const { t } = useI18n();
+  const driverRef = useRef<HTMLDivElement>(null);
+  const setScrollProgress = useScene((s) => s.setScrollProgress);
+  const setAct = useScene((s) => s.setAct);
+  const [seenIntro, setSeenIntro] = useState<boolean | null>(null);
+  const { scrollYProgress } = useScroll({ target: driverRef, offset: ['start start', 'end end'] });
+
+  const welcomeOpacity = useMotionValue(1);
+  const flashOpacity = useMotionValue(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTitleIdx((i) => (i + 1) % titles.length);
-    }, 3000);
-    return () => clearInterval(interval);
+    // Fresh load / refresh (module flag reset) → always the galaxy dive. Only an
+    // in-session return (flag already set) may skip to the overview.
+    const fresh = !sessionEntered;
+    sessionEntered = true;
+    const seen = !fresh && sessionStorage.getItem('seen-intro') === '1';
+    setSeenIntro(seen);
+    const scene = useScene.getState();
+    scene.setFocusedPlanet(null);
+    if (seen) {
+      scene.setAct('solar');
+    } else {
+      scene.setAct('galaxy');
+      scene.setScrollProgress(0);
+      window.scrollTo(0, 0);
+    }
   }, []);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!spotlightRef.current) return;
-    const rect = spotlightRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    spotlightRef.current.style.setProperty('--spotlight-x', `${x}px`);
-    spotlightRef.current.style.setProperty('--spotlight-y', `${y}px`);
-  }, []);
+  useMotionValueEvent(scrollYProgress, 'change', (v) => {
+    if (seenIntro) return;
+    setScrollProgress(v);
+    welcomeOpacity.set(1 - clamp01(v / 0.12));
+    const flash = v < 0.8 ? 0 : v < 0.9 ? (v - 0.8) / 0.1 : 1 - clamp01((v - 0.9) / 0.08);
+    flashOpacity.set(flash * 0.96);
+    if (useScene.getState().focusedPlanet) return;
+    if (v >= 0.9 && useScene.getState().act === 'galaxy') {
+      setAct('solar');
+      sessionStorage.setItem('seen-intro', '1');
+    } else if (v < 0.5 && useScene.getState().act === 'solar') {
+      setAct('galaxy');
+    }
+  });
+
+  // Repeat visit: no dive, no tall driver — the overview is already on screen. Give
+  // a short crawlable hint to explore the planets.
+  if (seenIntro) {
+    return (
+      <section className="relative min-h-dvh">
+        <SeoContent />
+        <div className="pointer-events-none fixed inset-x-0 bottom-10 z-10 flex justify-center">
+          <span className="text-xs tracking-[0.2em] text-[var(--color-core-gold)]/70">{t('hero.galaxy.hint')}</span>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section
-      ref={spotlightRef}
-      onMouseMove={handleMouseMove}
-      className="relative min-h-dvh flex items-center overflow-hidden"
-      style={{
-        background: `radial-gradient(ellipse at var(--spotlight-x, 50%) var(--spotlight-y, 50%), var(--color-accent-glow) 0%, transparent 60%)`,
-      }}
-    >
-      {/* A single restrained ambient glow — anchored to the content side */}
-      <div className="animate-aurora absolute -top-1/4 end-0 w-[520px] h-[520px] max-w-[80vw] rounded-full bg-[var(--color-gradient-start)] opacity-[0.06] blur-[150px] pointer-events-none" />
+    <section ref={driverRef} className="relative" style={{ height: '500vh' }}>
+      <SeoContent />
 
-      <div className="relative z-10 mx-auto max-w-[1200px] w-full px-6 py-32">
+      {/* Welcome — fixed, fades as the dive begins */}
+      <motion.div
+        style={{ opacity: welcomeOpacity }}
+        className="pointer-events-none fixed inset-0 z-10 flex flex-col items-center px-6 pt-[16vh] text-center"
+      >
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: [0.25, 0.4, 0, 1] }}
-          className="max-w-2xl"
+          initial={{ opacity: 0, y: 22, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 1.2, ease: [0.25, 0.4, 0, 1] }}
         >
+          <h1
+            className="text-[clamp(3rem,8vw,6.5rem)] leading-[1.05] text-[var(--color-star-white)]"
+            style={{ fontFamily: 'var(--font-display)', fontWeight: 300, letterSpacing: '0.06em', textShadow: '0 2px 40px rgba(5,7,20,0.85), 0 0 28px rgba(255,201,120,0.28)' }}
+          >
+            {t('hero.name')}
+          </h1>
           <motion.p
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.12 }}
-            className="text-sm text-[var(--color-text-tertiary)] mb-3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1.2, delay: 0.35, ease: 'easeOut' }}
+            className="mt-6 text-base font-light tracking-[0.12em] text-[var(--color-star-white)]/60 md:text-lg"
           >
-            {t('hero.greeting')}
+            {t('welcome.identity')}
           </motion.p>
-
-          {/* Name */}
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.24 }}
-            className="text-[clamp(3.5rem,8vw,7rem)] font-bold leading-[0.9] tracking-tighter mb-4"
-          >
-            <span
-              className="bg-gradient-to-r from-[var(--color-gradient-start)] via-[var(--color-accent-hover)] to-[var(--color-gradient-end)] bg-clip-text text-transparent"
-              style={{
-                backgroundSize: '200% 200%',
-                animation: 'gradient-rotate 10s ease infinite',
-                filter: 'drop-shadow(0 0 32px rgba(139,92,246,0.18))',
-              }}
-            >
-              {t('hero.name')}
-            </span>
-          </motion.h1>
-
-          {/* Rotating titles */}
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.36 }}
-            className="h-14 mb-5 overflow-hidden"
-          >
-            <AnimatePresence mode="wait">
-              <motion.p
-                key={titleIdx}
-                initial={{ opacity: 0, y: dir === 'rtl' ? -18 : 18, filter: 'blur(4px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, y: dir === 'rtl' ? 18 : -18, filter: 'blur(4px)' }}
-                transition={{ duration: 0.5, ease: [0.25, 0.4, 0, 1] }}
-                className="text-2xl md:text-3xl text-[var(--color-text-secondary)] font-light"
-              >
-                {t(titles[titleIdx])}
-              </motion.p>
-            </AnimatePresence>
-          </motion.div>
-
-          <motion.p
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.48 }}
-            className="text-base md:text-lg text-[var(--color-text-tertiary)] mb-10 max-w-xl"
-          >
-            {t('hero.subtitle')}
-          </motion.p>
-
-          {/* CTA */}
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.6 }}
-            className="flex flex-wrap gap-4 mb-10"
-          >
-            <a
-              href="#projects"
-              className="relative px-7 py-3.5 rounded-xl font-semibold text-sm text-white overflow-hidden shimmer-hover"
-              style={{
-                background: 'linear-gradient(135deg, #8B5CF6 0%, #06B6D4 100%)',
-                boxShadow: '0 0 24px rgba(139,92,246,0.35), 0 4px 20px rgba(0,0,0,0.3)',
-              }}
-            >
-              {t('hero.cta.work')}
-            </a>
-            <a
-              href="#contact"
-              className="px-7 py-3.5 rounded-xl border border-[var(--color-border-subtle)] text-[var(--color-text-secondary)] font-semibold text-sm glow-border hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)] transition-all duration-300"
-            >
-              {t('hero.cta.contact')}
-            </a>
-          </motion.div>
-
-          {/* Social icons */}
-          <div className="flex items-center gap-5 mb-12">
-            {socials.map((s) => (
-              <a
-                key={s.label}
-                href={s.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={s.label}
-                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:scale-110 hover:drop-shadow-[0_0_8px_rgba(139,92,246,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-all duration-300"
-              >
-                <s.icon size={20} strokeWidth={1.5} />
-              </a>
-            ))}
-          </div>
-
-          {/* Crawlable internal links for SEO/GEO — locale-aware text and hrefs */}
-          <div className="flex flex-wrap gap-3 text-sm">
-            <Link
-              href={locale === 'he' ? '/services' : `/${locale}/services`}
-              className="text-[var(--color-accent)] hover:underline"
-            >
-              {t('hero.links.services')}
-            </Link>
-            <Link
-              href={locale === 'he' ? '/services/ai-integration' : `/${locale}/services/ai-integration`}
-              className="text-[var(--color-accent)] hover:underline"
-            >
-              {t('hero.links.ai')}
-            </Link>
-            {/* Guide page exists only in Hebrew */}
-            {locale === 'he' && (
-              <Link
-                href="/guides/nextjs-seo-geo-2026"
-                className="text-[var(--color-accent)] hover:underline"
-              >
-                {t('hero.links.guide')}
-              </Link>
-            )}
-          </div>
         </motion.div>
-      </div>
-
-      {/* Scroll indicator */}
-      <AnimatePresence>
-        {!hideScrollCue && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 0.7, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            transition={{ duration: 0.35 }}
-            className="absolute bottom-8 left-1/2 -translate-x-1/2"
+        <div className="absolute inset-x-0 bottom-10 flex flex-col items-center gap-2">
+          <span className="text-xs tracking-[0.2em] text-[var(--color-core-gold)]/80">{t('welcome.hint')}</span>
+          <motion.span
+            animate={{ y: [0, 8, 0], opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
           >
-            <motion.div
-              animate={{ y: [0, 8, 0] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-              className="flex flex-col items-center gap-1"
-            >
-              <ChevronDown size={20} className="text-[var(--color-text-tertiary)]" />
-              <span className="w-px h-5 bg-gradient-to-b from-[var(--color-text-tertiary)] to-transparent" />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <ChevronDown size={22} className="text-[var(--color-core-gold)]/80" />
+          </motion.span>
+        </div>
+      </motion.div>
+
+      {/* Dust-veil crossing (not a white flash) — a warm gold-into-indigo cloud that
+          briefly curtains the frame while the act swaps behind it. */}
+      <motion.div
+        style={{ opacity: flashOpacity, background: 'radial-gradient(circle at 50% 46%, #FFD9A0 0%, #C9A25E 35%, #3A2E6E 75%, #0A0B22 100%)' }}
+        className="pointer-events-none fixed inset-0 z-20"
+      />
     </section>
   );
+}
+
+export default function Hero() {
+  const motionDisabled = useMotionDisabled();
+  const webgl = useWebGLAvailable();
+  return motionDisabled || !webgl ? <StaticHero /> : <GalaxyHome />;
 }

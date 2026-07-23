@@ -12,22 +12,30 @@
     "security:scan:history": "gitleaks git --redact --report-format json --report-path gitleaks-history.json --verbose ."
   },
   "dependencies": {
+    "@react-three/drei": "10.7.7",
+    "@react-three/fiber": "9.6.1",
+    "@react-three/postprocessing": "3.0.4",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.7.0",
+    "maath": "0.10.8",
     "next": "16.2.2",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "three": "0.185.1",
+    "zustand": "5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "0.185.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "puppeteer-core": "^24.42.0",
+    "r3f-perf": "7.2.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

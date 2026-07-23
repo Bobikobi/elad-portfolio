@@ -1,9 +1,4 @@
 import Hero from '@/components/sections/Hero';
-import About from '@/components/sections/About';
-import Services from '@/components/sections/Services';
-import Projects from '@/components/sections/Projects';
-import TechStack from '@/components/sections/TechStack';
-import Contact from '@/components/sections/Contact';
 import { JsonLd } from '@/components/JsonLd';
 
 // JSON-LD: ItemList of key projects — helps AI engines cite Elad Saadon's work
@@ -109,12 +104,10 @@ export default function Home() {
   return (
     <>
       <JsonLd data={projectsJsonLd} />
+      {/* The full-screen cosmic experience is the home page; navigation is via the
+          navbar and the planets. The classic sectioned site renders inside Hero's
+          reduced-motion / no-WebGL fallback. */}
       <Hero />
-      <About />
-      <Services />
-      <Projects />
-      <TechStack />
-      <Contact />
     </>
   );
 }

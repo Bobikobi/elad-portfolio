@@ -5,14 +5,19 @@ import { Menu, X } from 'lucide-react';
 import { useI18n, Locale } from '@/lib/i18n';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { sectionPath, sectionForPath, homePath, type SectionId } from '@/lib/sections';
 
 const navItems = ['about', 'services', 'projects', 'tech', 'contact'] as const;
-const sectionIds: Record<typeof navItems[number], string> = {
+const sectionIds: Record<typeof navItems[number], SectionId> = {
   about: 'about',
   services: 'services',
   projects: 'projects',
   tech: 'technologies',
   contact: 'contact',
+};
+// section id → nav item (technologies surfaces as "tech").
+const SECTION_TO_ITEM: Record<SectionId, typeof navItems[number]> = {
+  about: 'about', services: 'services', projects: 'projects', technologies: 'tech', contact: 'contact',
 };
 const locales: { code: Locale; label: string }[] = [
   { code: 'he', label: 'עב' },
@@ -25,44 +30,19 @@ export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
-  const [activeSection, setActiveSection] = useState<(typeof navItems)[number]>('about');
   const [mobileOpen, setMobileOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const { scrollY, scrollYProgress } = useScroll();
   const progressScale = useSpring(scrollYProgress, { stiffness: 120, damping: 28, mass: 0.2 });
 
-  const homePath = locale === 'he' ? '/' : `/${locale}`;
-  const isOnHome = pathname === homePath;
+  const home = homePath(locale);
+  // Active nav item derives from the current route (each section is its own page now).
+  const activeSectionId = sectionForPath(pathname)?.id;
+  const activeSection = activeSectionId ? SECTION_TO_ITEM[activeSectionId] : null;
 
   useMotionValueEvent(scrollY, 'change', (value) => {
     setScrolled(value > 80);
   });
-
-  useEffect(() => {
-    if (!isOnHome) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-
-        if (!visible?.target?.id) return;
-        const matched = (Object.entries(sectionIds).find(([, id]) => id === visible.target.id)?.[0] ?? null) as
-          | (typeof navItems)[number]
-          | null;
-        if (matched) setActiveSection(matched);
-      },
-      { rootMargin: '-35% 0px -50% 0px', threshold: [0.2, 0.45, 0.7] }
-    );
-
-    Object.values(sectionIds).forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, [isOnHome]);
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : '';
@@ -95,21 +75,16 @@ export default function Navbar() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [mobileOpen]);
 
-  const goToSection = (id: string) => {
+  // Each section is its own route now — navigation flies the persistent camera there.
+  const goToSection = (id: SectionId) => {
     setMobileOpen(false);
-    if (isOnHome) {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-      return;
-    }
-    router.push(`${homePath}#${id}`);
+    router.push(sectionPath(id, locale));
   };
 
   const goToHome = () => {
-    if (isOnHome) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    router.push(homePath);
+    setMobileOpen(false);
+    router.push(home);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const changeLocale = (newLocale: Locale) => {
@@ -148,7 +123,15 @@ export default function Navbar() {
             : 'bg-transparent'
         }`}
       >
-        <nav className="mx-auto max-w-[1200px] w-full px-4 sm:px-6 flex items-center justify-between h-16">
+        {/* Legibility scrim: a dark top-down fade sits behind the links while the
+            header is transparent, so text stays readable over the bright hero. */}
+        {!scrolled && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/55 via-black/25 to-transparent"
+          />
+        )}
+        <nav className="relative mx-auto max-w-[1200px] w-full px-4 sm:px-6 flex items-center justify-between h-16 [text-shadow:0_1px_10px_rgba(0,0,0,0.55)]">
           {/* Logo */}
           <button
             onClick={goToHome}
@@ -171,8 +154,8 @@ export default function Navbar() {
                   onClick={() => goToSection(sectionIds[item])}
                   className={`relative text-sm px-1 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors ${
                     activeSection === item
-                      ? 'text-[var(--color-text-primary)]'
-                      : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
+                      ? 'text-white'
+                      : 'text-white/75 hover:text-white'
                   }`}
                 >
                   {t(`nav.${item}`)}

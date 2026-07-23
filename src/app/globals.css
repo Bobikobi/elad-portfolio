@@ -7,24 +7,35 @@
 }
 
 @theme inline {
-  --color-bg-primary: #09090B;
-  --color-bg-secondary: #18181B;
-  --color-bg-tertiary: #27272A;
-  --color-border-default: #27272A;
-  --color-border-subtle: #3F3F46;
+  --color-bg-primary: #0A0612;
+  --color-bg-secondary: #1A1024;
+  --color-bg-tertiary: #2A1B36;
+  --color-border-default: #2E1A3C;
+  --color-border-subtle: #4A2A56;
   --color-text-primary: #FAFAFA;
   --color-text-secondary: #A1A1AA;
   --color-text-tertiary: #71717A;
-  --color-accent: #8B5CF6;
-  --color-accent-hover: #A78BFA;
-  --color-accent-glow: rgba(139, 92, 246, 0.15);
-  --color-gradient-start: #8B5CF6;
-  --color-gradient-end: #06B6D4;
+  --color-accent: #D946EF;
+  --color-accent-hover: #F0ABFC;
+  --color-accent-glow: rgba(217, 70, 239, 0.18);
+  --color-gradient-start: #F97316;
+  --color-gradient-end: #22D3EE;
   --color-success: #22C55E;
-  --color-surface-glass: rgba(24, 24, 27, 0.80);
+  --color-surface-glass: rgba(10, 5, 16, 0.93);
+  --color-tunnel-orange: #F97316;
+  --color-tunnel-magenta: #D946EF;
+  --color-tunnel-cyan: #22D3EE;
+  --color-tunnel-violet: #8B5CF6;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-hebrew: var(--font-heebo);
+
+  /* ===== Cosmic design system (binding visual language) ===== */
+  --color-space-void: #050714;
+  --color-galaxy-indigo: #6D5AE6;
+  --color-cosmic-blue: #4D8DFF;
+  --color-core-gold: #FFC978;
+  --color-star-white: #EEF1FF;
 }
 
 /* ===== Base ===== */
@@ -39,6 +50,17 @@ html {
   min-width: 0;
 }
 
+/* Typography roles — components use ONLY --font-display / --font-body.
+   Default = Hebrew/Latin pair; the Russian locale swaps both to the Cyrillic pair. */
+:root {
+  --font-display: var(--font-frank), 'Frank Ruhl Libre', serif;
+  --font-body: var(--font-heebo), sans-serif;
+}
+html[lang='ru'] {
+  --font-display: var(--font-playfair), serif;
+  --font-body: var(--font-inter), sans-serif;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -46,7 +68,15 @@ body {
   overflow-x: hidden;
   background: var(--color-bg-primary);
   color: var(--color-text-secondary);
-  font-family: var(--font-sans), var(--font-hebrew), sans-serif;
+  /* Body uses the role var so Russian renders in Inter (full Cyrillic) — never a
+     system-font fallback. he/en resolve to Heebo. */
+  font-family: var(--font-body), var(--font-hebrew), sans-serif;
+  line-height: 1.7;
+}
+/* Per-language body metric (spec 15th appendix): Latin/Cyrillic read at 1.65. */
+html[lang='en'] body,
+html[lang='ru'] body {
+  line-height: 1.65;
 }
 
 img,
@@ -130,6 +160,45 @@ body::before {
   0%   { background-position: -500px 0; }
   100% { background-position: 500px 0; }
 }
+/* ===== Galaxy node drift (transform-only, GPU-composited) ===== */
+@keyframes galaxy-float-a {
+  0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
+  50%      { transform: translate(-50%, -50%) translate(0, -10px); }
+}
+@keyframes galaxy-float-b {
+  0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
+  50%      { transform: translate(-50%, -50%) translate(6px, 8px); }
+}
+@keyframes galaxy-float-c {
+  0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
+  50%      { transform: translate(-50%, -50%) translate(-7px, 6px); }
+}
+.galaxy-float-a { animation: galaxy-float-a 7s ease-in-out infinite; will-change: transform; }
+.galaxy-float-b { animation: galaxy-float-b 9s ease-in-out infinite; will-change: transform; }
+.galaxy-float-c { animation: galaxy-float-c 8s ease-in-out infinite; will-change: transform; }
+
+/* ===== Scene loader — signature orbit ring ===== */
+.scene-loader-ring {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 1px solid rgba(238, 241, 255, 0.12);
+  animation: orbit-spin 1.4s linear infinite;
+}
+.scene-loader-ring::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: calc(50% - 3px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-core-gold);
+  box-shadow: 0 0 12px var(--color-core-gold);
+}
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
+
 /* ===== Utility classes ===== */
 .animate-aurora   { animation: aurora 14s ease-in-out infinite; }
 .animate-aurora-b { animation: aurora-b 18s ease-in-out infinite; }
@@ -162,8 +231,8 @@ body::before {
   background: linear-gradient(
     105deg,
     transparent 20%,
-    rgba(139, 92, 246, 0.08) 45%,
-    rgba(6, 182, 212, 0.06) 55%,
+    rgba(217, 70, 239, 0.08) 45%,
+    rgba(34, 211, 238, 0.06) 55%,
     transparent 80%
   );
   background-size: 500px 100%;
@@ -173,34 +242,62 @@ body::before {
 }
 .shimmer-hover:hover::after { animation: shimmer-sweep 0.85s ease forwards; }
 
+/* ===== World window list (Projects "Jupiter frame") ===== */
+/* Own scroll container: thin styled scrollbar + soft fade masks top/bottom so windows
+   dissolve into space instead of hitting a hard edge. overscroll-contain stops the
+   list end from ever leaking into the page / the departure gesture. */
+.world-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 201, 120, 0.35) transparent;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 5%, #000 92%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 5%, #000 92%, transparent 100%);
+}
+.world-scroll::-webkit-scrollbar { width: 5px; }
+.world-scroll::-webkit-scrollbar-track { background: transparent; }
+.world-scroll::-webkit-scrollbar-thumb { background: rgba(255, 201, 120, 0.3); border-radius: 3px; }
+.world-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 201, 120, 0.55); }
+
+/* Window enter: soft fade, once, when scrolled into view. Opacity ONLY — the arc
+   layer owns each window's `transform`, so the enter must never touch transform. */
+@keyframes window-fade { from { opacity: 0; } to { opacity: 1; } }
+.world-window { transform-origin: center; will-change: transform; }
+.window-enter { opacity: 0; }
+.window-enter.is-in { animation: window-fade 0.42s ease forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .window-enter, .window-enter.is-in { opacity: 1; animation: none; }
+  .world-scroll { scroll-behavior: auto; }
+}
+
 /* ── Glassmorphism card ── */
 .card-glass {
-  background: rgba(18, 18, 22, 0.82);
+  background: rgba(20, 12, 28, 0.82);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(217, 70, 239, 0.14);
   box-shadow: 0 0 0 0.5px rgba(255,255,255,0.04) inset,
               0 8px 40px rgba(0, 0, 0, 0.45);
   transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
 }
 .card-glass:hover {
-  background: rgba(10, 10, 14, 0.97);
-  border-color: rgba(139, 92, 246, 0.35);
+  background: rgba(14, 8, 18, 0.97);
+  border-color: rgba(217, 70, 239, 0.35);
   box-shadow: 0 0 0 0.5px rgba(255,255,255,0.06) inset,
               0 8px 60px rgba(0, 0, 0, 0.55),
-              0 0 40px rgba(139, 92, 246, 0.08);
+              0 0 40px rgba(217, 70, 239, 0.08);
 }
 
 /* ── Always-on glow border ── */
 .glow-border {
-  box-shadow: 0 0 0 1px rgba(139,92,246,0.18),
-              0 0 16px rgba(139,92,246,0.06);
+  box-shadow: 0 0 0 1px rgba(217,70,239,0.18),
+              0 0 16px rgba(217,70,239,0.06);
   transition: box-shadow 0.3s ease;
 }
 .glow-border:hover {
-  box-shadow: 0 0 0 1px rgba(139,92,246,0.45),
-              0 0 32px rgba(139,92,246,0.18),
-              0 0 64px rgba(6,182,212,0.06);
+  box-shadow: 0 0 0 1px rgba(217,70,239,0.45),
+              0 0 32px rgba(217,70,239,0.18),
+              0 0 64px rgba(34,211,238,0.06);
 }
 
 /* ===== Reduced motion ===== */

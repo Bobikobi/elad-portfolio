@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Heebo } from "next/font/google";
+import { Heebo, Frank_Ruhl_Libre, Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import ClientProviders from "@/components/layout/ClientProviders";
 import type { Locale } from "@/lib/i18n";
@@ -22,6 +22,24 @@ const heebo = Heebo({
   variable: "--font-heebo",
   subsets: ["hebrew", "latin"],
   weight: ["400", "500", "600", "700"],
+});
+
+// Display serif + body for he/en (Hebrew + Latin coverage).
+const frankRuhl = Frank_Ruhl_Libre({
+  variable: "--font-frank",
+  subsets: ["hebrew", "latin"],
+  weight: ["300", "500"],
+});
+// Russian (Cyrillic) pair — matched roles: elegant serif display + clean body.
+const playfair = Playfair_Display({
+  variable: "--font-playfair",
+  subsets: ["latin", "cyrillic"],
+  weight: ["400"],
+});
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin", "cyrillic"],
+  weight: ["300", "400", "500"],
 });
 
 export const metadata: Metadata = {
@@ -285,7 +303,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html
       lang={locale}
       dir={dir}
-      className={`${geistSans.variable} ${geistMono.variable} ${heebo.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${heebo.variable} ${frankRuhl.variable} ${playfair.variable} ${inter.variable} h-full antialiased`}
     >
       <head>
         {/* Preconnect to external origins for faster resource loading */}

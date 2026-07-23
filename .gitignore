@@ -62,3 +62,7 @@ PRIVATE_REPO_LIMITATION_AND_NEXT_STEP.md
 gitleaks-workingtree.json
 gitleaks-history.json
 security-reports/
+
+# Local visual-verification harness (not for commit)
+_verify.mjs
+_verify_batch.mjs
