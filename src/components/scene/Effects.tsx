@@ -34,18 +34,19 @@ export default function Effects() {
       <Bloom
         mipmapBlur
         intensity={solar ? 0.6 : 0.5}
-        luminanceThreshold={solar ? 0.7 : 0}
+        luminanceThreshold={solar ? 0.72 : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
-        radius={solar ? 0.55 : 0.5}
+        radius={solar ? 0.45 : 0.5}
       />
-      {/* Global grade: uniform ~1.15 saturation lift (spec) — colour in the sky and
-          on the planets without touching any texture. Solar act only. */}
-      {solar ? <HueSaturation saturation={0.14} /> : <></>}
+      {/* Global grade: a gentle saturation lift — colour on the planets without touching
+          any texture. Kept LOW in solar (was 0.14) because the higher lift pushed the dim
+          sky violet, which the vignette then framed as a milky "lavender oval" (F1). */}
+      {solar ? <HueSaturation saturation={0.06} /> : <></>}
       {/* Very subtle film grain + vignette — the glue that binds the depth layers. */}
       <Noise premultiply opacity={0.045} />
       {/* Deeper vignette in the solar act pulls the corners to deep space (spec: <10%
           brightness at the edges) while the sun keeps the centre warm. */}
-      <Vignette offset={solar ? 0.26 : 0.28} darkness={solar ? 0.92 : 0.62} />
+      <Vignette offset={solar ? 0.32 : 0.28} darkness={solar ? 0.87 : 0.62} />
     </EffectComposer>
   );
 }

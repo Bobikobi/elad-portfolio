@@ -152,7 +152,10 @@ export default function CameraRig() {
           if (_side.lengthSq() < 1e-4) _side.set(1, 0, 0);
           _side.normalize();
           const sideSign = rtl ? -1 : 1; // keep the lit limb on the outer (planet) edge
-          const A = 1.05; // ~60° off the lit direction
+          // ~72° off the lit direction: sits further behind the lit side so the sun (and
+          // its off-frame bloom) is pushed fully out of frame — it was still bleeding a
+          // warm glow into the top corner at 60° (F3). Terminator still crosses the disc.
+          const A = 1.25;
           _camDir.copy(_sunDir).multiplyScalar(-Math.cos(A));
           _camDir.addScaledVector(_side, Math.sin(A) * sideSign);
           // Elevation: ringed worlds get a high vantage so the rings open up (edge-on

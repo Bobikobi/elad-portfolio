@@ -123,8 +123,8 @@ const zodiacFrag = /* glsl */ `
   void main() {
     vec2 c = vUv - 0.5;
     float r = length(c) * 2.0;                       // 0 centre .. 1 edge
-    float band = smoothstep(0.05, 0.28, r) * (1.0 - smoothstep(0.42, 0.85, r));
-    gl_FragColor = vec4(vec3(1.0, 0.84, 0.55) * band, band * 0.09);
+    float band = smoothstep(0.05, 0.30, r) * (1.0 - smoothstep(0.38, 0.7, r));
+    gl_FragColor = vec4(vec3(1.0, 0.84, 0.55) * band, band * 0.05);
   }
 `;
 const zodiacVert = /* glsl */ `
@@ -327,10 +327,15 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         <Html center position={[0, spec.size + 0.5, 0]} zIndexRange={[20, 0]}>
           <button
             ref={labelRef}
+            type="button"
+            aria-label={t(page.labelKey)}
             onClick={open}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+            onFocus={() => setHovered(true)}
+            onBlur={() => setHovered(false)}
             onPointerOver={() => setHovered(true)}
             onPointerOut={() => setHovered(false)}
-            className="pointer-events-auto whitespace-nowrap rounded-full border border-white/20 bg-[rgba(5,7,20,0.78)] px-3.5 py-1.5 text-[13px] font-medium leading-none text-[var(--color-star-white)] shadow-[0_4px_18px_rgba(5,7,20,0.55)] transition-colors duration-200 hover:border-[var(--color-core-gold)]/70 hover:text-[var(--color-core-gold)]"
+            className="pointer-events-auto cursor-pointer whitespace-nowrap rounded-full border border-white/20 bg-[rgba(5,7,20,0.78)] px-3.5 py-1.5 text-[13px] font-medium leading-none text-[var(--color-star-white)] shadow-[0_4px_18px_rgba(5,7,20,0.55)] transition-colors duration-200 hover:border-[var(--color-core-gold)]/70 hover:text-[var(--color-core-gold)] focus:outline-none focus-visible:border-[var(--color-core-gold)] focus-visible:text-[var(--color-core-gold)] focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(5,7,20,0.9)]"
             style={{ fontFamily: 'var(--font-body, var(--font-hebrew))' }}
           >
             {t(page.labelKey)}
@@ -362,7 +367,7 @@ export default function SolarAct() {
         {PLANETS.map((p) => (
           <Planet key={p.key} spec={p} />
         ))}
-        <AsteroidBelt count={high ? 900 : 300} />
+        <AsteroidBelt count={high ? 1400 : 500} />
       </group>
       {/* World-fixed foreground giant — disabled until relit in Pass B (see flag). */}
       {SHOW_FOREGROUND_ANCHOR && <ForegroundAnchor />}

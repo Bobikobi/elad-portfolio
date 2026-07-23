@@ -10,6 +10,7 @@ import CameraRig from './CameraRig';
 import Effects from './Effects';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
+import HeroStars from './galaxy/HeroStars';
 import { HudProbe, DebugHudOverlay } from './DebugHud';
 
 const DEBUG = process.env.NODE_ENV !== 'production';
@@ -58,13 +59,14 @@ export default function SceneRoot() {
         <CameraRig />
         {/* Shared SKY — lives outside both acts and never swaps, so the universe is
             continuous through the transition (only the "middle" changes). */}
-        <GradientSky />
-        <Stars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.3} fade speed={0.5} />
+        <GradientSky solar={act === 'solar'} />
+        <Stars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.55} fade speed={0.5} />
+        <HeroStars />
         {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
             In the solar act the veils drop to a faint backdrop so they read as distant
             nebulosity, not the milky haze that used to wash the poster frame — corners
             stay <10% brightness but never empty (stars + a nebula touch everywhere). */}
-        <Nebula intensity={act === 'solar' ? 0.18 : 1} />
+        <Nebula intensity={act === 'solar' ? 0.28 : 1} />
         {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
         <Effects />
         {DEBUG && <HudProbe />}
