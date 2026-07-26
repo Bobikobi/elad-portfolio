@@ -1,21 +1,53 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions, planetRadii } from '@/lib/planetPositions';
 
 /**
- * DEV-ONLY debug HUD. Both halves are gated behind `process.env.NODE_ENV !== 'production'`
- * at their render sites (SceneRoot), so the whole thing dead-code-eliminates from the
- * production bundle. Numbers are computed from the live camera projection + a framebuffer
- * readback — never guessed — and are the accepted source for R2 camera-tuning measurements.
+ * Debug HUD. Numbers are computed from the live camera projection + a framebuffer
+ * readback — never guessed — and are the accepted source for camera-tuning measurements.
  *
  *   • sun disc height as % of viewport (perspective projection of SUN_R at its distance)
  *   • each labeled planet's on-screen DIAMETER in px
  *   • FPS (smoothed)
  *   • luminance % of the 4 viewport corners, sampled from the POST-processed framebuffer
+ *
+ * AVAILABILITY (see {@link HUD_AVAILABLE}): the HUD ships in every build EXCEPT the
+ * production deployment, and only *shows* on `?hud=1` (always on in dev). This is
+ * deliberate: a `next dev` build renders differently from a real prod build, so tuning
+ * numbers taken in dev do not match the deployed site. The HUD must run against the
+ * REAL prod render — a preview deploy, or a local `next build && next start` — so every
+ * measurement reflects what visitors actually see.
  */
+
+/**
+ * True in every build except the production deployment. `NEXT_PUBLIC_VERCEL_ENV` is
+ * inlined at build time (Vercel sets it to 'production' | 'preview'; it is undefined for
+ * local `dev`/`build`), so on the production domain this collapses to a literal `false`
+ * and the whole HUD tree — guarded by `HUD_AVAILABLE &&` at every render site — is
+ * dead-code-eliminated from the shipped bundle. Everywhere else it is available.
+ *
+ * Requires Vercel's "Automatically expose System Environment Variables" (default ON).
+ */
+export const HUD_AVAILABLE = process.env.NEXT_PUBLIC_VERCEL_ENV !== 'production';
+
+/**
+ * Runtime gate for actually rendering the HUD: on in dev (as before), or whenever the
+ * page is opened with `?hud=1`. Returns a constant `false` when !HUD_AVAILABLE so the
+ * production bundle never wires up the query listener.
+ */
+export function useHudEnabled(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (!HUD_AVAILABLE) return;
+    const dev = process.env.NODE_ENV !== 'production';
+    const hudQuery = new URLSearchParams(window.location.search).has('hud');
+    setOn(dev || hudQuery);
+  }, []);
+  return on;
+}
 
 const DEG2RAD = Math.PI / 180;
 const SUN_R = 1.5; // matches Sun.tsx SUN_R (world units)

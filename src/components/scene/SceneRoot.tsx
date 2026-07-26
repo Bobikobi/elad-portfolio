@@ -11,9 +11,7 @@ import Effects from './Effects';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
-import { HudProbe, DebugHudOverlay } from './DebugHud';
-
-const DEBUG = process.env.NODE_ENV !== 'production';
+import { HudProbe, DebugHudOverlay, HUD_AVAILABLE, useHudEnabled } from './DebugHud';
 
 /**
  * The single WebGL canvas — fixed, full-bleed, behind the DOM. `dynamic(ssr:false)`
@@ -35,6 +33,7 @@ export default function SceneRoot() {
   const setQuality = useScene((s) => s.setQuality);
   const act = useScene((s) => s.act);
   const high = useScene((s) => s.quality) === 'high';
+  const hudOn = useHudEnabled();
 
   // pointerEvents:auto so R3F can raycast planet clicks. It sits at z-0 behind the DOM;
   // on immersive routes `main` is pointer-events-none (ClientProviders) so clicks fall
@@ -43,7 +42,7 @@ export default function SceneRoot() {
   return (
     <div className="fixed inset-0" style={{ zIndex: 0, pointerEvents: 'auto' }} aria-hidden="true">
       <Canvas
-        gl={{ powerPreference: 'high-performance', antialias: true, alpha: false, preserveDrawingBuffer: DEBUG }}
+        gl={{ powerPreference: 'high-performance', antialias: true, alpha: false, preserveDrawingBuffer: HUD_AVAILABLE }}
         dpr={[1, 1.5]}
         camera={{ position: [0, 2.6, 9], fov: 55, near: 0.1, far: 200 }}
         shadows={false}
@@ -69,9 +68,9 @@ export default function SceneRoot() {
         <Nebula intensity={act === 'solar' ? 0.28 : 1} />
         {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
         <Effects />
-        {DEBUG && <HudProbe />}
+        {HUD_AVAILABLE && hudOn && <HudProbe />}
       </Canvas>
-      {DEBUG && <DebugHudOverlay />}
+      {HUD_AVAILABLE && hudOn && <DebugHudOverlay />}
     </div>
   );
 }
