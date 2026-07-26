@@ -66,6 +66,15 @@ export default function Footer() {
           >
             Planet textures: Solar System Scope (CC BY 4.0)
           </a>
+          <span className="mx-1.5 opacity-40">·</span>
+          <a
+            href="https://images.nasa.gov/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-[var(--color-text-secondary)] transition-colors"
+          >
+            Nebula imagery: NASA/ESA Hubble (public domain)
+          </a>
         </div>
       </div>
     </footer>

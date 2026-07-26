@@ -4,6 +4,7 @@ import Galaxy from '../galaxy/Galaxy';
 import GalaxyDetail from '../galaxy/GalaxyDetail';
 import Dust from '../galaxy/Dust';
 import DiveField from '../galaxy/DiveField';
+import TransitVeils from '../galaxy/TransitVeils';
 
 /**
  * Act 1 content: the living galaxy, its foreground dust, and the volumetric dive
@@ -19,6 +20,9 @@ export default function GalaxyAct() {
           out when PerformanceMonitor dips quality during the heavy first frames. */}
       <GalaxyDetail />
       <DiveField count={high ? 4200 : 1500} />
+      {/* Photographic nebula veils along the corridor (T2.5) — ~10 soft sprites, cheap
+          on any tier, kept regardless of quality so the dive always reads rich. */}
+      <TransitVeils />
       <Dust count={high ? 70 : 30} />
     </>
   );
