@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useMemo, useEffect, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Html, useCursor } from '@react-three/drei';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,48 @@ import AsteroidBelt from '../solar/AsteroidBelt';
 const _wp = new THREE.Vector3();
 const _ndc = new THREE.Vector3();
 const DEG2RAD = Math.PI / 180;
+
+// --- A1: focused-planet texture tiering ------------------------------------------------
+// The overview keeps its 2K base map (small on screen); once a page-planet is FOCUSED
+// (ORBIT, ~2/3 of the frame) we lazily upgrade it — mid (half-res webp) on a mid GPU, hi
+// (native 8K/4K webp) on a strong desktop GPU, and NOT at all on mobile (coarse pointer
+// stays 2K). Load is fetch → createImageBitmap → gl.initTexture (pre-upload, no arrival
+// stall) → a ~0.5s crossfade via a mix uniform, so the disc is never naked/black/popping.
+// Only one planet is ever focused, so at most one hi texture is resident; it is disposed
+// on leave (budget: max one 8K resident — verified via renderer.info in dev).
+type HiTier = 'base' | 'mid' | 'hi';
+const DEV = process.env.NODE_ENV !== 'production';
+const HI_FADE = 0.5; // s
+
+let _white1: THREE.DataTexture | null = null;
+function white1(): THREE.DataTexture {
+  if (!_white1) {
+    _white1 = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
+    _white1.needsUpdate = true;
+  }
+  return _white1;
+}
+
+function hiTierFor(): HiTier {
+  if (typeof window === 'undefined') return 'base';
+  if (window.matchMedia('(pointer: coarse)').matches) return 'base'; // mobile stays 2K
+  return useScene.getState().quality === 'high' ? 'hi' : 'mid';
+}
+
+/** Fetch + decode a tier texture off the critical path and pre-upload it to the GPU so the
+ *  material swap never stalls the flight. flipY handled to match the base TextureLoader map. */
+async function loadHiRes(key: string, tier: HiTier, gl: THREE.WebGLRenderer): Promise<THREE.Texture | null> {
+  const res = await fetch(`/textures/hi/${key}.${tier}.webp`);
+  if (!res.ok) return null;
+  const bitmap = await createImageBitmap(await res.blob(), { imageOrientation: 'flipY' });
+  const tex = new THREE.Texture(bitmap);
+  tex.flipY = false; // bitmap already flipped → matches the base map's orientation
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
+  tex.needsUpdate = true;
+  gl.initTexture(tex);
+  return tex;
+}
 
 /** A radial ring strip (colour + alpha vs radius) on a 1-D canvas — mapped radially by
  *  the rebuilt RingGeometry UVs. Bright tan bands, a dark Cassini-style gap, soft edges. */
@@ -207,11 +249,17 @@ const rimFrag = /* glsl */ `
 function Planet({ spec }: { spec: PlanetSpec }) {
   const { t, locale } = useI18n();
   const router = useRouter();
+  const gl = useThree((s) => s.gl);
+  const focused = useScene((s) => s.focusedPlanet);
   const group = useRef<THREE.Group>(null);
   const spinGroup = useRef<THREE.Group>(null);
   const mesh = useRef<THREE.Mesh>(null);
   const angle = useRef(spec.phase);
   const labelRef = useRef<HTMLButtonElement>(null);
+  // A1 hi-res crossfade state (page planets only).
+  const hiShader = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
+  const hiTex = useRef<THREE.Texture | null>(null);
+  const hiTarget = useRef(0); // 0 = show base, 1 = show hi
   const [hovered, setHovered] = useState(false);
   const page = PLANET_PAGES[spec.key];
   // Clicking a planet navigates to its section route; the URL is the source of
@@ -231,6 +279,30 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     tx.anisotropy = 8;
     return tx;
   }, [spec.tex]);
+  // Albedo material. Page planets get a mix-in hi-res sampler (A1): the base 2K map is
+  // always the floor; `uHiMap`/`uHiMix` crossfade the focused hi-res texture in on top of
+  // it in the exact same UV space, so upgrade/downgrade is a fade, never a pop.
+  const material = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({ map: texture, color: spec.bodyColor ?? '#ffffff', roughness: 0.9, metalness: 0.02 });
+    if (page) {
+      m.onBeforeCompile = (shader) => {
+        shader.uniforms.uHiMap = { value: white1() };
+        shader.uniforms.uHiMix = { value: 0 };
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+          #ifdef USE_MAP
+            // Re-apply the material tint (e.g. Earth's cool bodyColor) so the hi-res map
+            // matches the base exactly — the base was already multiplied by \`diffuse\`.
+            diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( uHiMap, vMapUv ).rgb * diffuse, uHiMix );
+          #endif`
+        );
+        hiShader.current = shader;
+      };
+    }
+    return m;
+  }, [texture, spec.bodyColor, page]);
+  useEffect(() => () => material.dispose(), [material]);
   // Procedural ring strip (colour + alpha vs radius), drawn to a 1-D canvas and mapped
   // radially. Deterministic and CSP-safe — avoids the saturn_ring.png alpha-layout that
   // sampled transparent under RingGeometry's UVs and made the rings vanish entirely.
@@ -258,8 +330,27 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       planetPositions.set(spec.key, new THREE.Vector3());
       planetRadii.set(spec.key, spec.size);
     }
-    return () => { texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); planetPositions.delete(spec.key); planetRadii.delete(spec.key); };
+    return () => { texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose(); planetPositions.delete(spec.key); planetRadii.delete(spec.key); };
   }, [texture, ringTex, ringGeo, page, spec.key, spec.size]);
+
+  // A1: lazily upgrade this planet's albedo the moment it becomes the focused world, and
+  // fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
+  useEffect(() => {
+    if (!page || focused !== spec.key) { hiTarget.current = 0; return; }
+    const tier = hiTierFor();
+    if (tier === 'base') return; // mobile keeps the 2K base
+    let cancelled = false;
+    loadHiRes(spec.key, tier, gl).then((tex) => {
+      if (!tex) return;
+      if (cancelled) { tex.dispose(); return; }
+      hiTex.current?.dispose();
+      hiTex.current = tex;
+      if (hiShader.current) hiShader.current.uniforms.uHiMap.value = tex;
+      hiTarget.current = 1;
+      if (DEV) console.log(`[tex] ${spec.key} ${tier} resident — textures=${gl.info.memory.textures}`);
+    });
+    return () => { cancelled = true; hiTarget.current = 0; };
+  }, [focused, page, spec.key, gl]);
 
   useFrame((state, dt) => {
     angle.current += dt * spec.speed;
@@ -267,6 +358,19 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     const rimTarget = hovered && page ? 0.9 : 0.35;
     const uI = rimUniforms.uIntensity;
     uI.value += (rimTarget - uI.value) * Math.min(1, dt * 6);
+    // A1: crossfade the hi-res map toward its target; once fully faded out, free the GPU
+    // texture (budget: at most one hi texture resident, since only one world is focused).
+    if (page && hiShader.current) {
+      const u = hiShader.current.uniforms.uHiMix;
+      const step = dt / HI_FADE;
+      u.value += Math.sign(hiTarget.current - u.value) * Math.min(Math.abs(hiTarget.current - u.value), step);
+      if (hiTarget.current === 0 && u.value <= 0.001 && hiTex.current) {
+        hiTex.current.dispose();
+        hiTex.current = null;
+        hiShader.current.uniforms.uHiMap.value = white1();
+        if (DEV) console.log(`[tex] ${spec.key} disposed — textures=${gl.info.memory.textures}`);
+      }
+    }
     if (group.current) {
       group.current.position.set(Math.cos(angle.current) * spec.orbit, 0, Math.sin(angle.current) * spec.orbit);
       if (page) {
@@ -311,9 +415,8 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   return (
     <group ref={group}>
       <group ref={spinGroup} rotation={[0, 0, spec.tilt ?? 0]} scale={hovered && page ? 1.12 : 1}>
-        <mesh ref={mesh} {...bind}>
+        <mesh ref={mesh} {...bind} material={material}>
           <sphereGeometry args={[spec.size, 64, 64]} />
-          <meshStandardMaterial map={texture} color={spec.bodyColor ?? '#ffffff'} roughness={0.9} metalness={0.02} />
         </mesh>
         {/* Atmospheric rim light (heightened realism, tinted from the planet). */}
         <mesh scale={1.05}>
