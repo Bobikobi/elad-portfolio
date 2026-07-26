@@ -29,11 +29,29 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 
 // Immersive welcome: low + close, looking ACROSS the galaxy plane so it fills the
 // frame and spills off the left/right edges (you're inside space, not viewing a disc).
-const DIVE_FROM = new THREE.Vector3(0, 2.6, 9);
-// Dive ends inside a spiral ARM (offset from centre), not the core — Sol's real
-// neighbourhood. The gold core slides sideways to hang in the background.
-const DIVE_TO = new THREE.Vector3(3.6, 0.0, 1.6);
 const LOOK = new THREE.Vector3(0, 0.5, 0);
+// T4 dive choreography — a cubic-Bézier S-curve that PITCHES THROUGH the disc plane
+// (y: +2.6 above → −0.9 below), not parallel to it, so the galaxy disc is never a flat
+// horizontal band. Ends inside a spiral ARM (offset from centre, Sol's neighbourhood);
+// the gold core slides sideways to hang in the background.
+const DIVE_P0 = new THREE.Vector3(0, 2.6, 9);
+const DIVE_C1 = new THREE.Vector3(-0.7, 2.5, 6.4);
+const DIVE_C2 = new THREE.Vector3(2.9, 0.4, 3.2);
+const DIVE_P1 = new THREE.Vector3(3.7, -0.9, 1.5);
+// Look pitches from looking-DOWN at the core (camera above the plane) to looking-UP at
+// the arm (camera below it) — the disc sweeps across the frame at an angle.
+const LOOK_START = new THREE.Vector3(0, 0.25, 0);
+const LOOK_END = new THREE.Vector3(5.2, 0.9, -1.5);
+const _bz = new THREE.Vector3();
+/** Cubic Bézier into `out`. */
+function cubicBezier(out: THREE.Vector3, p0: THREE.Vector3, c1: THREE.Vector3, c2: THREE.Vector3, p1: THREE.Vector3, e: number) {
+  const u = 1 - e, a = u * u * u, b = 3 * u * u * e, c = 3 * u * e * e, d = e * e * e;
+  out.set(
+    a * p0.x + b * c1.x + c * c2.x + d * p1.x,
+    a * p0.y + b * c1.y + c * c2.y + d * p1.y,
+    a * p0.z + b * c1.z + c * c2.z + d * p1.z
+  );
+}
 const _tgt = new THREE.Vector3();
 const _look = new THREE.Vector3();
 const _sunDir = new THREE.Vector3();
@@ -47,8 +65,23 @@ const _orbitLook = new THREE.Vector3();
 const _ovPos = new THREE.Vector3();
 const _ovLook = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
-const LOOK_CORE = new THREE.Vector3(0, 0.4, 0);
-const LOOK_ARM = new THREE.Vector3(5.2, 0, -1.5); // forward along travel — core drifts off-side
+const _orbOff = new THREE.Vector3();
+const _orbAxis = new THREE.Vector3();
+/**
+ * Drag-to-rotate (T6): rotate `pos` around `look` by yaw (about world-Y) then pitch
+ * (about the horizontal axis perpendicular to the view) — an offset applied on top of
+ * the state pose, so the rig stays the sole camera owner (no OrbitControls).
+ */
+function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch: number) {
+  if (yaw === 0 && pitch === 0) return;
+  _orbOff.subVectors(pos, look);
+  _orbOff.applyAxisAngle(UP, yaw);
+  _orbAxis.crossVectors(UP, _orbOff);
+  if (_orbAxis.lengthSq() < 1e-6) _orbAxis.set(1, 0, 0);
+  _orbAxis.normalize();
+  _orbOff.applyAxisAngle(_orbAxis, pitch);
+  pos.copy(look).add(_orbOff);
+}
 
 /**
  * Sole owner of the camera. WELCOME_IDLE drifts; DIVE follows scrollProgress into
@@ -60,6 +93,7 @@ export default function CameraRig() {
   const prevAct = useRef<string>('galaxy');
   const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
   const swapLatch = useRef(false);  // blocks re-swaps until well clear of the covered window
+  const orbit = useRef({ yaw: 0, pitch: 0 }); // damped drag-to-rotate offset (T6)
   // Read the store via getState() inside the frame loop — subscribing with the hook
   // would re-render this component on every scroll tick.
   useFrame((state, delta) => {
@@ -113,6 +147,11 @@ export default function CameraRig() {
     const px = state.pointer.x || 0;
     const py = state.pointer.y || 0;
 
+    // Drag-to-rotate (T6): damp the applied offset toward the store target (release
+    // inertia lives in DragControls). Applied ONLY in WELCOME_IDLE + SOLAR_OVERVIEW below.
+    damp(orbit.current, 'yaw', store.orbitYaw, 0.12, dt);
+    damp(orbit.current, 'pitch', store.orbitPitch, 0.12, dt);
+
     if (act === 'galaxy') {
       prevAct.current = 'galaxy';
       const p = scrollProgress;
@@ -123,22 +162,31 @@ export default function CameraRig() {
           2.6 + Math.sin(t * 0.07) * 0.25 + py * 0.9,
           9 + Math.cos(t * 0.08) * 0.5
         );
+        applyOrbit(_tgt, LOOK, orbit.current.yaw, orbit.current.pitch); // drag-to-rotate (T6)
         damp3(cam.position, _tgt, 0.5, dt);
         damp(cam, 'fov', 55, 0.5, dt);
         cam.lookAt(LOOK.x, LOOK.y, LOOK.z);
       } else {
-        // DIVE — dive completes by ~0.85; the veil/swap happens in the last stretch.
+        // DIVE — a staged S-curve that descends THROUGH the disc plane. Completes by
+        // ~0.85; the veil/swap happens in the last stretch.
         const e = easeInOutCubic(clamp01((p - 0.015) / 0.85));
-        _tgt.copy(DIVE_FROM).lerp(DIVE_TO, e);
+        cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, e);
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);
         damp3(cam.position, _tgt, 0.22, dt);
         // FOV opens for speed on the way in, eases back near arrival (deceleration cue).
         const fov = 55 + 13 * Math.sin(clamp01(e) * Math.PI * 0.85);
         damp(cam, 'fov', fov, 0.22, dt);
-        // Look shifts from core toward the travel direction, so the core slides off-side.
-        _look.copy(LOOK_CORE).lerp(LOOK_ARM, easeInOutCubic(e));
+        // Look pitches down→up as the camera crosses the plane, and a small extra pitch
+        // bump mid-dive — so the disc sweeps across the frame at an angle, never a flat
+        // horizontal band. The core (LOOK_END.x) slides off-side toward the arm.
+        _look.copy(LOOK_START).lerp(LOOK_END, easeInOutCubic(e));
+        _look.y += 0.5 * Math.sin(e * Math.PI);
         cam.lookAt(_look.x, _look.y, _look.z);
+        // Cinematic bank — a roll that tilts the disc diagonally (kills any residual
+        // horizontal read). Frequency 0.85π so it stays banked THROUGH the late crossing
+        // (a faster wave returned to level right where the disc goes edge-on); a touch of mouse.
+        cam.rotateZ(0.11 * Math.sin(e * Math.PI * 0.85) + px * 0.05);
       }
     } else {
       const focused = useScene.getState().focusedPlanet;
@@ -180,6 +228,10 @@ export default function CameraRig() {
           ovDist * Math.cos(ovElev) + Math.cos(t * 0.03) * 0.4
         );
         _ovLook.set(Math.sin(t * 0.04) * 0.15, 0.2, 0);
+        // Drag-to-rotate (T6): orbit the whole system in SOLAR_OVERVIEW. Applied to the
+        // overview pose only — in ORBIT the camera uses _orbitPos (departure≈0 blends in
+        // no overview), so a focused world is never rotated by the offset.
+        applyOrbit(_ovPos, _ovLook, orbit.current.yaw, orbit.current.pitch);
 
         if (pp) {
           // --- ORBIT: the "Jupiter frame". The focused planet is the DOMINANT hero —

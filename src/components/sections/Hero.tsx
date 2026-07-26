@@ -86,7 +86,6 @@ function GalaxyHome() {
   const { scrollYProgress } = useScroll({ target: driverRef, offset: ['start start', 'end end'] });
 
   const welcomeOpacity = useMotionValue(1);
-  const flashOpacity = useMotionValue(0);
 
   useEffect(() => {
     // Fresh load / refresh (module flag reset) → always the galaxy dive. Only an
@@ -106,19 +105,14 @@ function GalaxyHome() {
     }
   }, []);
 
-  // Feed raw scroll to the store; CameraRig owns the act swap + coverage (T1). The mask
-  // overlay opacity is driven from store.coverage via the subscription below (not here),
-  // so the DOM curtain and the atomic swap always agree on the exact same number.
+  // Feed raw scroll to the store; CameraRig owns the act swap + coverage (T1). The
+  // crossover curtain is now the in-world SwapMask (T3, in SceneRoot) driven by the same
+  // store.coverage — no DOM overlay, so the wash is a real bloomed glow, not a flat gradient.
   useMotionValueEvent(scrollYProgress, 'change', (v) => {
     if (seenIntro) return;
     setScrollProgress(v);
     welcomeOpacity.set(1 - clamp01(v / 0.12));
   });
-
-  // Mirror store.coverage → the mask overlay's opacity every frame (imperative motion
-  // value, no React re-render). This is the interim T1 curtain; T3 retires it for the
-  // 3D waypoint-star glow and derives coverage from the measured composite instead.
-  useEffect(() => useScene.subscribe((s) => flashOpacity.set(s.coverage)), [flashOpacity]);
 
   // Repeat visit: no dive, no tall driver — the overview is already on screen. Give
   // a short crawlable hint to explore the planets.
@@ -172,13 +166,6 @@ function GalaxyHome() {
           </motion.span>
         </div>
       </motion.div>
-
-      {/* Dust-veil crossing (not a white flash) — a warm gold-into-indigo cloud that
-          briefly curtains the frame while the act swaps behind it. */}
-      <motion.div
-        style={{ opacity: flashOpacity, background: 'radial-gradient(circle at 50% 46%, #FFD9A0 0%, #C9A25E 35%, #3A2E6E 75%, #0A0B22 100%)' }}
-        className="pointer-events-none fixed inset-0 z-20"
-      />
     </section>
   );
 }

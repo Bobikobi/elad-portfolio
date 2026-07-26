@@ -37,6 +37,7 @@ export const translations: Record<string, Record<Locale, string>> = {
     ru: 'Full-stack разработчик веб и AI продуктов',
   },
   'welcome.hint': { he: 'גלול כדי לצלול', en: 'Scroll to dive in', ru: 'Прокрутите, чтобы нырнуть' },
+  'welcome.dragHint': { he: 'גררו כדי לסובב את המערכת', en: 'Drag to rotate the system', ru: 'Потяните, чтобы вращать систему' },
 
   // About
   'about.title': { he: 'אודות', en: 'About Me', ru: 'Обо мне' },

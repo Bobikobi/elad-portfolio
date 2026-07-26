@@ -1,6 +1,12 @@
 'use client';
+import { useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation } from '@react-three/postprocessing';
 import { useScene } from '@/lib/sceneStore';
+
+// The postprocessing VignetteEffect exposes `darkness`/`offset` as live setters; the
+// package isn't hoisted for a direct type import (pnpm), so we type the ref structurally.
+type VignetteLike = { darkness: number; offset: number };
 
 /**
  * Post FX (one fullscreen pass). Runs uninterrupted across the act swap (one camera,
@@ -24,6 +30,20 @@ export default function Effects() {
   // back in from the edge and re-dominate the frame (F1). So: overview only.
   const godRays = solar && !focused && sunMesh && high;
 
+  // Ease the vignette across the swap (T3) so the corners don't flip between solar's
+  // deep vignette and the galaxy's mild one at the crossover — that flip (galaxy
+  // corners ~9% → solar corners ~0%) was the last visible seam behind the gold mask.
+  // Driven imperatively so `coverage` never re-renders the composer per frame.
+  const vigRef = useRef<VignetteLike | null>(null);
+  useFrame(() => {
+    const v = vigRef.current;
+    if (!v) return;
+    const { act: a, coverage } = useScene.getState();
+    const sol = a === 'solar';
+    v.darkness = sol ? 0.87 - 0.25 * coverage : 0.62;
+    v.offset = sol ? 0.32 - 0.04 * coverage : 0.28;
+  });
+
   return (
     <EffectComposer multisampling={0}>
       {godRays ? (
@@ -45,8 +65,9 @@ export default function Effects() {
       {/* Very subtle film grain + vignette — the glue that binds the depth layers. */}
       <Noise premultiply opacity={0.045} />
       {/* Deeper vignette in the solar act pulls the corners to deep space (spec: <10%
-          brightness at the edges) while the sun keeps the centre warm. */}
-      <Vignette offset={solar ? 0.32 : 0.28} darkness={solar ? 0.87 : 0.62} />
+          brightness at the edges) while the sun keeps the centre warm. Darkness/offset
+          are driven per-frame (vigRef) to ease across the swap — see above. */}
+      <Vignette ref={(e: VignetteLike | null) => { vigRef.current = e ?? null; }} offset={0.28} darkness={0.62} />
     </EffectComposer>
   );
 }

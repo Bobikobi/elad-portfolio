@@ -217,6 +217,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   // Clicking a planet navigates to its section route; the URL is the source of
   // truth and CosmicStage's bridge flies the camera there.
   const open = () => {
+    // A drag-to-rotate gesture (T6) ends with a pointerup on a planet too — don't let
+    // it navigate. The threshold flag is set by DragControls.
+    if (useScene.getState().dragMoved) return;
     const section = PLANET_SECTION[spec.key];
     if (section) router.push(sectionPath(section, locale));
   };
@@ -272,21 +275,24 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         if (labelRef.current) {
           // Overview pills belong ONLY to the solar overview — hide every label the
           // moment a world is focused (ORBIT), else it floats as an orphan over the panel.
-          const focused = useScene.getState().focusedPlanet;
+          const { focusedPlanet: focused, coverage } = useScene.getState();
           if (focused) {
             labelRef.current.style.opacity = '0';
             labelRef.current.style.pointerEvents = 'none';
           } else {
             // Overview: hide the label when its planet is partially cropped by the
-            // frame edge (a pill floating at the edge reads as broken).
+            // frame edge (a pill floating at the edge reads as broken), AND fade it out
+            // while the swap mask is covering (T3) so the pills never pop through the
+            // crossover — the DOM sits above the canvas, so the 3D wash can't hide them.
             const cam = state.camera as THREE.PerspectiveCamera;
             _ndc.copy(_wp).project(cam);
             const dist = cam.position.distanceTo(_wp);
             const rY = spec.size / (dist * Math.tan((cam.fov * DEG2RAD) / 2));
             const rX = rY / (state.size.width / state.size.height);
             const cropped = _ndc.z > 1 || Math.abs(_ndc.x) + rX > 0.98 || Math.abs(_ndc.y) + rY > 0.98;
-            labelRef.current.style.opacity = cropped ? '0' : '1';
-            labelRef.current.style.pointerEvents = cropped ? 'none' : 'auto';
+            const covFade = Math.max(0, Math.min(1, 1 - (coverage - 0.12) / 0.38)); // 1 → 0 over cov 0.12..0.5
+            labelRef.current.style.opacity = (cropped ? 0 : covFade).toString();
+            labelRef.current.style.pointerEvents = cropped || covFade < 0.5 ? 'none' : 'auto';
           }
         }
       }

@@ -26,6 +26,14 @@ interface SceneState {
   /** Departure gesture progress 0..1 while in ORBIT — scrubs the camera back toward
    *  the overview; 1.0 commits the return flight. Owned by the world's ProjectsStage. */
   departure: number;
+  /** Drag-to-rotate offset (T6) — a yaw/pitch the user drags, applied by CameraRig ON
+   *  TOP of the WELCOME_IDLE / SOLAR_OVERVIEW pose (never OrbitControls; the rig stays
+   *  the sole camera owner). Persists (no auto-recenter); pitch is clamped by the writer. */
+  orbitYaw: number;
+  orbitPitch: number;
+  /** True when the last pointer sequence crossed the drag threshold — the planet click
+   *  handler reads it to tell a rotate-drag from a navigating tap. */
+  dragMoved: boolean;
   quality: Quality;
   /** Sun mesh — set by the Sun component, read by Effects as the God Rays source. */
   sunMesh: THREE.Mesh | null;
@@ -37,6 +45,8 @@ interface SceneState {
   setCameraMode: (m: CameraMode) => void;
   setFocusedPlanet: (id: string | null) => void;
   setDeparture: (v: number) => void;
+  setOrbit: (yaw: number, pitch: number) => void;
+  setDragMoved: (v: boolean) => void;
   setQuality: (q: Quality) => void;
   setSunMesh: (m: THREE.Mesh | null) => void;
   setSceneReady: (v: boolean) => void;
@@ -49,6 +59,9 @@ export const useScene = create<SceneState>((set) => ({
   cameraMode: 'WELCOME_IDLE',
   focusedPlanet: null,
   departure: 0,
+  orbitYaw: 0,
+  orbitPitch: 0,
+  dragMoved: false,
   quality: 'high',
   sunMesh: null,
   sceneReady: false,
@@ -58,6 +71,8 @@ export const useScene = create<SceneState>((set) => ({
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setFocusedPlanet: (focusedPlanet) => set({ focusedPlanet }),
   setDeparture: (departure) => set({ departure }),
+  setOrbit: (orbitYaw, orbitPitch) => set({ orbitYaw, orbitPitch }),
+  setDragMoved: (dragMoved) => set({ dragMoved }),
   setQuality: (quality) => set({ quality }),
   setSunMesh: (sunMesh) => set({ sunMesh }),
   setSceneReady: (sceneReady) => set({ sceneReady }),
