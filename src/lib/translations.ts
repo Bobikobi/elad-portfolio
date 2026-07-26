@@ -38,6 +38,7 @@ export const translations: Record<string, Record<Locale, string>> = {
   },
   'welcome.hint': { he: 'גלול כדי לצלול', en: 'Scroll to dive in', ru: 'Прокрутите, чтобы нырнуть' },
   'welcome.dragHint': { he: 'גררו כדי לסובב את המערכת', en: 'Drag to rotate the system', ru: 'Потяните, чтобы вращать систему' },
+  'welcome.swipeHint': { he: 'החליקו לכוכב הבא', en: 'Swipe to the next planet', ru: 'Свайп к следующей планете' },
 
   // About
   'about.title': { he: 'אודות', en: 'About Me', ru: 'Обо мне' },

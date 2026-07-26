@@ -10,6 +10,7 @@ import CameraRig from './CameraRig';
 import Effects from './Effects';
 import SwapMask from './SwapMask';
 import DragControls from './DragControls';
+import TourDots from './TourDots';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
@@ -94,6 +95,7 @@ export default function SceneRoot() {
         {HUD_AVAILABLE && hudOn && <HudProbe />}
       </Canvas>
       <DragControls />
+      <TourDots />
       {HUD_AVAILABLE && hudOn && <DebugHudOverlay />}
     </div>
   );

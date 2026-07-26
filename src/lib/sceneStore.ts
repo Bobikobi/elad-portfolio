@@ -34,6 +34,14 @@ interface SceneState {
   /** True when the last pointer sequence crossed the drag threshold — the planet click
    *  handler reads it to tell a rotate-drag from a navigating tap. */
   dragMoved: boolean;
+  /** T7b: portrait/coarse-pointer devices swap the wide overview + drag-rotate for a
+   *  planet-to-planet tour (a brief establishing shot, then framed stops navigated by
+   *  horizontal swipe). Set from a matchMedia listener; read by CameraRig each frame and
+   *  by the pagination dots. */
+  tourMode: boolean;
+  /** Current tour stop — an index into SECTIONS (0..4). Persists across the session so a
+   *  return to the overview resumes where the tour left off. */
+  tourStop: number;
   quality: Quality;
   /** Sun mesh — set by the Sun component, read by Effects as the God Rays source. */
   sunMesh: THREE.Mesh | null;
@@ -47,6 +55,8 @@ interface SceneState {
   setDeparture: (v: number) => void;
   setOrbit: (yaw: number, pitch: number) => void;
   setDragMoved: (v: boolean) => void;
+  setTourMode: (v: boolean) => void;
+  setTourStop: (i: number) => void;
   setQuality: (q: Quality) => void;
   setSunMesh: (m: THREE.Mesh | null) => void;
   setSceneReady: (v: boolean) => void;
@@ -62,6 +72,8 @@ export const useScene = create<SceneState>((set) => ({
   orbitYaw: 0,
   orbitPitch: 0,
   dragMoved: false,
+  tourMode: false,
+  tourStop: 0,
   quality: 'high',
   sunMesh: null,
   sceneReady: false,
@@ -73,6 +85,8 @@ export const useScene = create<SceneState>((set) => ({
   setDeparture: (departure) => set({ departure }),
   setOrbit: (orbitYaw, orbitPitch) => set({ orbitYaw, orbitPitch }),
   setDragMoved: (dragMoved) => set({ dragMoved }),
+  setTourMode: (tourMode) => set({ tourMode }),
+  setTourStop: (tourStop) => set({ tourStop }),
   setQuality: (quality) => set({ quality }),
   setSunMesh: (sunMesh) => set({ sunMesh }),
   setSceneReady: (sceneReady) => set({ sceneReady }),

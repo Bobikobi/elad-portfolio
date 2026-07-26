@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, PLANET_PAGES } from '@/lib/planetPositions';
-import { PLANET_SECTION, sectionPath } from '@/lib/sections';
+import { PLANET_SECTION, sectionPath, SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
@@ -352,6 +352,41 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   );
 }
 
+const TOUR_STOPS = SECTIONS.length;
+
+/** T7b: the belt (Technologies) is a tour stop but — unlike the page-planets — has no
+ *  clickable body. A world-fixed pill pinned to the belt-stop frame centre gives the tour
+ *  the same tap-to-enter affordance as every other stop. Tour mode only (desktop overview
+ *  is unchanged); shown only while the belt is the active stop. */
+function BeltTourLabel() {
+  const { t, locale } = useI18n();
+  const router = useRouter();
+  const tourMode = useScene((s) => s.tourMode);
+  const act = useScene((s) => s.act);
+  const focused = useScene((s) => s.focusedPlanet);
+  const stop = useScene((s) => s.tourStop);
+  const idx = ((stop % TOUR_STOPS) + TOUR_STOPS) % TOUR_STOPS;
+  if (!tourMode || act !== 'solar' || focused || SECTIONS[idx]?.focus !== 'belt') return null;
+  const open = () => {
+    if (useScene.getState().dragMoved) return; // a swipe ended here — don't navigate
+    router.push(sectionPath('technologies', locale));
+  };
+  return (
+    <Html center position={[1.4, 0.9, 0]} zIndexRange={[20, 0]}>
+      <button
+        type="button"
+        aria-label={t('nav.tech')}
+        onClick={open}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+        className="pointer-events-auto cursor-pointer whitespace-nowrap rounded-full border border-white/20 bg-[rgba(5,7,20,0.78)] px-3.5 py-1.5 text-[13px] font-medium leading-none text-[var(--color-star-white)] shadow-[0_4px_18px_rgba(5,7,20,0.55)] transition-colors duration-200 hover:border-[var(--color-core-gold)]/70 hover:text-[var(--color-core-gold)] focus:outline-none focus-visible:border-[var(--color-core-gold)] focus-visible:text-[var(--color-core-gold)]"
+        style={{ fontFamily: 'var(--font-body, var(--font-hebrew))' }}
+      >
+        {t('nav.tech')}
+      </button>
+    </Html>
+  );
+}
+
 /**
  * Act 2: the solar system. M2 = basic reveal (sun + real central light + orbiting
  * bodies + Saturn rings + starfield). M3 adds textures, God Rays, moons, labels,
@@ -375,6 +410,8 @@ export default function SolarAct() {
         ))}
         <AsteroidBelt count={high ? 1400 : 500} />
       </group>
+      {/* T7b: tap-to-enter affordance for the belt tour stop (world-fixed, tour mode only). */}
+      <BeltTourLabel />
       {/* World-fixed foreground giant — disabled until relit in Pass B (see flag). */}
       {SHOW_FOREGROUND_ANCHOR && <ForegroundAnchor />}
     </>

@@ -5,6 +5,7 @@ import { damp, damp3 } from 'maath/easing';
 import * as THREE from 'three';
 import { useScene, type Act } from '@/lib/sceneStore';
 import { planetPositions, planetRadii } from '@/lib/planetPositions';
+import { SECTIONS } from '@/lib/sections';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD } from '@/lib/orbitFraming';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -64,9 +65,45 @@ const _orbitPos = new THREE.Vector3();
 const _orbitLook = new THREE.Vector3();
 const _ovPos = new THREE.Vector3();
 const _ovLook = new THREE.Vector3();
+const _entry = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const _orbOff = new THREE.Vector3();
 const _orbAxis = new THREE.Vector3();
+
+// --- T7b mobile tour (portrait / coarse pointer) --------------------------------------
+// Portrait crops the wide overview to mostly-sun, so instead of shrinking the system (and
+// making planets untappable) we run a guided tour: a brief WIDE establishing shot, then
+// framed "zoom-above" stops the user swipes between. Poses live here (the rig is the sole
+// camera owner); DragControls writes the stop index, the dots read it.
+const EST_DIST = 30;                    // establishing: far enough that the page-planets fit portrait
+const EST_ELEV = 35 * DEG2RAD;          // elevated ~35° so the ecliptic reads as a system, not a line
+const EST_FOV = 64;                     // wide vertical fov so the narrow portrait frame still holds it
+const EST_HOLD = 1.7;                   // s — how long the establishing shot lingers before the tour
+const EST_EASE = 1.4;                   // s — glide from establishing to the first stop
+const TOUR_FOV = 44;                    // per-stop fov
+const TOUR_FILL = 0.4;                  // planet ≈ 40% of viewport height (huge; leaves room for the label)
+const BELT_TOUR_FOV = 46;
+const _tourPos = new THREE.Vector3();
+const _tourLook = new THREE.Vector3();
+const _est = new THREE.Vector3();
+const _el = new THREE.Vector3(); // establishing look target
+/** A framed "zoom-above" stop for one page-planet: a mostly-lit gibbous vantage, elevated,
+ *  with the planet large and sitting a little low so its label rides near the top. */
+function tourPlanetPose(pp: THREE.Vector3, r: number) {
+  _sunDir.copy(pp).normalize();
+  _side.copy(UP).cross(_sunDir);
+  if (_side.lengthSq() < 1e-4) _side.set(1, 0, 0);
+  _side.normalize();
+  const A = 0.7; // ~40° off the lit direction → a bright gibbous face with a terminator edge
+  _camDir.copy(_sunDir).multiplyScalar(-Math.cos(A)); // -sunDir = toward the lit side (sun behind camera)
+  _camDir.addScaledVector(_side, Math.sin(A));
+  _camDir.y += 0.6; // "zoom-above"
+  _camDir.normalize();
+  const d = r / (TOUR_FILL * Math.tan((TOUR_FOV * DEG2RAD) / 2));
+  _tourPos.copy(pp).addScaledVector(_camDir, d);
+  _tourLook.copy(pp);
+  _tourLook.y += r * 0.8; // planet drops low in frame, label sits near centre-top
+}
 /**
  * Drag-to-rotate (T6): rotate `pos` around `look` by yaw (about world-Y) then pitch
  * (about the horizontal axis perpendicular to the view) — an offset applied on top of
@@ -93,6 +130,9 @@ export default function CameraRig() {
   const prevAct = useRef<string>('galaxy');
   const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
   const swapLatch = useRef(false);  // blocks re-swaps until well clear of the covered window
+  const arrivedViaDive = useRef(false); // T7a: true only on the fresh galaxy→solar dive, so the
+                                        // arrival dolly is scroll-driven (settle lands at scrollY=max)
+  const mobileArriveT = useRef(0);      // T7b: clock time the establishing shot settled (0 = not yet)
   const orbit = useRef({ yaw: 0, pitch: 0 }); // damped drag-to-rotate offset (T6)
   // Read the store via getState() inside the frame loop — subscribing with the hook
   // would re-render this component on every scroll tick.
@@ -138,6 +178,7 @@ export default function CameraRig() {
         store.setAct(desired);
         act = desired;
         swapLatch.current = true;
+        arrivedViaDive.current = desired === 'solar'; // scroll-drive the arrival dolly (T7a); cleared on reverse
         if (desired === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
       }
       if (cov < 0.5) swapLatch.current = false; // re-arm once clear of the covered window
@@ -154,6 +195,7 @@ export default function CameraRig() {
 
     if (act === 'galaxy') {
       prevAct.current = 'galaxy';
+      mobileArriveT.current = 0; // T7b: replay the establishing shot on the next solar entry
       const p = scrollProgress;
       if (p < 0.015) {
         // WELCOME_IDLE — low, close, looking across the plane; gentle drift + parallax.
@@ -191,6 +233,7 @@ export default function CameraRig() {
     } else {
       const focused = useScene.getState().focusedPlanet;
       const departure = focused ? clamp01(useScene.getState().departure) : 0;
+      if (focused) mobileArriveT.current = 0; // T7b: re-establish the tour after a world visit
       // On first entering the solar act, snap to a start pose then fly IN. From the
       // dive we snap FAR for a zoom-in reveal; a deep-link straight to a world starts
       // closer so the flight to its planet is short and graceful.
@@ -285,6 +328,66 @@ export default function CameraRig() {
           damp3(cam.position, _tgt, 0.5, dt);
           damp(cam, 'fov', fov, 0.5, dt);
           cam.lookAt(_look.x, _look.y, _look.z);
+        } else if (store.tourMode) {
+          // --- T7b: MOBILE TOUR ---------------------------------------------------
+          // Portrait crops the wide overview to mostly-sun, so we guide instead: a brief
+          // WIDE establishing shot (understand the space), then a framed "zoom-above" stop
+          // the user swipes between (DragControls writes tourStop). Vertical scroll stays
+          // the page; tap still enters the world (the planet's own click handler).
+          _est.set(
+            Math.sin(t * 0.03) * 0.6,
+            EST_DIST * Math.sin(EST_ELEV) + Math.sin(t * 0.05) * 0.2,
+            EST_DIST * Math.cos(EST_ELEV)
+          );
+          _el.set(0, 0.2, 0);
+          const stopIdx = ((store.tourStop % SECTIONS.length) + SECTIONS.length) % SECTIONS.length;
+          const focus = SECTIONS[stopIdx].focus;
+          let stopFov = TOUR_FOV;
+          if (focus === 'belt') {
+            _tourPos.set(Math.sin(t * 0.05) * 0.8 - 2.4, 1.9 + Math.sin(t * 0.06) * 0.2, 7.6 + Math.cos(t * 0.05) * 0.5);
+            _tourLook.set(1.4, 0.2, 0);
+            stopFov = BELT_TOUR_FOV;
+          } else {
+            const tp = planetPositions.get(focus);
+            const tr = planetRadii.get(focus) ?? 0.4;
+            if (tp) {
+              tourPlanetPose(tp, tr);
+            } else {
+              // Planet not mounted yet (first solar frame) → hold the establishing pose.
+              _tourPos.copy(_est); _tourLook.copy(_el); stopFov = EST_FOV;
+            }
+          }
+          const diving = arrivedViaDive.current && scrollProgress < 0.999;
+          if (diving) {
+            // Scroll-driven approach to the establishing pose (T7a rule: settle at max).
+            const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
+            _entry.set(0, 8, 21);
+            _tgt.copy(_entry).lerp(_est, arrive);
+            damp3(cam.position, _tgt, 0.3, dt);
+            damp(cam, 'fov', 52 + (EST_FOV - 52) * arrive, 0.3, dt);
+            cam.lookAt(_el.x, _el.y, _el.z);
+          } else {
+            if (mobileArriveT.current === 0) mobileArriveT.current = t; // establishing settled → start the beat
+            const held = t - mobileArriveT.current;
+            const blend = easeInOutCubic(clamp01((held - EST_HOLD) / EST_EASE)); // 0 wide → 1 framed
+            _tgt.copy(_est).lerp(_tourPos, blend);
+            _look.copy(_el).lerp(_tourLook, blend);
+            damp3(cam.position, _tgt, 0.45, dt);
+            damp(cam, 'fov', EST_FOV + (stopFov - EST_FOV) * blend, 0.45, dt);
+            cam.lookAt(_look.x, _look.y, _look.z);
+          }
+        } else if (arrivedViaDive.current && scrollProgress >= SWAP_V) {
+          // T7a: scroll-driven arrival dolly. The far entry pose eases to the overview
+          // across the final scroll segment [SWAP_V..1], so the camera settle lands
+          // exactly at scrollY=max — every position in the tail moves the camera, no
+          // inert range. Returns / deep-links (scroll<SWAP_V) fall through to the
+          // time-damped reveal below, so they still fly in without a scroll driver.
+          const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
+          _entry.set(0, 8, 21);
+          _tgt.copy(_entry).lerp(_ovPos, arrive);
+          damp3(cam.position, _tgt, 0.3, dt);
+          damp(cam, 'fov', 52 + (ovFov - 52) * arrive, 0.3, dt);
+          cam.lookAt(_ovLook.x, _ovLook.y, _ovLook.z);
         } else {
           damp3(cam.position, _ovPos, 0.7, dt);
           damp(cam, 'fov', ovFov, 0.7, dt);
