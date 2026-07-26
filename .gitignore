@@ -63,6 +63,5 @@ gitleaks-workingtree.json
 gitleaks-history.json
 security-reports/
 
-# Local visual-verification harness (not for commit)
-_verify.mjs
-_verify_batch.mjs
+# Local visual-verification harness (not for commit) — all root _*.mjs are temp harness
+/_*.mjs

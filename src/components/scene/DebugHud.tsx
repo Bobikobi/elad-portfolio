@@ -65,11 +65,14 @@ export interface HudData {
   camDist: number; // camera distance to sun (overview) — handy while tuning
   pdb: boolean; // preserveDrawingBuffer actually enabled?
   center: number; // center-screen luminance (sampling sanity check)
+  cov: number; // T1 swap mask coverage 0..1 (swap fires only >0.95)
+  scroll: number; // dive scroll progress 0..1
 }
 
 export const hudData: HudData = {
   solar: false, sunPct: 0, sunPx: 0, planets: [], fps: 0,
   corners: [0, 0, 0, 0], vw: 0, vh: 0, fov: 0, camDist: 0, pdb: false, center: 0,
+  cov: 0, scroll: 0,
 };
 
 /** Perspective on-screen size (fraction of viewport HEIGHT) of a sphere of world
@@ -98,7 +101,9 @@ export function HudProbe() {
 
   useFrame((state, dt) => {
     const cam = state.camera as THREE.PerspectiveCamera;
-    const { act, sunMesh } = useScene.getState();
+    const { act, sunMesh, coverage, scrollProgress } = useScene.getState();
+    hudData.cov = coverage;
+    hudData.scroll = scrollProgress;
     const solar = act === 'solar';
     const fovYrad = cam.fov * DEG2RAD;
     const vh = state.size.height;
@@ -191,6 +196,7 @@ export function DebugHudOverlay() {
           : '  —';
         el.textContent =
           `HUD ${d.solar ? 'SOLAR' : 'galaxy'}  ${fmt(d.fps, 0)} fps  fov ${fmt(d.fov, 1)}°  ${d.vw}×${d.vh}\n` +
+          `swap  scroll ${fmt(d.scroll, 3)}  cov ${fmt(d.cov, 3)}${d.cov > 0.95 ? ' [SWAP-OK]' : ''}\n` +
           `sun disc  ${fmt(d.sunPct, 1)}% h   (${fmt(d.sunPx, 0)} px)  camDist ${fmt(d.camDist, 2)}\n` +
           `planets (diameter):\n${planetLines}\n` +
           `corners %lum  TL ${fmt(c[0], 1)}${cornerFlag(c[0])}  TR ${fmt(c[1], 1)}${cornerFlag(c[1])}\n` +

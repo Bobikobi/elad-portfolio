@@ -82,7 +82,6 @@ function GalaxyHome() {
   const { t } = useI18n();
   const driverRef = useRef<HTMLDivElement>(null);
   const setScrollProgress = useScene((s) => s.setScrollProgress);
-  const setAct = useScene((s) => s.setAct);
   const [seenIntro, setSeenIntro] = useState<boolean | null>(null);
   const { scrollYProgress } = useScroll({ target: driverRef, offset: ['start start', 'end end'] });
 
@@ -107,20 +106,19 @@ function GalaxyHome() {
     }
   }, []);
 
+  // Feed raw scroll to the store; CameraRig owns the act swap + coverage (T1). The mask
+  // overlay opacity is driven from store.coverage via the subscription below (not here),
+  // so the DOM curtain and the atomic swap always agree on the exact same number.
   useMotionValueEvent(scrollYProgress, 'change', (v) => {
     if (seenIntro) return;
     setScrollProgress(v);
     welcomeOpacity.set(1 - clamp01(v / 0.12));
-    const flash = v < 0.8 ? 0 : v < 0.9 ? (v - 0.8) / 0.1 : 1 - clamp01((v - 0.9) / 0.08);
-    flashOpacity.set(flash * 0.96);
-    if (useScene.getState().focusedPlanet) return;
-    if (v >= 0.9 && useScene.getState().act === 'galaxy') {
-      setAct('solar');
-      sessionStorage.setItem('seen-intro', '1');
-    } else if (v < 0.5 && useScene.getState().act === 'solar') {
-      setAct('galaxy');
-    }
   });
+
+  // Mirror store.coverage → the mask overlay's opacity every frame (imperative motion
+  // value, no React re-render). This is the interim T1 curtain; T3 retires it for the
+  // 3D waypoint-star glow and derives coverage from the measured composite instead.
+  useEffect(() => useScene.subscribe((s) => flashOpacity.set(s.coverage)), [flashOpacity]);
 
   // Repeat visit: no dive, no tall driver — the overview is already on screen. Give
   // a short crawlable hint to explore the planets.

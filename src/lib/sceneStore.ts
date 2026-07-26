@@ -16,6 +16,11 @@ interface SceneState {
   act: Act;
   /** 0..1 dive progress across the galaxy act (single source of truth: scrollDriver). */
   scrollProgress: number;
+  /** 0..1 mask coverage of the galaxy↔solar swap (T1). Written each frame by CameraRig
+   *  from the (damped) dive gate; the atomic act swap may fire ONLY while coverage>0.95,
+   *  and the DOM mask overlay reads it for its opacity. Bidirectional: the same envelope
+   *  peaks whether diving down or surfacing up, so scroll-up mirrors the dive. */
+  coverage: number;
   cameraMode: CameraMode;
   focusedPlanet: string | null;
   /** Departure gesture progress 0..1 while in ORBIT — scrubs the camera back toward
@@ -28,6 +33,7 @@ interface SceneState {
   sceneReady: boolean;
   setAct: (act: Act) => void;
   setScrollProgress: (p: number) => void;
+  setCoverage: (v: number) => void;
   setCameraMode: (m: CameraMode) => void;
   setFocusedPlanet: (id: string | null) => void;
   setDeparture: (v: number) => void;
@@ -39,6 +45,7 @@ interface SceneState {
 export const useScene = create<SceneState>((set) => ({
   act: 'galaxy',
   scrollProgress: 0,
+  coverage: 0,
   cameraMode: 'WELCOME_IDLE',
   focusedPlanet: null,
   departure: 0,
@@ -47,6 +54,7 @@ export const useScene = create<SceneState>((set) => ({
   sceneReady: false,
   setAct: (act) => set({ act }),
   setScrollProgress: (scrollProgress) => set({ scrollProgress }),
+  setCoverage: (coverage) => set({ coverage }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setFocusedPlanet: (focusedPlanet) => set({ focusedPlanet }),
   setDeparture: (departure) => set({ departure }),

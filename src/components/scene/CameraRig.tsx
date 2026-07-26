@@ -3,11 +3,17 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { damp, damp3 } from 'maath/easing';
 import * as THREE from 'three';
-import { useScene } from '@/lib/sceneStore';
+import { useScene, type Act } from '@/lib/sceneStore';
 import { planetPositions, planetRadii } from '@/lib/planetPositions';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD } from '@/lib/orbitFraming';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+// --- T1 swap machine constants -------------------------------------------------
+const DEV = process.env.NODE_ENV !== 'production';
+const SWAP_V = 0.9;          // dive progress where galaxy↔solar crosses over
+const COVER_PLATEAU = 0.02;  // coverage == 1 for |gate - SWAP_V| < this (a full hidden window)
+const COVER_FALLOFF = 0.06;  // coverage eases to 0 over this much beyond the plateau
 
 // Per-planet ORBIT exposure. Inner planets sit so close to the sun that their lit
 // disc clips to gold at full exposure (Earth/Mars washed out); normalising the
@@ -52,6 +58,8 @@ const LOOK_ARM = new THREE.Vector3(5.2, 0, -1.5); // forward along travel — co
  */
 export default function CameraRig() {
   const prevAct = useRef<string>('galaxy');
+  const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
+  const swapLatch = useRef(false);  // blocks re-swaps until well clear of the covered window
   // Read the store via getState() inside the frame loop — subscribing with the hook
   // would re-render this component on every scroll tick.
   useFrame((state, delta) => {
@@ -65,9 +73,41 @@ export default function CameraRig() {
     // exactly where the camera was already headed. Composition is now identical at every
     // frame rate — cost may scale with the quality tier, framing never does.
     const dt = delta;
-    const { act, scrollProgress } = useScene.getState();
+    const store = useScene.getState();
+    let act = store.act;
+    const scrollProgress = store.scrollProgress;
     const cam = state.camera as THREE.PerspectiveCamera;
     const t = state.clock.elapsedTime;
+
+    // --- T1: coverage-gated, bidirectional, ATOMIC galaxy↔solar swap --------------
+    // Only the home dive owns this machine (never on a focused world route). The swap
+    // is driven by ONE number — the mask coverage — and may fire ONLY while cov>0.95,
+    // so no seam is ever exposed; scroll-up runs the identical sequence mirrored.
+    if (!store.focusedPlanet) {
+      // Damp a GATE toward raw scroll (wall-clock, frame-rate independent per the tier
+      // law) so a fast fling can't jump past the covered window between two frames.
+      damp(pGate, 'current', scrollProgress, 0.08, dt);
+      const g = pGate.current;
+      // Symmetric cover envelope: a full plateau centred on the swap point — identical
+      // whether diving down or surfacing up, so the reverse is the dive played backwards.
+      const d = Math.abs(g - SWAP_V);
+      const cov = d < COVER_PLATEAU ? 1 : clamp01(1 - (d - COVER_PLATEAU) / COVER_FALLOFF);
+      store.setCoverage(cov);
+      const desired: Act = g >= SWAP_V ? 'solar' : 'galaxy';
+      if (desired !== act && cov > 0.95 && !swapLatch.current) {
+        // Order is law — all inside this covered frame, each step logged in dev:
+        //  (1) unmount old act  (2) move camera to the new entry pose  (3) mount new act.
+        // setAct() schedules the React unmount+mount; advancing `act` locally NOW makes
+        // THIS frame's camera block below reposition to the new act's entry pose (step 2)
+        // before the new act paints — the whole crossover hidden behind cov>0.95.
+        if (DEV) console.log(`[swap] ${act}→${desired}  cov=${cov.toFixed(2)} gate=${g.toFixed(3)}: unmount ${act} → camera→${desired} → mount ${desired}`);
+        store.setAct(desired);
+        act = desired;
+        swapLatch.current = true;
+        if (desired === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
+      }
+      if (cov < 0.5) swapLatch.current = false; // re-arm once clear of the covered window
+    }
 
     // Mouse parallax — the camera answers to you, so the scene is a place, not a video.
     const px = state.pointer.x || 0;
