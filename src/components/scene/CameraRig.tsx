@@ -55,7 +55,16 @@ export default function CameraRig() {
   // Read the store via getState() inside the frame loop — subscribing with the hook
   // would re-render this component on every scroll tick.
   useFrame((state, delta) => {
-    const dt = Math.min(delta, 1 / 30); // clamp so a background-tab return can't jump the camera
+    // Use the REAL frame delta so every damp() converges in wall-clock time, not per
+    // frame. The old `min(delta, 1/30)` clamp made convergence frame-count-bound: on a
+    // slow client (software renderer / low tier, single-digit FPS) the arrival dolly-in
+    // and fov settle took ~a minute, stranding it in a far/tiny composition with the
+    // zodiacal disc splayed as an "oval" — a tier-dependent framing bug. maath's damp is
+    // stable for any dt (asymptotic, never overshoots), so a large delta (e.g. a
+    // background-tab return) just eases straight to the current resting target, which is
+    // exactly where the camera was already headed. Composition is now identical at every
+    // frame rate — cost may scale with the quality tier, framing never does.
+    const dt = delta;
     const { act, scrollProgress } = useScene.getState();
     const cam = state.camera as THREE.PerspectiveCamera;
     const t = state.clock.elapsedTime;
