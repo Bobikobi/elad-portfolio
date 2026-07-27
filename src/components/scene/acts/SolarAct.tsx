@@ -109,6 +109,10 @@ interface PlanetSpec {
   shear?: number;
   haze?: number;
   earth?: boolean;
+  /** A3: atmospheric limb-scattering hue + idle strength (~0.4 subtle). Falls back to
+   *  `rim` when `atmo` is absent; airless bodies use a low strength. */
+  atmo?: string;
+  atmoStrength?: number;
 }
 
 function Moons({ count, planetSize }: { count: number; planetSize: number }) {
@@ -152,18 +156,18 @@ function Moons({ count, planetSize }: { count: number; planetSize: number }) {
 // speed ≈ 2π/period) so any exit/return is a rare, graceful event; phases staggered
 // so the idle frame never lines the planets up. No orbit rings (no glowing hoops).
 const PLANETS: PlanetSpec[] = [
-  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, phase: 0.6 },
-  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, phase: 3.7 },
+  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, phase: 0.6, atmoStrength: 0.12 },
+  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, phase: 3.7, atmo: '#f6e6b0', atmoStrength: 0.6 },
   // Earth gets a gentle cool multiplier to counter the warm sun (reads blue/white,
   // not gold); the close-orbit over-exposure is handled by per-planet ORBIT exposure
   // in CameraRig (inner planets sit so close to the sun the lit disc would otherwise
   // clip to gold regardless of albedo).
-  { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, tilt: 0.41, bodyColor: '#cfe0ff', earth: true },
-  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, tilt: 0.44, haze: 0.12 },
-  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, moons: 4, flow: 0.012, shear: 0.005 },
-  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035 },
-  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 9.4, size: 0.44, speed: 0.0074, phase: 3.0, tilt: 1.7, flow: 0.005, shear: 0.0015 },
-  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 10.6, size: 0.42, speed: 0.0062, phase: 0.4, flow: 0.008, shear: 0.003 },
+  { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, tilt: 0.41, bodyColor: '#cfe0ff', earth: true, atmo: '#a8d0ff', atmoStrength: 0.5 },
+  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
+  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
+  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, atmo: '#f0dcae', atmoStrength: 0.45 },
+  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 9.4, size: 0.44, speed: 0.0074, phase: 3.0, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
+  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 10.6, size: 0.42, speed: 0.0062, phase: 0.4, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
 ];
 
 /** Zodiacal light — a faint gold dust glow lying in the ecliptic plane, catching
@@ -229,8 +233,10 @@ function ForegroundAnchor() {
   );
 }
 
-// Fresnel rim that hugs the SUN-LIT limb (sun sits at the world origin), not a full
-// hoop around the silhouette. Intensity is a uniform: idle 0.35, hover 0.9.
+// A3: atmospheric limb scattering. A two-tone fresnel on a slightly-larger BackSide shell
+// (sun at world origin): a broad haze in the atmosphere hue plus a thin, whiter bright
+// line at the very limb (forward scatter), living on the DAY side and fading through the
+// terminator into night. This is what separates a "textured ball" from a "world".
 const rimVert = /* glsl */ `
   varying vec3 vN; varying vec3 vV; varying vec3 vWPos; varying vec3 vWN;
   void main() {
@@ -247,11 +253,14 @@ const rimFrag = /* glsl */ `
   uniform vec3 uColor; uniform float uIntensity;
   varying vec3 vN; varying vec3 vV; varying vec3 vWPos; varying vec3 vWN;
   void main() {
-    float f = pow(1.0 - max(dot(vV, vN), 0.0), 3.0);   // view-fresnel (limb)
+    float f = 1.0 - max(dot(vV, vN), 0.0);              // 0 disc centre .. 1 silhouette limb
+    float glow = pow(f, 3.0);                            // broad atmospheric haze
+    float edge = pow(f, 9.0);                            // thin bright scattering line at the limb
     vec3 L = normalize(-vWPos);                          // toward the sun at origin
-    float lit = clamp(dot(normalize(vWN), L), 0.0, 1.0);// 0 night .. 1 lit
-    float rim = f * (0.15 + 0.85 * lit) * uIntensity;   // stays on the lit side
-    gl_FragColor = vec4(uColor, rim);
+    float lit = smoothstep(-0.25, 0.35, dot(normalize(vWN), L)); // day-side, softly through the terminator
+    vec3 col = uColor + vec3(0.55) * edge;               // two-tone: hue + whiter forward-scatter edge
+    float a = (glow * 0.75 + edge) * lit * uIntensity;
+    gl_FragColor = vec4(col, a);
   }
 `;
 
@@ -423,7 +432,11 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     uv.needsUpdate = true;
     return g;
   }, [spec.rings, spec.size]);
-  const rimUniforms = useMemo(() => ({ uColor: { value: new THREE.Color(spec.rim) }, uIntensity: { value: 0.35 } }), [spec.rim]);
+  const atmoStrength = spec.atmoStrength ?? 0.4;
+  const rimUniforms = useMemo(
+    () => ({ uColor: { value: new THREE.Color(spec.atmo ?? spec.rim) }, uIntensity: { value: atmoStrength } }),
+    [spec.atmo, spec.rim, atmoStrength]
+  );
 
   useEffect(() => {
     if (page) {
@@ -454,8 +467,8 @@ function Planet({ spec }: { spec: PlanetSpec }) {
 
   useFrame((state, dt) => {
     angle.current += dt * spec.speed;
-    // Rim intensity eases toward idle 0.35 / hover 0.9 (a fade, not a switch).
-    const rimTarget = hovered && page ? 0.9 : 0.35;
+    // Atmosphere strength eases toward its idle value, brightening on hover (a fade, not a switch).
+    const rimTarget = hovered && page ? atmoStrength * 1.8 : atmoStrength;
     const uI = rimUniforms.uIntensity;
     uI.value += (rimTarget - uI.value) * Math.min(1, dt * 6);
     // A2: drive the flow/haze animation (all planets that compiled the shader).
