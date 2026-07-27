@@ -51,6 +51,14 @@ export function useWorldExit(locale: Locale, contentRef: RefObject<HTMLElement |
   }, [setDeparture]);
 
   useEffect(() => {
+    // A departure gesture is one made over the SCENE — the planet or open space. Because
+    // the world chrome is pointer-events-none except for its own panel, "over the scene"
+    // is exactly "the event target is the canvas". Testing that directly (rather than
+    // "not inside the content column") is what keeps the gesture from swallowing scroll
+    // inside the other floating islands — the chat panel and the accessibility widget
+    // both live outside the content column and were previously unscrollable here.
+    const overScene = (target: EventTarget | null) =>
+      target instanceof Element && target.tagName === 'CANVAS';
     const inContent = (target: EventTarget | null) =>
       !!(target instanceof Node && contentRef.current?.contains(target));
     let acc = 0;
@@ -82,21 +90,21 @@ export function useWorldExit(locale: Locale, contentRef: RefObject<HTMLElement |
     };
 
     const onWheel = (e: WheelEvent) => {
-      if (returningRef.current) { e.preventDefault(); return; }
-      if (inContent(e.target)) return; // native content scroll
+      if (returningRef.current) return;
+      if (inContent(e.target) || !overScene(e.target)) return; // native scroll wins
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
       bump(Math.abs(e.deltaY) * unit);
     };
 
     let touchY = 0;
-    let touchInContent = false;
+    let touchOnScene = false;
     const onTouchStart = (e: TouchEvent) => {
       touchY = e.touches[0]?.clientY ?? 0;
-      touchInContent = inContent(e.target);
+      touchOnScene = overScene(e.target) && !inContent(e.target);
     };
     const onTouchMove = (e: TouchEvent) => {
-      if (touchInContent || returningRef.current) return;
+      if (!touchOnScene || returningRef.current) return;
       const y = e.touches[0]?.clientY ?? 0;
       const dy = touchY - y;
       touchY = y;
@@ -108,6 +116,9 @@ export function useWorldExit(locale: Locale, contentRef: RefObject<HTMLElement |
     // contact form lives inside a world) so Esc there means "dismiss my input" first.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // Escape is a "dismiss the innermost thing" key: a modal (the mobile nav drawer)
+      // and a focused text field (the contact form, the chat box) both outrank the world.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       const el = document.activeElement as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) {
