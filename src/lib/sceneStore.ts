@@ -11,6 +11,11 @@ export type CameraMode =
   | 'FLYING'
   | 'ORBIT';
 export type Quality = 'high' | 'low';
+/** R5.9 — frame-pacing profile, decided once during the loader from the measured
+ *  display refresh rate. 'smooth' = a 120Hz-capable display, so we let the scene run at
+ *  the display rate; 'even' = lock to an even-paced 60. Pacing is COST ONLY: it changes
+ *  how often we draw, never what is drawn (tier composition LAW). */
+export type Pacing = 'smooth' | 'even';
 
 interface SceneState {
   act: Act;
@@ -49,6 +54,15 @@ interface SceneState {
    *  solar overview at scroll 0 (no driver). */
   scrollDriven: boolean;
   quality: Quality;
+  /** R5.9 — measured display refresh rate (Hz, median rAF delta during the loader).
+   *  0 until measured. */
+  displayHz: number;
+  /** R5.9 — frame pacing profile derived from `displayHz`. */
+  pacing: Pacing;
+  /** R5.6 — which DECORATIVE body (mercury/venus/uranus/neptune) the pointer is on.
+   *  Set only on hover enter/leave, never per frame; the tooltip's SCREEN position is
+   *  written imperatively by the label driver. */
+  hoveredBody: string | null;
   /** Sun mesh — set by the Sun component, read by Effects as the God Rays source. */
   sunMesh: THREE.Mesh | null;
   /** True once the WebGL scene has rendered its first frame (hides the loader). */
@@ -65,6 +79,9 @@ interface SceneState {
   setTourStop: (i: number) => void;
   setScrollDriven: (v: boolean) => void;
   setQuality: (q: Quality) => void;
+  setDisplayHz: (hz: number) => void;
+  setPacing: (p: Pacing) => void;
+  setHoveredBody: (k: string | null) => void;
   setSunMesh: (m: THREE.Mesh | null) => void;
   setSceneReady: (v: boolean) => void;
 }
@@ -83,6 +100,9 @@ export const useScene = create<SceneState>((set) => ({
   tourStop: 0,
   scrollDriven: false,
   quality: 'high',
+  displayHz: 0,
+  pacing: 'even',
+  hoveredBody: null,
   sunMesh: null,
   sceneReady: false,
   setAct: (act) => set({ act }),
@@ -97,6 +117,9 @@ export const useScene = create<SceneState>((set) => ({
   setTourStop: (tourStop) => set({ tourStop }),
   setScrollDriven: (scrollDriven) => set({ scrollDriven }),
   setQuality: (quality) => set({ quality }),
+  setDisplayHz: (displayHz) => set({ displayHz }),
+  setPacing: (pacing) => set({ pacing }),
+  setHoveredBody: (hoveredBody) => set({ hoveredBody }),
   setSunMesh: (sunMesh) => set({ sunMesh }),
   setSceneReady: (sceneReady) => set({ sceneReady }),
 }));

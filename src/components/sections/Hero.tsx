@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/i18n';
 import { useMotionDisabled } from '@/hooks/useMotionDisabled';
 import { useWebGLAvailable } from '@/hooks/useWebGLAvailable';
 import { useScene } from '@/lib/sceneStore';
+import { SWAP_V, COVER_FALLOFF } from '@/lib/diveEnvelope';
 import About from '@/components/sections/About';
 import Services from '@/components/sections/Services';
 import Projects from '@/components/sections/Projects';
@@ -99,6 +100,9 @@ function GalaxyHome() {
     if (seen) {
       scene.setAct('solar');
       scene.setScrollDriven(false); // returning visit: no tall driver, scroll must not steer the act
+      // R5.1: park the dive progress at "fully arrived". A stale mid-dive value left the
+      // arrival choreography half-played with no scroll left to finish it.
+      scene.setScrollProgress(1);
     } else {
       scene.setAct('galaxy');
       scene.setScrollProgress(0);
@@ -111,11 +115,54 @@ function GalaxyHome() {
   // Feed raw scroll to the store; CameraRig owns the act swap + coverage (T1). The
   // crossover curtain is now the in-world SwapMask (T3, in SceneRoot) driven by the same
   // store.coverage — no DOM overlay, so the wash is a real bloomed glow, not a flat gradient.
+  const lastScrollTs = useRef(0);
+  const lastDir = useRef(1);
+  const prevV = useRef(0);
   useMotionValueEvent(scrollYProgress, 'change', (v) => {
     if (seenIntro) return;
+    if (v !== prevV.current) {
+      lastDir.current = v > prevV.current ? 1 : -1;
+      prevV.current = v;
+      lastScrollTs.current = performance.now();
+    }
     setScrollProgress(v);
     welcomeOpacity.set(1 - clamp01(v / 0.12));
   });
+
+  // R5.1 — crossover auto-commit. The swap curtain is a wide, symmetric envelope around
+  // the crossover point, so a visitor who simply STOPS scrolling inside it is left staring
+  // at a gold wash with no indication that anything more is expected of them: the one true
+  // stuck position on the page. When scroll comes to rest while the curtain is meaningfully
+  // up, finish the crossing for them — a short smooth scroll to just past the curtain, in
+  // whichever direction they were already travelling. Never fires while they are still
+  // scrolling, so it can never fight the gesture.
+  useEffect(() => {
+    if (seenIntro !== false) return;
+    const REST_MS = 320;
+    const COMMIT_COV = 0.45; // only while the curtain actually obscures the frame
+    let raf = 0;
+    let committing = false;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const s = useScene.getState();
+      if (!s.scrollDriven || s.focusedPlanet) return;
+      if (committing) {
+        if (s.coverage < COMMIT_COV) committing = false; // clear of the obscuring band → re-arm
+        return;
+      }
+      if (s.coverage < COMMIT_COV) return;
+      if (performance.now() - lastScrollTs.current < REST_MS) return;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (max <= 0) return;
+      // Just past the falloff on the side we were heading → coverage lands ≈0.
+      const target = lastDir.current >= 0 ? SWAP_V + COVER_FALLOFF + 0.005 : SWAP_V - COVER_FALLOFF - 0.005;
+      committing = true;
+      lastScrollTs.current = performance.now();
+      window.scrollTo({ top: clamp01(target) * max, behavior: 'smooth' });
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [seenIntro]);
 
   // Repeat visit: no dive, no tall driver — the overview is already on screen. Give
   // a short crawlable hint to explore the planets.

@@ -37,6 +37,35 @@ const LABELS = {
   },
   error: { he: 'משהו השתבש, נסה שוב', en: 'Something went wrong, try again', ru: 'Что-то пошло не так' },
   typing: { he: 'מקליד...', en: 'Typing...', ru: 'Печатает...' },
+  // Graceful, specific failure states (R5.5) — a visitor should always know whether to
+  // retry, wait, or just email instead.
+  errBusy: {
+    he: 'יותר מדי הודעות ברצף. נסה שוב בעוד דקה.',
+    en: 'Too many messages in a row. Try again in a minute.',
+    ru: 'Слишком много сообщений подряд. Попробуйте через минуту.',
+  },
+  errUpstream: {
+    he: 'העוזר לא זמין כרגע. אפשר לנסות שוב, או פשוט לכתוב לאלעד ישירות.',
+    en: "The assistant is unavailable right now. Try again, or just email Elad directly.",
+    ru: 'Помощник сейчас недоступен. Попробуйте позже или напишите Эладу напрямую.',
+  },
+  errOffline: {
+    he: 'הצ׳אט כבוי כרגע. אפשר ליצור קשר דרך עמוד יצירת הקשר.',
+    en: 'Chat is switched off right now. The contact page still works.',
+    ru: 'Чат сейчас отключён. Свяжитесь через страницу контактов.',
+  },
+};
+
+/** Server error code → the message the visitor actually sees. */
+const ERROR_LABEL: Record<string, keyof typeof LABELS> = {
+  rate_limited: 'errBusy',
+  not_configured: 'errOffline',
+  upstream_unavailable: 'errUpstream',
+  server_error: 'errUpstream',
+  captcha_missing: 'errUpstream',
+  captcha_failed: 'errUpstream',
+  forbidden: 'errUpstream',
+  invalid_input: 'error',
 };
 
 interface ChatWidgetProps {
@@ -99,7 +128,7 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
     const text = input.trim();
     if (!text || loading) return;
     if (!turnstileToken) {
-      setMessages((prev) => [...prev, { role: 'assistant', text: t('error') }]);
+      setMessages((prev) => [...prev, { role: 'assistant', text: t(turnstileSiteKey ? 'error' : 'errOffline') }]);
       return;
     }
 
@@ -116,23 +145,29 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
         body: JSON.stringify({ messages: next, turnstileToken }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.error || 'request_failed');
+        // The route answers with a stable code, never a raw upstream message — map it to
+        // a localized line so the failure is informative instead of a dead end.
+        const key = ERROR_LABEL[String(data?.error ?? '')] ?? 'errUpstream';
+        setMessages((prev) => [...prev, { role: 'assistant', text: t(key) }]);
+        return;
       }
 
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', text: data.text || t('error') },
+        { role: 'assistant', text: data.text || t('errUpstream') },
       ]);
+    } catch {
+      setMessages((prev) => [...prev, { role: 'assistant', text: t('errUpstream') }]);
+    } finally {
+      // The Turnstile token is single-use whatever the outcome — always mint a fresh one,
+      // otherwise a failed send left the widget permanently un-sendable.
       setTurnstileToken('');
       window.turnstile?.reset(turnstileWidgetIdRef.current || undefined);
-    } catch {
-      setMessages((prev) => [...prev, { role: 'assistant', text: t('error') }]);
-    } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, turnstileToken, t]);
+  }, [input, loading, messages, turnstileToken, turnstileSiteKey, t]);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -230,7 +265,7 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
             {turnstileSiteKey ? (
               <div ref={turnstileRef} className="min-h-[65px]" />
             ) : (
-              <p className="text-xs text-[var(--color-text-tertiary)]">Chat protection is not configured.</p>
+              <p className="text-xs text-[var(--color-text-tertiary)]">{t('errOffline')}</p>
             )}
           </div>
         </div>

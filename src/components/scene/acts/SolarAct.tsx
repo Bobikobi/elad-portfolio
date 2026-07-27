@@ -1,19 +1,19 @@
 'use client';
 import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Html, useCursor } from '@react-three/drei';
+import { useCursor } from '@react-three/drei';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, PLANET_PAGES } from '@/lib/planetPositions';
-import { PLANET_SECTION, sectionPath, SECTIONS } from '@/lib/sections';
+import { PLANET_SECTION, sectionPath } from '@/lib/sections';
+import { BODY_FACTS } from '@/lib/bodyFacts';
 import { useI18n } from '@/lib/i18n';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
 
 const _wp = new THREE.Vector3();
-const _ndc = new THREE.Vector3();
 const DEG2RAD = Math.PI / 180;
 
 // --- A1: focused-planet texture tiering ------------------------------------------------
@@ -329,8 +329,52 @@ function EarthLayers({ radius }: { radius: number }) {
   );
 }
 
+// --- R5.7: Earth's Moon ----------------------------------------------------------------
+// A real lunar albedo map on a body at the TRUE size ratio (0.2725 × Earth), on an orbit
+// that is visibly INCLINED to the ecliptic — a coplanar moon reads as a bead sliding
+// along a wire, an inclined one immediately reads as a second world in orbit. The
+// distance is compressed hard (the real 60 Earth radii would put it off-frame at every
+// vantage) but the tidal lock is honest: the same face is always turned toward Earth.
+// Lives inside Earth's orbit group but OUTSIDE its spin group, so it neither inherits
+// Earth's axial tilt nor the hover scale-up.
+const MOON_RATIO = 0.2725; // real Moon/Earth radius ratio
+const MOON_DIST = 2.9; // Earth radii (compressed from 60 so it stays in the ORBIT frame)
+const MOON_INCL = 22 * DEG2RAD; // exaggerated from 5.1° so the inclination reads
+const MOON_PERIOD = 26; // s per revolution — slow enough to feel orbital, not spun
+
+function EarthMoon({ planetSize }: { planetSize: number }) {
+  const pivot = useRef<THREE.Group>(null);
+  const body = useRef<THREE.Mesh>(null);
+  const tex = useMemo(() => {
+    const tx = new THREE.TextureLoader().load('/textures/moon.jpg');
+    tx.colorSpace = THREE.SRGBColorSpace;
+    tx.anisotropy = 8;
+    return tx;
+  }, []);
+  useEffect(() => () => { tex.dispose(); }, [tex]);
+  const r = planetSize * MOON_DIST;
+  useFrame((state) => {
+    const a = (state.clock.elapsedTime / MOON_PERIOD) * Math.PI * 2;
+    if (pivot.current) pivot.current.rotation.y = a;
+    // Tidal lock: the near face stays turned toward Earth as the pivot carries it round.
+    if (body.current) body.current.rotation.y = -a;
+  });
+  return (
+    <group rotation={[MOON_INCL, 0, 0]}>
+      <group ref={pivot}>
+        {/* Opaque + depth-written like every other body, so it occludes and is occluded
+            correctly against Earth and the belt. */}
+        <mesh ref={body} position={[r, 0, 0]} raycast={() => null}>
+          <sphereGeometry args={[planetSize * MOON_RATIO, 32, 32]} />
+          <meshStandardMaterial map={tex} roughness={0.98} metalness={0.0} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
 function Planet({ spec }: { spec: PlanetSpec }) {
-  const { t, locale } = useI18n();
+  const { locale } = useI18n();
   const router = useRouter();
   const gl = useThree((s) => s.gl);
   const focused = useScene((s) => s.focusedPlanet);
@@ -338,13 +382,16 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   const spinGroup = useRef<THREE.Group>(null);
   const mesh = useRef<THREE.Mesh>(null);
   const angle = useRef(spec.phase);
-  const labelRef = useRef<HTMLButtonElement>(null);
   // A1 hi-res crossfade state (page planets only).
   const hiShader = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
   const hiTex = useRef<THREE.Texture | null>(null);
   const hiTarget = useRef(0); // 0 = show base, 1 = show hi
   const [hovered, setHovered] = useState(false);
   const page = PLANET_PAGES[spec.key];
+  // R5.6 — the four bodies that are NOT section routes still answer the pointer: they
+  // raise a glass tooltip (name + a real astronomy fact + the wink). The tooltip's DOM
+  // lives in PlanetLabelsOverlay; here we only publish WHICH body is under the pointer.
+  const decorative = !page && !!BODY_FACTS[spec.key];
   // Clicking a planet navigates to its section route; the URL is the source of
   // truth and CosmicStage's bridge flies the camera there.
   const open = () => {
@@ -354,7 +401,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     const section = PLANET_SECTION[spec.key];
     if (section) router.push(sectionPath(section, locale));
   };
-  useCursor(hovered && !!page);
+  useCursor(hovered && (!!page || decorative));
 
   const texture = useMemo(() => {
     const tx = new THREE.TextureLoader().load(spec.tex);
@@ -439,13 +486,18 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     [spec.atmo, spec.rim, atmoStrength]
   );
 
+  // EVERY body publishes its live world position + radius now, not just the four page
+  // planets: the label driver needs the decorative bodies too in order to hang their
+  // tooltips on them (R5.6).
   useEffect(() => {
-    if (page) {
-      planetPositions.set(spec.key, new THREE.Vector3());
-      planetRadii.set(spec.key, spec.size);
-    }
-    return () => { texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose(); planetPositions.delete(spec.key); planetRadii.delete(spec.key); };
-  }, [texture, ringTex, ringGeo, page, spec.key, spec.size]);
+    planetPositions.set(spec.key, new THREE.Vector3());
+    planetRadii.set(spec.key, spec.size);
+    return () => {
+      texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose();
+      planetPositions.delete(spec.key); planetRadii.delete(spec.key);
+      if (useScene.getState().hoveredBody === spec.key) useScene.getState().setHoveredBody(null);
+    };
+  }, [texture, ringTex, ringGeo, spec.key, spec.size]);
 
   // A1: lazily upgrade this planet's albedo the moment it becomes the focused world, and
   // fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
@@ -489,58 +541,39 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     }
     if (group.current) {
       group.current.position.set(Math.cos(angle.current) * spec.orbit, 0, Math.sin(angle.current) * spec.orbit);
-      if (page) {
-        group.current.getWorldPosition(_wp);
-        planetPositions.get(spec.key)?.copy(_wp);
-        if (labelRef.current) {
-          // Overview pills belong ONLY to the solar overview — hide every label the
-          // moment a world is focused (ORBIT), else it floats as an orphan over the panel.
-          const { focusedPlanet: focused, coverage } = useScene.getState();
-          if (focused) {
-            labelRef.current.style.opacity = '0';
-            labelRef.current.style.pointerEvents = 'none';
-          } else {
-            // Overview: never crop a label away — an off-frame outer planet (a bigger sun
-            // pushes them toward the edges) has its pill CLAMPED to the frame edge so all
-            // five section labels stay present + tappable at rest. We drive the button's own
-            // `position:fixed` here (fully controlled, unlike drei's internal placement);
-            // when the planet is on-frame we hand placement back to drei. covFade hides the
-            // pills through the swap crossover so they never pop over the wash.
-            const el = labelRef.current;
-            const cam = state.camera as THREE.PerspectiveCamera;
-            _ndc.copy(_wp).project(cam);
-            const off = _ndc.z > 1 || Math.abs(_ndc.x) > 0.97 || Math.abs(_ndc.y) > 0.97;
-            if (off) {
-              let sx = (_ndc.x * 0.5 + 0.5) * state.size.width;
-              let sy = (-_ndc.y * 0.5 + 0.5) * state.size.height;
-              if (_ndc.z > 1) { sx = state.size.width - sx; sy = state.size.height - sy; } // behind camera → opposite edge
-              sx = Math.min(state.size.width - 66, Math.max(66, sx));
-              sy = Math.min(state.size.height - 96, Math.max(74, sy)); // clear navbar (top) + dots/hint (bottom)
-              el.style.position = 'fixed';
-              el.style.left = `${sx}px`;
-              el.style.top = `${sy}px`;
-              el.style.transform = 'translate(-50%, -50%)';
-              el.style.zIndex = '18'; // above the drag hint (z-10)
-            } else if (el.style.position === 'fixed') {
-              el.style.position = ''; el.style.left = ''; el.style.top = ''; el.style.transform = ''; el.style.zIndex = '';
-            }
-            const covFade = Math.max(0, Math.min(1, 1 - (coverage - 0.12) / 0.38)); // 1 → 0 over cov 0.12..0.5
-            el.style.opacity = covFade.toString();
-            el.style.pointerEvents = covFade < 0.5 ? 'none' : 'auto';
-          }
-        }
-      }
+      // Publish the live world position. The label driver (priority 2) reads it LATER in
+      // this same frame, so pills are never a frame behind the body they name (R5.4).
+      group.current.getWorldPosition(_wp);
+      planetPositions.get(spec.key)?.copy(_wp);
     }
     if (mesh.current) mesh.current.rotation.y += dt * 0.3;
   });
 
-  const bind = page
-    ? {
-        onClick: (e: { stopPropagation: () => void }) => { e.stopPropagation(); open(); },
-        onPointerOver: (e: { stopPropagation: () => void }) => { e.stopPropagation(); setHovered(true); },
-        onPointerOut: () => setHovered(false),
-      }
-    : {};
+  const bind =
+    page || decorative
+      ? {
+          onClick: (e: { stopPropagation: () => void }) => {
+            e.stopPropagation();
+            if (page) open();
+            // Touch has no hover: a tap on a decorative body toggles its tooltip.
+            else if (!useScene.getState().dragMoved) {
+              const s = useScene.getState();
+              s.setHoveredBody(s.hoveredBody === spec.key ? null : spec.key);
+            }
+          },
+          onPointerOver: (e: { stopPropagation: () => void }) => {
+            e.stopPropagation();
+            setHovered(true);
+            if (decorative) useScene.getState().setHoveredBody(spec.key);
+          },
+          onPointerOut: () => {
+            setHovered(false);
+            if (decorative && useScene.getState().hoveredBody === spec.key) {
+              useScene.getState().setHoveredBody(null);
+            }
+          },
+        }
+      : {};
 
   return (
     <group ref={group}>
@@ -562,69 +595,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         )}
         {spec.moons && <Moons count={spec.moons} planetSize={spec.size} />}
       </group>
-      {/* No distanceFactor — the pill holds a constant, legible screen size (≥13px)
-          at the poster distance instead of shrinking into the planet. */}
-      {page && (
-        // zIndexRange floor 16 keeps every on-frame label ABOVE the drag hint (z-10);
-        // off-frame labels are edge-clamped via labelRef in the frame loop above.
-        <Html center position={[0, spec.size + 0.5, 0]} zIndexRange={[30, 16]}>
-          <button
-            ref={labelRef}
-            type="button"
-            aria-label={t(page.labelKey)}
-            onClick={open}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
-            onFocus={() => setHovered(true)}
-            onBlur={() => setHovered(false)}
-            onPointerOver={() => setHovered(true)}
-            onPointerOut={() => setHovered(false)}
-            className="pointer-events-auto cursor-pointer whitespace-nowrap rounded-full border border-white/20 bg-[rgba(5,7,20,0.78)] px-3.5 py-1.5 text-[13px] font-medium leading-none text-[var(--color-star-white)] shadow-[0_4px_18px_rgba(5,7,20,0.55)] transition-colors duration-200 hover:border-[var(--color-core-gold)]/70 hover:text-[var(--color-core-gold)] focus:outline-none focus-visible:border-[var(--color-core-gold)] focus-visible:text-[var(--color-core-gold)] focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(5,7,20,0.9)]"
-            style={{ fontFamily: 'var(--font-body, var(--font-hebrew))' }}
-          >
-            {t(page.labelKey)}
-          </button>
-        </Html>
-      )}
+      {/* R5.7 — the real Moon, on its own inclined orbit outside Earth's spin group. */}
+      {spec.earth && <EarthMoon planetSize={spec.size} />}
     </group>
-  );
-}
-
-const TOUR_STOPS = SECTIONS.length;
-
-/** The belt (Technologies) is the 5th section but — unlike the page-planets — has no
- *  clickable body, so it needs its own pill. Desktop overview: a marker on the belt's
- *  right edge, so all five section labels are present at rest. Mobile tour: pinned to the
- *  belt-stop frame centre (only while the belt is the active stop). Either way it enters
- *  /technologies on tap, and is cut while the swap mask covers (invisible under the wash). */
-function BeltTourLabel() {
-  const { t, locale } = useI18n();
-  const router = useRouter();
-  const tourMode = useScene((s) => s.tourMode);
-  const act = useScene((s) => s.act);
-  const focused = useScene((s) => s.focusedPlanet);
-  const coverage = useScene((s) => s.coverage);
-  const stop = useScene((s) => s.tourStop);
-  const idx = ((stop % TOUR_STOPS) + TOUR_STOPS) % TOUR_STOPS;
-  if (act !== 'solar' || focused || coverage > 0.12) return null;
-  if (tourMode && SECTIONS[idx]?.focus !== 'belt') return null; // tour: only on the belt stop
-  const pos: [number, number, number] = tourMode ? [1.4, 0.9, 0] : [5.0, 0.15, 0];
-  const open = () => {
-    if (useScene.getState().dragMoved) return; // a swipe ended here — don't navigate
-    router.push(sectionPath('technologies', locale));
-  };
-  return (
-    <Html center position={pos} zIndexRange={[30, 16]}>
-      <button
-        type="button"
-        aria-label={t('nav.tech')}
-        onClick={open}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
-        className="pointer-events-auto cursor-pointer whitespace-nowrap rounded-full border border-white/20 bg-[rgba(5,7,20,0.78)] px-3.5 py-1.5 text-[13px] font-medium leading-none text-[var(--color-star-white)] shadow-[0_4px_18px_rgba(5,7,20,0.55)] transition-colors duration-200 hover:border-[var(--color-core-gold)]/70 hover:text-[var(--color-core-gold)] focus:outline-none focus-visible:border-[var(--color-core-gold)] focus-visible:text-[var(--color-core-gold)]"
-        style={{ fontFamily: 'var(--font-body, var(--font-hebrew))' }}
-      >
-        {t('nav.tech')}
-      </button>
-    </Html>
   );
 }
 
@@ -653,8 +626,8 @@ export default function SolarAct() {
       </group>
       {/* A4: per-world nebula backdrop (world-fixed, shows only while a world is focused). */}
       <WorldBackdrop />
-      {/* T7b: tap-to-enter affordance for the belt tour stop (world-fixed, tour mode only). */}
-      <BeltTourLabel />
+      {/* Section pills, the belt marker and the decorative-body tooltips all live in the
+          DOM overlay now (PlanetLabels) — see the note there on frame ordering. */}
       {/* World-fixed foreground giant — disabled until relit in Pass B (see flag). */}
       {SHOW_FOREGROUND_ANCHOR && <ForegroundAnchor />}
     </>

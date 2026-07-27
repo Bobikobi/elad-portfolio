@@ -7,14 +7,14 @@ import { useScene, type Act } from '@/lib/sceneStore';
 import { planetPositions, planetRadii } from '@/lib/planetPositions';
 import { SECTIONS } from '@/lib/sections';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD } from '@/lib/orbitFraming';
+import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 // --- T1 swap machine constants -------------------------------------------------
 const DEV = process.env.NODE_ENV !== 'production';
-const SWAP_V = 0.9;          // dive progress where galaxy↔solar crosses over
-const COVER_PLATEAU = 0.02;  // coverage == 1 for |gate - SWAP_V| < this (a full hidden window)
-const COVER_FALLOFF = 0.06;  // coverage eases to 0 over this much beyond the plateau
+// Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
+// share them without importing three.js.
 
 // Per-planet ORBIT exposure. Inner planets sit so close to the sun that their lit
 // disc clips to gold at full exposure (Earth/Mars washed out); normalising the
@@ -160,7 +160,25 @@ export default function CameraRig() {
     // Only the home dive owns this machine (never on a focused world route). The swap
     // is driven by ONE number — the mask coverage — and may fire ONLY while cov>0.95,
     // so no seam is ever exposed; scroll-up runs the identical sequence mirrored.
-    if (!store.focusedPlanet) {
+    if (!store.focusedPlanet && !store.scrollDriven) {
+      // R5.1 — no dive driver is mounted (in-session return to the overview), so SCROLL IS
+      // NOT THE AUTHORITY on which act shows: the route + Hero decided it. Running the
+      // machine here made a frozen, stale `scrollProgress` (whatever the visitor happened
+      // to be at when they left the home page) drag the damped gate back across the swap
+      // point — a gold curtain flash and a spurious solar→galaxy→solar flip on every
+      // return home. Instead: keep the gate pinned to the current scroll and ease any
+      // residual coverage away, so the frame is always clean and never latched.
+      pGate.current = scrollProgress;
+      prevScroll.current = scrollProgress;
+      swapLatch.current = false;
+      reconcile.current = 0;
+      if (store.coverage > 0.001) {
+        recCov.current = Math.max(0, store.coverage - dt / 0.3);
+        store.setCoverage(recCov.current);
+      } else if (store.coverage !== 0) {
+        store.setCoverage(0);
+      }
+    } else if (!store.focusedPlanet) {
       // Scroll velocity (per second) → "at rest" detection for the T7c reconcile.
       const vel = prevScroll.current < 0 ? 1 : Math.abs(scrollProgress - prevScroll.current) / Math.max(dt, 1e-4);
       prevScroll.current = scrollProgress;
@@ -173,8 +191,7 @@ export default function CameraRig() {
         const g = pGate.current;
         // Symmetric cover envelope: a full plateau centred on the swap point — identical
         // whether diving down or surfacing up, so the reverse is the dive played backwards.
-        const d = Math.abs(g - SWAP_V);
-        const cov = d < COVER_PLATEAU ? 1 : clamp01(1 - (d - COVER_PLATEAU) / COVER_FALLOFF);
+        const cov = coverageFor(g);
         store.setCoverage(cov);
         const desired: Act = g >= SWAP_V ? 'solar' : 'galaxy';
         if (desired !== act && cov > 0.95 && !swapLatch.current) {
@@ -403,7 +420,13 @@ export default function CameraRig() {
               _tourPos.copy(_est); _tourLook.copy(_el); stopFov = EST_FOV;
             }
           }
-          const diving = arrivedViaDive.current && scrollProgress < 0.999;
+          // R5.1: the scroll-driven approach is valid ONLY while the tall dive driver is
+          // actually mounted. On an in-session return the driver is gone and
+          // `scrollProgress` is frozen at whatever the visitor last scrolled to — reading
+          // it here stranded the camera part-way through the approach with no scroll left
+          // to finish it (a hard stuck state). Without a driver we fall through to the
+          // time-damped path, which always settles.
+          const diving = store.scrollDriven && arrivedViaDive.current && scrollProgress < 0.999;
           if (diving) {
             // Scroll-driven approach to the establishing pose (T7a rule: settle at max).
             const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
@@ -422,7 +445,7 @@ export default function CameraRig() {
             damp(cam, 'fov', EST_FOV + (stopFov - EST_FOV) * blend, 0.45, dt);
             cam.lookAt(_look.x, _look.y, _look.z);
           }
-        } else if (arrivedViaDive.current && scrollProgress >= SWAP_V) {
+        } else if (store.scrollDriven && arrivedViaDive.current && scrollProgress >= SWAP_V) {
           // T7a: scroll-driven arrival dolly. The far entry pose eases to the overview
           // across the final scroll segment [SWAP_V..1], so the camera settle lands
           // exactly at scrollY=max — every position in the tail moves the camera, no

@@ -68,3 +68,4 @@ security-reports/
 
 # local visual-verification chrome profile (never commit)
 .automation-profile/
+tsconfig.check.json

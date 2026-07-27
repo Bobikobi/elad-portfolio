@@ -10,6 +10,7 @@ export const translations: Record<string, Record<Locale, string>> = {
   'nav.projects': { he: 'פרויקטים', en: 'Projects', ru: 'Проекты' },
   'nav.tech': { he: 'טכנולוגיות', en: 'Tech Stack', ru: 'Технологии' },
   'nav.contact': { he: 'צור קשר', en: 'Contact', ru: 'Контакт' },
+  'nav.home': { he: 'לדף הבית', en: 'Home', ru: 'Главная' },
 
   // Hero
   'hero.greeting': { he: 'היי, אני', en: "Hi, I'm", ru: 'Привет, я' },

@@ -199,6 +199,47 @@ body::before {
 }
 @keyframes orbit-spin { to { transform: rotate(360deg); } }
 
+/* ===== Scene loader v2 — shooting stars + rotating trilingual copy (R5.8) =====
+   Pure CSS on purpose: the loader is on screen exactly while the main thread is busy
+   compiling shaders, so its animation must be compositor-only (transform + opacity)
+   and must never involve JS per frame. Three staggered streaks give a crossing every
+   ~2.5s from one 7.5s keyframe. */
+.loader-meteor {
+  position: absolute;
+  top: -12%;
+  left: 78%;
+  width: 150px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 201, 120, 0), rgba(255, 201, 120, 0.95), rgba(255, 255, 255, 0));
+  filter: drop-shadow(0 0 6px rgba(255, 201, 120, 0.55));
+  opacity: 0;
+  transform: rotate(35deg) translate3d(0, 0, 0);
+  animation: loader-meteor 7.5s linear infinite;
+  will-change: transform, opacity;
+}
+.loader-meteor--b { left: 52%; width: 110px; animation-duration: 7.5s; }
+.loader-meteor--c { left: 96%; width: 190px; animation-duration: 7.5s; }
+@keyframes loader-meteor {
+  0%   { opacity: 0; transform: rotate(35deg) translate3d(0, 0, 0); }
+  6%   { opacity: 1; }
+  26%  { opacity: 0; transform: rotate(35deg) translate3d(-125vmax, 0, 0); }
+  100% { opacity: 0; transform: rotate(35deg) translate3d(-125vmax, 0, 0); }
+}
+
+/* Each rotating line fades up as it arrives (keyed remount restarts the animation). */
+.loader-line { animation: loader-line 0.5s ease both; }
+@keyframes loader-line {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader-meteor { animation: none; opacity: 0; }
+  .loader-line { animation: none; }
+  .scene-loader-ring { animation: none; }
+}
+
 /* ===== Utility classes ===== */
 .animate-aurora   { animation: aurora 14s ease-in-out infinite; }
 .animate-aurora-b { animation: aurora-b 18s ease-in-out infinite; }

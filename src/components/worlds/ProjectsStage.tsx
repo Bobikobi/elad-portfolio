@@ -1,18 +1,16 @@
 'use client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { Locale } from '@/lib/translations';
 import { translations as tr } from '@/lib/translations';
 import { homePath } from '@/lib/sections';
-import { useScene } from '@/lib/sceneStore';
 import { projectedPlanetRect } from '@/lib/orbitFraming';
+import { useWorldExit } from '@/hooks/useWorldExit';
+import DepartureMeter from './DepartureMeter';
 
 const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 
-// Departure gesture tuning.
-const THRESH = 180; // px accumulated outside the list to commit the return flight
-const DECAY_PER_S = THRESH / 0.8; // meter fully decays in ~0.8s once input stops
 // Arc shaping (desktop).
 const ARC_GAP = 48; // px virtual gap between the window edge and the planet limb
 const ARC_AMP = 120; // px max inset at the planet's equator (amplified so the arc reads)
@@ -39,29 +37,11 @@ export default function ProjectsStage({
   tagline: string;
   children: ReactNode;
 }) {
-  const router = useRouter();
   const listRef = useRef<HTMLDivElement>(null);
-  const setDeparture = useScene((s) => s.setDeparture);
   const [portrait, setPortrait] = useState(false);
-  const [meterUi, setMeterUi] = useState(0);
-
-  // Return to the solar overview. Mark the intro as seen so the home route lands in
-  // the overview (not a re-dive), then navigate — the URL is the source of truth and
-  // CosmicStage's bridge clears the focus so the camera flies back.
-  const returningRef = useRef(false);
-  const returnHome = () => {
-    if (returningRef.current) return;
-    returningRef.current = true;
-    try { sessionStorage.setItem('seen-intro', '1'); } catch {}
-    setDeparture(0);
-    router.push(homePath(locale));
-  };
-
-  // Reset the meter on mount/unmount so a stale value never scrubs the next world.
-  useEffect(() => {
-    setDeparture(0);
-    return () => setDeparture(0);
-  }, [setDeparture]);
+  // Escape / scroll-away / back — the shared world exit (R5.1, R5.10). Scrolling inside
+  // the window list stays native content scroll; anywhere else builds the meter.
+  const { meter, returnHome } = useWorldExit(locale, listRef);
 
   // Track orientation.
   useEffect(() => {
@@ -136,76 +116,6 @@ export default function ProjectsStage({
     return () => io.disconnect();
   }, []);
 
-  // --- Departure meter (scroll outside the list). ---
-  useEffect(() => {
-    const inList = (target: EventTarget | null) => !!(target instanceof Node && listRef.current?.contains(target));
-    let meter = 0;
-    let last = 0;
-    let decayRaf = 0;
-    let prevTs = 0;
-
-    const apply = () => {
-      const v = clamp(meter / THRESH, 0, 1);
-      setDeparture(v);
-      setMeterUi(v);
-      if (meter >= THRESH) returnHome();
-    };
-    const decay = (ts: number) => {
-      const dt = prevTs ? (ts - prevTs) / 1000 : 0;
-      prevTs = ts;
-      if (performance.now() - last > 60) {
-        meter = Math.max(0, meter - DECAY_PER_S * dt);
-        apply();
-      }
-      if (meter > 0 && !returningRef.current) decayRaf = requestAnimationFrame(decay);
-      else { decayRaf = 0; prevTs = 0; }
-    };
-    const bump = (amount: number) => {
-      meter = Math.min(THRESH * 1.1, meter + amount);
-      last = performance.now();
-      apply();
-      if (!decayRaf && !returningRef.current) { prevTs = 0; decayRaf = requestAnimationFrame(decay); }
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      if (returningRef.current) { e.preventDefault(); return; }
-      if (inList(e.target)) return; // native content scroll
-      e.preventDefault();
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
-      bump(Math.abs(e.deltaY) * unit);
-    };
-
-    let touchY = 0;
-    let touchInList = false;
-    const onTouchStart = (e: TouchEvent) => {
-      touchY = e.touches[0]?.clientY ?? 0;
-      touchInList = inList(e.target);
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      if (touchInList || returningRef.current) return;
-      const y = e.touches[0]?.clientY ?? 0;
-      const dy = touchY - y;
-      touchY = y;
-      e.preventDefault();
-      bump(Math.abs(dy));
-    };
-
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') returnHome(); };
-
-    window.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('wheel', onWheel);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('keydown', onKey);
-      cancelAnimationFrame(decayRaf);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const back = t('contact.back', locale);
   const departureLabel = t('world.departure', locale);
 
@@ -230,13 +140,14 @@ export default function ProjectsStage({
             </h1>
             <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-star-white)]/55 md:text-[13px]">{tagline}</p>
           </div>
-          <button
-            onClick={returnHome}
+          <Link
+            href={homePath(locale)}
+            onClick={(e) => { e.preventDefault(); returnHome(); }}
             className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-[rgba(5,7,20,0.6)] px-3 py-1 text-xs text-[var(--color-star-white)]/75 transition-colors hover:border-[var(--color-core-gold)]/60 hover:text-[var(--color-core-gold)]"
           >
             <span aria-hidden>↩</span>
             {back}
-          </button>
+          </Link>
         </header>
 
         <div ref={listRef} className="world-scroll pointer-events-auto flex-1 pt-1">
@@ -245,17 +156,7 @@ export default function ProjectsStage({
       </div>
 
       {/* Departure indicator — orbit-arc + localized hint, fades in with the meter. */}
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-[8dvh] flex flex-col items-center gap-2 transition-opacity duration-200"
-        style={{ opacity: meterUi }}
-        aria-hidden={meterUi < 0.05}
-      >
-        <svg width="46" height="24" viewBox="0 0 46 24" fill="none">
-          <path d="M2 22 A 40 40 0 0 1 44 22" stroke="var(--color-core-gold)" strokeWidth="1" strokeOpacity="0.5" fill="none" />
-          <circle cx={2 + 42 * clamp(meterUi, 0, 1)} cy={22 - 20 * Math.sin(Math.PI * clamp(meterUi, 0, 1))} r="2.5" fill="var(--color-core-gold)" />
-        </svg>
-        <span className="text-[11px] tracking-[0.14em] text-[var(--color-core-gold)]/80">{departureLabel}</span>
-      </div>
+      <DepartureMeter value={meter} label={departureLabel} />
     </div>
   );
 }

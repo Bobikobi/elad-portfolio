@@ -75,15 +75,14 @@ export default function Navbar() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [mobileOpen]);
 
-  // Each section is its own route now — navigation flies the persistent camera there.
-  const goToSection = (id: SectionId) => {
+  // R5.2 — nav items and the logo are REAL anchors (crawlable, middle-clickable,
+  // "open in new tab"-able) that still behave like the old buttons: next/link keeps the
+  // navigation client-side, so the persistent canvas is never torn down and the camera
+  // flies to the new world instead of the page reloading.
+  const closeMenu = () => setMobileOpen(false);
+  const goHome = () => {
     setMobileOpen(false);
-    router.push(sectionPath(id, locale));
-  };
-
-  const goToHome = () => {
-    setMobileOpen(false);
-    router.push(home);
+    // The home route's scroll position is the dive driver — always start it at the top.
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -132,11 +131,12 @@ export default function Navbar() {
           />
         )}
         <nav className="relative mx-auto max-w-[1200px] w-full px-4 sm:px-6 flex items-center justify-between h-16 [text-shadow:0_1px_10px_rgba(0,0,0,0.55)]">
-          {/* Logo */}
-          <button
-            onClick={goToHome}
+          {/* Logo — a real link home (the galaxy / solar overview), not a button. */}
+          <Link
+            href={home}
+            onClick={goHome}
             className="flex items-center opacity-90 hover:opacity-100 transition-opacity"
-            aria-label="Back to top"
+            aria-label={t('nav.home')}
           >
             <span
               className="text-3xl font-bold tracking-wide text-[var(--color-text-primary)]"
@@ -144,15 +144,17 @@ export default function Navbar() {
             >
               E.S
             </span>
-          </button>
+          </Link>
 
           {/* Desktop links */}
           <ul className="hidden md:flex items-center gap-8">
             {navItems.map((item) => (
               <li key={item}>
-                <button
-                  onClick={() => goToSection(sectionIds[item])}
-                  className={`relative text-sm px-1 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors ${
+                <Link
+                  href={sectionPath(sectionIds[item], locale)}
+                  onClick={closeMenu}
+                  aria-current={activeSection === item ? 'page' : undefined}
+                  className={`relative block text-sm px-1 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors ${
                     activeSection === item
                       ? 'text-white'
                       : 'text-white/75 hover:text-white'
@@ -166,7 +168,7 @@ export default function Navbar() {
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                     />
                   )}
-                </button>
+                </Link>
               </li>
             ))}
           </ul>
@@ -228,18 +230,29 @@ export default function Navbar() {
                 </button>
               </div>
               <ul className="flex flex-col gap-6">
+                <li>
+                  <Link
+                    href={home}
+                    onClick={goHome}
+                    className="text-lg text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+                  >
+                    {t('nav.home')}
+                  </Link>
+                </li>
                 {navItems.map((item) => (
                   <li key={item}>
-                    <button
-                      onClick={() => goToSection(sectionIds[item])}
-                      className={`text-lg transition-colors ${
+                    <Link
+                      href={sectionPath(sectionIds[item], locale)}
+                      onClick={closeMenu}
+                      aria-current={activeSection === item ? 'page' : undefined}
+                      className={`block text-lg transition-colors ${
                         activeSection === item
                           ? 'text-[var(--color-text-primary)]'
                           : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
                       }`}
                     >
                       {t(`nav.${item}`)}
-                    </button>
+                    </Link>
                   </li>
                 ))}
               </ul>

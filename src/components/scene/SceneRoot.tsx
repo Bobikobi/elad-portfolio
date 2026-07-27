@@ -1,7 +1,7 @@
 'use client';
 import { useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { PerformanceMonitor, AdaptiveDpr, Stars } from '@react-three/drei';
+import { AdaptiveDpr, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import GalaxyAct from './acts/GalaxyAct';
@@ -11,6 +11,8 @@ import Effects from './Effects';
 import SwapMask from './SwapMask';
 import DragControls from './DragControls';
 import TourDots from './TourDots';
+import PlanetLabelsOverlay, { PlanetLabelDriver } from './PlanetLabels';
+import QualityGovernor from './QualityGovernor';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
@@ -52,7 +54,6 @@ function Warmup() {
 }
 
 export default function SceneRoot() {
-  const setQuality = useScene((s) => s.setQuality);
   const act = useScene((s) => s.act);
   const high = useScene((s) => s.quality) === 'high';
   const hudOn = useHudEnabled();
@@ -62,6 +63,7 @@ export default function SceneRoot() {
   // through to the planets, while classic pages keep `main` interactive and the canvas
   // never receives their clicks.
   return (
+    <>
     <div className="fixed inset-0" style={{ zIndex: 0, pointerEvents: 'auto', touchAction: 'pan-y' }} aria-hidden="true">
       <Canvas
         gl={{ powerPreference: 'high-performance', antialias: true, alpha: false, preserveDrawingBuffer: HUD_AVAILABLE }}
@@ -74,7 +76,10 @@ export default function SceneRoot() {
         }}
       >
         <color attach="background" args={['#050714']} />
-        <PerformanceMonitor onDecline={() => setQuality('low')} />
+        {/* R5.9 — the quality governor owns every tier decision now (warm-up grace,
+            hysteresis, refresh-rate-aware pacing). A raw PerformanceMonitor.onDecline
+            downgraded on the very first frames, while shaders were still compiling. */}
+        <QualityGovernor />
         <AdaptiveDpr pixelated />
         <Warmup />
         <CameraRig />
@@ -92,11 +97,19 @@ export default function SceneRoot() {
         {/* In-world swap curtain — persists across the act swap, covers the seam. */}
         <SwapMask />
         <Effects />
+        {/* Priority 2 → the last thing in the frame, after the composer has drawn it, so
+            every pill lands on the exact pixels of the body it names (R5.4). */}
+        <PlanetLabelDriver />
         {HUD_AVAILABLE && hudOn && <HudProbe />}
       </Canvas>
       <DragControls />
-      <TourDots />
       {HUD_AVAILABLE && hudOn && <DebugHudOverlay />}
     </div>
+    {/* Interactive scene chrome lives OUTSIDE the aria-hidden canvas wrapper: these are
+        real buttons a screen-reader user must be able to reach. (They were previously
+        nested inside it — focusable content under aria-hidden.) */}
+    <PlanetLabelsOverlay />
+    <TourDots />
+    </>
   );
 }
