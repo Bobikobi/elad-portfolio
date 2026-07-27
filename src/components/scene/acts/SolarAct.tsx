@@ -10,6 +10,7 @@ import { PLANET_SECTION, sectionPath, SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
+import WorldBackdrop from '../solar/WorldBackdrop';
 
 const _wp = new THREE.Vector3();
 const _ndc = new THREE.Vector3();
@@ -650,6 +651,8 @@ export default function SolarAct() {
         ))}
         <AsteroidBelt count={high ? 1400 : 500} />
       </group>
+      {/* A4: per-world nebula backdrop (world-fixed, shows only while a world is focused). */}
+      <WorldBackdrop />
       {/* T7b: tap-to-enter affordance for the belt tour stop (world-fixed, tour mode only). */}
       <BeltTourLabel />
       {/* World-fixed foreground giant — disabled until relit in Pass B (see flag). */}
