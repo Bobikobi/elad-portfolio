@@ -499,19 +499,33 @@ function Planet({ spec }: { spec: PlanetSpec }) {
             labelRef.current.style.opacity = '0';
             labelRef.current.style.pointerEvents = 'none';
           } else {
-            // Overview: hide the label when its planet is partially cropped by the
-            // frame edge (a pill floating at the edge reads as broken), AND fade it out
-            // while the swap mask is covering (T3) so the pills never pop through the
-            // crossover — the DOM sits above the canvas, so the 3D wash can't hide them.
+            // Overview: never crop a label away — an off-frame outer planet (a bigger sun
+            // pushes them toward the edges) has its pill CLAMPED to the frame edge so all
+            // five section labels stay present + tappable at rest. We drive the button's own
+            // `position:fixed` here (fully controlled, unlike drei's internal placement);
+            // when the planet is on-frame we hand placement back to drei. covFade hides the
+            // pills through the swap crossover so they never pop over the wash.
+            const el = labelRef.current;
             const cam = state.camera as THREE.PerspectiveCamera;
             _ndc.copy(_wp).project(cam);
-            const dist = cam.position.distanceTo(_wp);
-            const rY = spec.size / (dist * Math.tan((cam.fov * DEG2RAD) / 2));
-            const rX = rY / (state.size.width / state.size.height);
-            const cropped = _ndc.z > 1 || Math.abs(_ndc.x) + rX > 0.98 || Math.abs(_ndc.y) + rY > 0.98;
+            const off = _ndc.z > 1 || Math.abs(_ndc.x) > 0.97 || Math.abs(_ndc.y) > 0.97;
+            if (off) {
+              let sx = (_ndc.x * 0.5 + 0.5) * state.size.width;
+              let sy = (-_ndc.y * 0.5 + 0.5) * state.size.height;
+              if (_ndc.z > 1) { sx = state.size.width - sx; sy = state.size.height - sy; } // behind camera → opposite edge
+              sx = Math.min(state.size.width - 66, Math.max(66, sx));
+              sy = Math.min(state.size.height - 96, Math.max(74, sy)); // clear navbar (top) + dots/hint (bottom)
+              el.style.position = 'fixed';
+              el.style.left = `${sx}px`;
+              el.style.top = `${sy}px`;
+              el.style.transform = 'translate(-50%, -50%)';
+              el.style.zIndex = '18'; // above the drag hint (z-10)
+            } else if (el.style.position === 'fixed') {
+              el.style.position = ''; el.style.left = ''; el.style.top = ''; el.style.transform = ''; el.style.zIndex = '';
+            }
             const covFade = Math.max(0, Math.min(1, 1 - (coverage - 0.12) / 0.38)); // 1 → 0 over cov 0.12..0.5
-            labelRef.current.style.opacity = (cropped ? 0 : covFade).toString();
-            labelRef.current.style.pointerEvents = cropped || covFade < 0.5 ? 'none' : 'auto';
+            el.style.opacity = covFade.toString();
+            el.style.pointerEvents = covFade < 0.5 ? 'none' : 'auto';
           }
         }
       }
@@ -550,7 +564,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       {/* No distanceFactor — the pill holds a constant, legible screen size (≥13px)
           at the poster distance instead of shrinking into the planet. */}
       {page && (
-        <Html center position={[0, spec.size + 0.5, 0]} zIndexRange={[20, 0]}>
+        // zIndexRange floor 16 keeps every on-frame label ABOVE the drag hint (z-10);
+        // off-frame labels are edge-clamped via labelRef in the frame loop above.
+        <Html center position={[0, spec.size + 0.5, 0]} zIndexRange={[30, 16]}>
           <button
             ref={labelRef}
             type="button"
@@ -574,25 +590,29 @@ function Planet({ spec }: { spec: PlanetSpec }) {
 
 const TOUR_STOPS = SECTIONS.length;
 
-/** T7b: the belt (Technologies) is a tour stop but — unlike the page-planets — has no
- *  clickable body. A world-fixed pill pinned to the belt-stop frame centre gives the tour
- *  the same tap-to-enter affordance as every other stop. Tour mode only (desktop overview
- *  is unchanged); shown only while the belt is the active stop. */
+/** The belt (Technologies) is the 5th section but — unlike the page-planets — has no
+ *  clickable body, so it needs its own pill. Desktop overview: a marker on the belt's
+ *  right edge, so all five section labels are present at rest. Mobile tour: pinned to the
+ *  belt-stop frame centre (only while the belt is the active stop). Either way it enters
+ *  /technologies on tap, and is cut while the swap mask covers (invisible under the wash). */
 function BeltTourLabel() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const tourMode = useScene((s) => s.tourMode);
   const act = useScene((s) => s.act);
   const focused = useScene((s) => s.focusedPlanet);
+  const coverage = useScene((s) => s.coverage);
   const stop = useScene((s) => s.tourStop);
   const idx = ((stop % TOUR_STOPS) + TOUR_STOPS) % TOUR_STOPS;
-  if (!tourMode || act !== 'solar' || focused || SECTIONS[idx]?.focus !== 'belt') return null;
+  if (act !== 'solar' || focused || coverage > 0.12) return null;
+  if (tourMode && SECTIONS[idx]?.focus !== 'belt') return null; // tour: only on the belt stop
+  const pos: [number, number, number] = tourMode ? [1.4, 0.9, 0] : [5.0, 0.15, 0];
   const open = () => {
     if (useScene.getState().dragMoved) return; // a swipe ended here — don't navigate
     router.push(sectionPath('technologies', locale));
   };
   return (
-    <Html center position={[1.4, 0.9, 0]} zIndexRange={[20, 0]}>
+    <Html center position={pos} zIndexRange={[30, 16]}>
       <button
         type="button"
         aria-label={t('nav.tech')}
