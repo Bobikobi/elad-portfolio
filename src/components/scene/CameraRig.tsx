@@ -130,6 +130,9 @@ export default function CameraRig() {
   const prevAct = useRef<string>('galaxy');
   const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
   const swapLatch = useRef(false);  // blocks re-swaps until well clear of the covered window
+  const reconcile = useRef(0);      // T7c: 0 idle · 1 covering · 2 revealing (force-played swap)
+  const recCov = useRef(0);         // T7c: hand-driven coverage during a reconcile
+  const prevScroll = useRef(-1);    // T7c: previous-frame scroll → velocity (detect "at rest")
   const arrivedViaDive = useRef(false); // T7a: true only on the fresh galaxy→solar dive, so the
                                         // arrival dolly is scroll-driven (settle lands at scrollY=max)
   const mobileArriveT = useRef(0);      // T7b: clock time the establishing shot settled (0 = not yet)
@@ -158,30 +161,73 @@ export default function CameraRig() {
     // is driven by ONE number — the mask coverage — and may fire ONLY while cov>0.95,
     // so no seam is ever exposed; scroll-up runs the identical sequence mirrored.
     if (!store.focusedPlanet) {
-      // Damp a GATE toward raw scroll (wall-clock, frame-rate independent per the tier
-      // law) so a fast fling can't jump past the covered window between two frames.
-      damp(pGate, 'current', scrollProgress, 0.08, dt);
-      const g = pGate.current;
-      // Symmetric cover envelope: a full plateau centred on the swap point — identical
-      // whether diving down or surfacing up, so the reverse is the dive played backwards.
-      const d = Math.abs(g - SWAP_V);
-      const cov = d < COVER_PLATEAU ? 1 : clamp01(1 - (d - COVER_PLATEAU) / COVER_FALLOFF);
-      store.setCoverage(cov);
-      const desired: Act = g >= SWAP_V ? 'solar' : 'galaxy';
-      if (desired !== act && cov > 0.95 && !swapLatch.current) {
-        // Order is law — all inside this covered frame, each step logged in dev:
-        //  (1) unmount old act  (2) move camera to the new entry pose  (3) mount new act.
-        // setAct() schedules the React unmount+mount; advancing `act` locally NOW makes
-        // THIS frame's camera block below reposition to the new act's entry pose (step 2)
-        // before the new act paints — the whole crossover hidden behind cov>0.95.
-        if (DEV) console.log(`[swap] ${act}→${desired}  cov=${cov.toFixed(2)} gate=${g.toFixed(3)}: unmount ${act} → camera→${desired} → mount ${desired}`);
-        store.setAct(desired);
-        act = desired;
-        swapLatch.current = true;
-        arrivedViaDive.current = desired === 'solar'; // scroll-drive the arrival dolly (T7a); cleared on reverse
-        if (desired === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
+      // Scroll velocity (per second) → "at rest" detection for the T7c reconcile.
+      const vel = prevScroll.current < 0 ? 1 : Math.abs(scrollProgress - prevScroll.current) / Math.max(dt, 1e-4);
+      prevScroll.current = scrollProgress;
+      const scrollSide: Act = scrollProgress >= SWAP_V ? 'solar' : 'galaxy';
+
+      if (reconcile.current === 0) {
+        // Damp a GATE toward raw scroll (wall-clock, frame-rate independent per the tier
+        // law) so a fast fling can't jump past the covered window between two frames.
+        damp(pGate, 'current', scrollProgress, 0.08, dt);
+        const g = pGate.current;
+        // Symmetric cover envelope: a full plateau centred on the swap point — identical
+        // whether diving down or surfacing up, so the reverse is the dive played backwards.
+        const d = Math.abs(g - SWAP_V);
+        const cov = d < COVER_PLATEAU ? 1 : clamp01(1 - (d - COVER_PLATEAU) / COVER_FALLOFF);
+        store.setCoverage(cov);
+        const desired: Act = g >= SWAP_V ? 'solar' : 'galaxy';
+        if (desired !== act && cov > 0.95 && !swapLatch.current) {
+          // Order is law — all inside this covered frame, each step logged in dev:
+          //  (1) unmount old act  (2) move camera to the new entry pose  (3) mount new act.
+          // setAct() schedules the React unmount+mount; advancing `act` locally NOW makes
+          // THIS frame's camera block below reposition to the new act's entry pose (step 2)
+          // before the new act paints — the whole crossover hidden behind cov>0.95.
+          if (DEV) console.log(`[swap] ${act}→${desired}  cov=${cov.toFixed(2)} gate=${g.toFixed(3)}: unmount ${act} → camera→${desired} → mount ${desired}`);
+          store.setAct(desired);
+          act = desired;
+          swapLatch.current = true;
+          arrivedViaDive.current = desired === 'solar'; // scroll-drive the arrival dolly (T7a); cleared on reverse
+          if (desired === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
+        }
+        if (cov < 0.5) swapLatch.current = false; // re-arm once clear of the covered window
+
+        // T7c — positional reconciliation. An instant jump (End/Home, scrollbar drag,
+        // scrollTo, scroll restoration) can move the damped gate PAST the coverage window
+        // in a single step, so the swap above never fires and the act is left stranded on
+        // the wrong side of SWAP_V. When the scene is scroll-driven and the scroll has come
+        // to rest with the gate settled on the wrong side, force-play the full covered swap
+        // below (never skips the cover — honours the T1 law).
+        if (
+          store.scrollDriven &&
+          scrollSide !== act &&
+          vel < 0.05 &&
+          Math.abs(g - scrollProgress) < 0.06
+        ) {
+          reconcile.current = 1;
+          recCov.current = cov; // continue the cover from wherever it already is
+        }
+      } else if (reconcile.current === 1) {
+        // Cover up to a full plateau, THEN swap (T1: only at full coverage).
+        recCov.current = Math.min(1, recCov.current + dt / 0.3);
+        store.setCoverage(recCov.current);
+        if (recCov.current >= 0.999) {
+          if (act !== scrollSide) {
+            if (DEV) console.log(`[swap:reconcile] ${act}→${scrollSide}  cov=${recCov.current.toFixed(3)} scroll=${scrollProgress.toFixed(3)}`);
+            store.setAct(scrollSide);
+            act = scrollSide;
+            pGate.current = scrollProgress;   // sync the gate so the normal machine resumes cleanly
+            arrivedViaDive.current = false;   // a teleport, not a dive → time-damped reveal (overview/tour)
+            if (scrollSide === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
+          }
+          reconcile.current = 2;
+        }
+      } else {
+        // Reveal: ease coverage back down over the new act.
+        recCov.current = Math.max(0, recCov.current - dt / 0.3);
+        store.setCoverage(recCov.current);
+        if (recCov.current <= 0.001) { reconcile.current = 0; swapLatch.current = false; }
       }
-      if (cov < 0.5) swapLatch.current = false; // re-arm once clear of the covered window
     }
 
     // Mouse parallax — the camera answers to you, so the scene is a place, not a video.

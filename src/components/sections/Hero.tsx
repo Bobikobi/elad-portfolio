@@ -98,11 +98,14 @@ function GalaxyHome() {
     scene.setFocusedPlanet(null);
     if (seen) {
       scene.setAct('solar');
+      scene.setScrollDriven(false); // returning visit: no tall driver, scroll must not steer the act
     } else {
       scene.setAct('galaxy');
       scene.setScrollProgress(0);
+      scene.setScrollDriven(true); // fresh dive: the 500vh driver is mounted (T7c reconciliation active)
       window.scrollTo(0, 0);
     }
+    return () => { useScene.getState().setScrollDriven(false); };
   }, []);
 
   // Feed raw scroll to the store; CameraRig owns the act swap + coverage (T1). The

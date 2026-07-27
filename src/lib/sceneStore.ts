@@ -42,6 +42,12 @@ interface SceneState {
   /** Current tour stop — an index into SECTIONS (0..4). Persists across the session so a
    *  return to the overview resumes where the tour left off. */
   tourStop: number;
+  /** T7c: the tall galaxy→solar dive driver is mounted (a fresh visit), so scroll position
+   *  is the authority on which act should be showing. Lets CameraRig reconcile an instant
+   *  scroll teleport (End key / scrollbar / scrollTo / restoration) that skipped the
+   *  coverage window — WITHOUT swapping a returning visitor who legitimately sits in the
+   *  solar overview at scroll 0 (no driver). */
+  scrollDriven: boolean;
   quality: Quality;
   /** Sun mesh — set by the Sun component, read by Effects as the God Rays source. */
   sunMesh: THREE.Mesh | null;
@@ -57,6 +63,7 @@ interface SceneState {
   setDragMoved: (v: boolean) => void;
   setTourMode: (v: boolean) => void;
   setTourStop: (i: number) => void;
+  setScrollDriven: (v: boolean) => void;
   setQuality: (q: Quality) => void;
   setSunMesh: (m: THREE.Mesh | null) => void;
   setSceneReady: (v: boolean) => void;
@@ -74,6 +81,7 @@ export const useScene = create<SceneState>((set) => ({
   dragMoved: false,
   tourMode: false,
   tourStop: 0,
+  scrollDriven: false,
   quality: 'high',
   sunMesh: null,
   sceneReady: false,
@@ -87,6 +95,7 @@ export const useScene = create<SceneState>((set) => ({
   setDragMoved: (dragMoved) => set({ dragMoved }),
   setTourMode: (tourMode) => set({ tourMode }),
   setTourStop: (tourStop) => set({ tourStop }),
+  setScrollDriven: (scrollDriven) => set({ scrollDriven }),
   setQuality: (quality) => set({ quality }),
   setSunMesh: (sunMesh) => set({ sunMesh }),
   setSceneReady: (sceneReady) => set({ sceneReady }),
