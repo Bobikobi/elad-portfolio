@@ -52,6 +52,7 @@ export function useHudEnabled(): boolean {
 const DEG2RAD = Math.PI / 180;
 const SUN_R = 1.5; // matches Sun.tsx SUN_R (world units)
 
+
 export interface HudData {
   solar: boolean;
   sunPct: number; // sun disc height as % of viewport height
@@ -74,6 +75,17 @@ export const hudData: HudData = {
   corners: [0, 0, 0, 0], vw: 0, vh: 0, fov: 0, camDist: 0, pdb: false, center: 0,
   cov: 0, scroll: 0,
 };
+
+/**
+ * Verification handle. Same availability rule as the HUD — present on preview deploys and
+ * local builds, dead-code-eliminated on the production bundle — so an automated pass can
+ * read and drive the REAL scene state (act, coverage, quality tier, measured refresh rate,
+ * the hovered decorative body) instead of inferring it from pixels.
+ */
+if (HUD_AVAILABLE && typeof window !== 'undefined') {
+  (window as unknown as { __scene?: typeof useScene }).__scene = useScene;
+  (window as unknown as { __hud?: HudData }).__hud = hudData;
+}
 
 /** Perspective on-screen size (fraction of viewport HEIGHT) of a sphere of world
  *  radius R whose centre is `dist` from the camera. Uses the same tan model as the

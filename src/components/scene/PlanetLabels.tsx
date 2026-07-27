@@ -164,6 +164,7 @@ function Pill({ nodeKey, label, onOpen }: { nodeKey: string; label: string; onOp
     <button
       ref={register(nodeKey)}
       type="button"
+      data-planet-label={nodeKey}
       aria-label={label}
       onClick={onOpen}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
@@ -217,6 +218,7 @@ export default function PlanetLabelsOverlay() {
       <div
         ref={register('tooltip')}
         role="tooltip"
+        data-body-tooltip={hovered ?? ''}
         className="absolute left-0 top-0 w-[min(19rem,78vw)] rounded-2xl border border-white/15 px-4 py-3 shadow-[0_10px_40px_rgba(5,7,20,0.6)]"
         style={{
           background: 'rgba(5,7,20,0.86)',
