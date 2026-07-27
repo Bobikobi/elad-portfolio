@@ -2,6 +2,7 @@
 import { useScene } from '@/lib/sceneStore';
 import Galaxy from '../galaxy/Galaxy';
 import GalaxyDetail from '../galaxy/GalaxyDetail';
+import GalaxyNebulae from '../galaxy/GalaxyNebulae';
 import Dust from '../galaxy/Dust';
 import DiveField from '../galaxy/DiveField';
 import TransitVeils from '../galaxy/TransitVeils';
@@ -19,6 +20,8 @@ export default function GalaxyAct() {
       {/* Lightweight (~40 sprites) — kept regardless of tier so they never flash
           out when PerformanceMonitor dips quality during the heavy first frames. */}
       <GalaxyDetail />
+      {/* A6: real Hubble HII pockets embedded in the arms (one-universe family). */}
+      <GalaxyNebulae />
       <DiveField count={high ? 4200 : 1500} />
       {/* Photographic nebula veils along the corridor (T2.5) — ~10 soft sprites, cheap
           on any tier, kept regardless of quality so the dive always reads rich. */}
