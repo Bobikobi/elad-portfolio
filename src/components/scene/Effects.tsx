@@ -7,6 +7,21 @@ import { useScene } from '@/lib/sceneStore';
 // The postprocessing VignetteEffect exposes `darkness`/`offset` as live setters; the
 // package isn't hoisted for a direct type import (pnpm), so we type the ref structurally.
 type VignetteLike = { darkness: number; offset: number };
+type HueSatLike = { hue: number; saturation: number };
+
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+// A5: per-world colour grade — a subtle hue shift + saturation lift on the EXISTING
+// HueSaturation pass (no new pass, no LUT) that gives each focused world its own
+// cinematic mood on top of its nebula palette. Eased in on focus, out on departure.
+const OVERVIEW_SAT = 0.06;
+const WORLD_GRADE: Record<string, { hue: number; sat: number }> = {
+  earth: { hue: -0.03, sat: 0.15 }, // cool, clean
+  jupiter: { hue: 0.03, sat: 0.17 }, // warm, rich
+  saturn: { hue: 0.04, sat: 0.13 }, // golden
+  mars: { hue: 0.05, sat: 0.19 }, // hot rust
+  belt: { hue: -0.05, sat: 0.15 }, // teal-tech
+};
 
 /**
  * Post FX (one fullscreen pass). Runs uninterrupted across the act swap (one camera,
@@ -35,13 +50,30 @@ export default function Effects() {
   // corners ~9% → solar corners ~0%) was the last visible seam behind the gold mask.
   // Driven imperatively so `coverage` never re-renders the composer per frame.
   const vigRef = useRef<VignetteLike | null>(null);
-  useFrame(() => {
-    const v = vigRef.current;
-    if (!v) return;
-    const { act: a, coverage } = useScene.getState();
+  const hueSatRef = useRef<HueSatLike | null>(null);
+  const curSat = useRef(OVERVIEW_SAT);
+  const curHue = useRef(0);
+  useFrame((_, dt) => {
+    const { act: a, coverage, focusedPlanet: fp, departure } = useScene.getState();
     const sol = a === 'solar';
-    v.darkness = sol ? 0.87 - 0.25 * coverage : 0.62;
-    v.offset = sol ? 0.32 - 0.04 * coverage : 0.28;
+    const v = vigRef.current;
+    if (v) {
+      v.darkness = sol ? 0.87 - 0.25 * coverage : 0.62;
+      v.offset = sol ? 0.32 - 0.04 * coverage : 0.28;
+    }
+    // A5: ease the per-world grade in on focus, back to the neutral overview on departure.
+    const hs = hueSatRef.current;
+    if (hs) {
+      const g = fp ? WORLD_GRADE[fp] : null;
+      const dep = fp ? clamp01(departure) : 0;
+      const tSat = g ? OVERVIEW_SAT + (g.sat - OVERVIEW_SAT) * (1 - dep) : OVERVIEW_SAT;
+      const tHue = g ? g.hue * (1 - dep) : 0;
+      const k = Math.min(1, dt * 3);
+      curSat.current += (tSat - curSat.current) * k;
+      curHue.current += (tHue - curHue.current) * k;
+      hs.saturation = curSat.current;
+      hs.hue = curHue.current;
+    }
   });
 
   return (
@@ -61,7 +93,7 @@ export default function Effects() {
       {/* Global grade: a gentle saturation lift — colour on the planets without touching
           any texture. Kept LOW in solar (was 0.14) because the higher lift pushed the dim
           sky violet, which the vignette then framed as a milky "lavender oval" (F1). */}
-      {solar ? <HueSaturation saturation={0.06} /> : <></>}
+      {solar ? <HueSaturation ref={(e: HueSatLike | null) => { hueSatRef.current = e ?? null; }} saturation={OVERVIEW_SAT} /> : <></>}
       {/* Very subtle film grain + vignette — the glue that binds the depth layers. */}
       <Noise premultiply opacity={0.045} />
       {/* Deeper vignette in the solar act pulls the corners to deep space (spec: <10%
