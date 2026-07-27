@@ -52,6 +52,7 @@ async function loadHiRes(key: string, tier: HiTier, gl: THREE.WebGLRenderer): Pr
   tex.flipY = false; // bitmap already flipped → matches the base map's orientation
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
+  tex.wrapS = THREE.RepeatWrapping; // match the base map (A2 band shear)
   tex.needsUpdate = true;
   gl.initTexture(tex);
   return tex;
@@ -100,6 +101,14 @@ interface PlanetSpec {
   moons?: number;
   /** Optional cool multiplier on the body to counter the warm sun (Earth). */
   bodyColor?: string;
+  /** A2: gas-giant "living bands". `flow` = domain-warp turbulence amplitude on the
+   *  albedo UV; `shear` = per-unit-time latitudinal band shear (adjacent bands oppose).
+   *  `haze` = Mars drifting dust-haze amount. `earth` = enable the cloud + night-lights
+   *  layers. All zero/undefined ⇒ a static rocky body. */
+  flow?: number;
+  shear?: number;
+  haze?: number;
+  earth?: boolean;
 }
 
 function Moons({ count, planetSize }: { count: number; planetSize: number }) {
@@ -149,12 +158,12 @@ const PLANETS: PlanetSpec[] = [
   // not gold); the close-orbit over-exposure is handled by per-planet ORBIT exposure
   // in CameraRig (inner planets sit so close to the sun the lit disc would otherwise
   // clip to gold regardless of albedo).
-  { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, tilt: 0.41, bodyColor: '#cfe0ff' },
-  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, tilt: 0.44 },
-  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, moons: 4 },
-  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, tilt: 0.47, rings: true, moons: 8 },
-  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 9.4, size: 0.44, speed: 0.0074, phase: 3.0, tilt: 1.7 },
-  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 10.6, size: 0.42, speed: 0.0062, phase: 0.4 },
+  { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, tilt: 0.41, bodyColor: '#cfe0ff', earth: true },
+  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, tilt: 0.44, haze: 0.12 },
+  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, moons: 4, flow: 0.012, shear: 0.005 },
+  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035 },
+  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 9.4, size: 0.44, speed: 0.0074, phase: 3.0, tilt: 1.7, flow: 0.005, shear: 0.0015 },
+  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 10.6, size: 0.42, speed: 0.0062, phase: 0.4, flow: 0.008, shear: 0.003 },
 ];
 
 /** Zodiacal light — a faint gold dust glow lying in the ecliptic plane, catching
@@ -246,6 +255,70 @@ const rimFrag = /* glsl */ `
   }
 `;
 
+// --- A2: Earth cloud shell + night-lights (day/night) ---------------------------------
+// Both layers ride the surface's spin (children of the albedo mesh); clouds add a hair of
+// extra rotation so they drift over the ground. `vWN`/`vWPos` give the sun-facing factor
+// (sun at world origin) so lights show on the dark hemisphere and clouds shade at the
+// terminator — the pair is what turns a blue ball into a living planet.
+const earthVert = /* glsl */ `
+  varying vec2 vUv; varying vec3 vWN; varying vec3 vWPos;
+  void main() {
+    vUv = uv;
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vWPos = wp.xyz;
+    vWN = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+const earthNightFrag = /* glsl */ `
+  uniform sampler2D uMap; varying vec2 vUv; varying vec3 vWN; varying vec3 vWPos;
+  void main() {
+    float lit = dot(normalize(vWN), normalize(-vWPos));
+    float night = smoothstep(0.08, -0.2, lit);          // 1 on the dark hemisphere
+    vec3 lights = texture2D(uMap, vUv).rgb;
+    gl_FragColor = vec4(lights * 2.0, night);           // additive; alpha gates to night (survives the low ORBIT exposure)
+  }
+`;
+const earthCloudFrag = /* glsl */ `
+  uniform sampler2D uMap; varying vec2 vUv; varying vec3 vWN; varying vec3 vWPos;
+  void main() {
+    float c = texture2D(uMap, vUv).r;                    // cloud density (grayscale)
+    float lit = clamp(dot(normalize(vWN), normalize(-vWPos)), 0.0, 1.0);
+    float shade = 0.12 + 0.9 * lit;                      // clouds go dark past the terminator
+    float a = smoothstep(0.16, 0.7, c) * 0.9;
+    gl_FragColor = vec4(vec3(shade), a);
+  }
+`;
+
+function EarthLayers({ radius }: { radius: number }) {
+  const clouds = useRef<THREE.Mesh>(null);
+  const cloudTex = useMemo(() => {
+    const tx = new THREE.TextureLoader().load('/textures/earth_clouds.webp');
+    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
+  }, []);
+  const nightTex = useMemo(() => {
+    const tx = new THREE.TextureLoader().load('/textures/earth_night.webp');
+    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
+  }, []);
+  useEffect(() => () => { cloudTex.dispose(); nightTex.dispose(); }, [cloudTex, nightTex]);
+  const cloudUniforms = useMemo(() => ({ uMap: { value: cloudTex } }), [cloudTex]);
+  const nightUniforms = useMemo(() => ({ uMap: { value: nightTex } }), [nightTex]);
+  useFrame((_, dt) => { if (clouds.current) clouds.current.rotation.y += dt * 0.045; });
+  const skip = () => null; // overlays are visual only — never intercept planet taps
+  return (
+    <>
+      <mesh scale={1.002} raycast={skip}>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <shaderMaterial vertexShader={earthVert} fragmentShader={earthNightFrag} uniforms={nightUniforms} transparent blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <mesh ref={clouds} scale={1.02} raycast={skip}>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <shaderMaterial vertexShader={earthVert} fragmentShader={earthCloudFrag} uniforms={cloudUniforms} transparent depthWrite={false} />
+      </mesh>
+    </>
+  );
+}
+
 function Planet({ spec }: { spec: PlanetSpec }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -277,6 +350,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     const tx = new THREE.TextureLoader().load(spec.tex);
     tx.colorSpace = THREE.SRGBColorSpace;
     tx.anisotropy = 8;
+    tx.wrapS = THREE.RepeatWrapping; // let the A2 band shear scroll U seamlessly
     return tx;
   }, [spec.tex]);
   // Albedo material. Page planets get a mix-in hi-res sampler (A1): the base 2K map is
@@ -284,24 +358,50 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   // it in the exact same UV space, so upgrade/downgrade is a fade, never a pop.
   const material = useMemo(() => {
     const m = new THREE.MeshStandardMaterial({ map: texture, color: spec.bodyColor ?? '#ffffff', roughness: 0.9, metalness: 0.02 });
-    if (page) {
-      m.onBeforeCompile = (shader) => {
-        shader.uniforms.uHiMap = { value: white1() };
-        shader.uniforms.uHiMix = { value: 0 };
-        shader.fragmentShader = shader.fragmentShader.replace(
-          '#include <map_fragment>',
-          `#include <map_fragment>
-          #ifdef USE_MAP
-            // Re-apply the material tint (e.g. Earth's cool bodyColor) so the hi-res map
-            // matches the base exactly — the base was already multiplied by \`diffuse\`.
-            diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( uHiMap, vMapUv ).rgb * diffuse, uHiMix );
-          #endif`
-        );
-        hiShader.current = shader;
-      };
-    }
+    m.onBeforeCompile = (shader) => {
+      shader.uniforms.uHiMap = { value: white1() };
+      shader.uniforms.uHiMix = { value: 0 };
+      shader.uniforms.uTime = { value: 0 };
+      shader.uniforms.uFlow = { value: spec.flow ?? 0 };   // A2 gas-giant band turbulence
+      shader.uniforms.uShear = { value: spec.shear ?? 0 }; // A2 latitudinal band shear
+      shader.uniforms.uHaze = { value: spec.haze ?? 0 };   // A2 Mars dust haze
+      shader.fragmentShader =
+        `uniform sampler2D uHiMap; uniform float uHiMix, uTime, uFlow, uShear, uHaze;
+         float _h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+         float _n(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+           return mix(mix(_h(i),_h(i+vec2(1,0)),u.x), mix(_h(i+vec2(0,1)),_h(i+vec2(1,1)),u.x), u.y); }
+        ` + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
+           vec2 flowUv = vMapUv;
+           if ( uFlow > 0.0 ) {
+             // Latitudinal band shear — adjacent bands scroll in opposite directions
+             // (wraps via RepeatWrapping); plus two-octave domain-warp turbulence so the
+             // bands swirl, not just slide. Reads over ~20-30s.
+             float bandDir = sin( vMapUv.y * 20.0 );
+             flowUv.x += bandDir * uShear * uTime;
+             float t = uTime * 0.03;
+             float w = ( _n( vec2( vMapUv.x * 4.0 - t,       vMapUv.y * 10.0 ) ) - 0.5 ) * 0.6
+                     + ( _n( vec2( vMapUv.x * 8.0 + t * 1.7, vMapUv.y * 16.0 ) ) - 0.5 ) * 0.4;
+             flowUv.x += w * uFlow;
+             flowUv.y += w * uFlow * 0.35;
+           }
+           vec4 sampledDiffuseColor = texture2D( map, flowUv );
+           diffuseColor *= sampledDiffuseColor;
+           // A1: crossfade the hi-res map in (same warped UV + material tint).
+           diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( uHiMap, flowUv ).rgb * diffuse, uHiMix );
+           if ( uHaze > 0.0 ) {
+             // Mars: a faint warm dust-haze drifting slowly across the disc.
+             float hz = _n( vec2( vMapUv.x * 3.0 + uTime * 0.01, vMapUv.y * 5.0 - uTime * 0.006 ) );
+             diffuseColor.rgb += vec3(0.55, 0.32, 0.18) * ( hz - 0.4 ) * uHaze;
+           }
+         #endif`
+      );
+      hiShader.current = shader;
+    };
     return m;
-  }, [texture, spec.bodyColor, page]);
+  }, [texture, spec.bodyColor, spec.flow, spec.shear, spec.haze]);
   useEffect(() => () => material.dispose(), [material]);
   // Procedural ring strip (colour + alpha vs radius), drawn to a 1-D canvas and mapped
   // radially. Deterministic and CSP-safe — avoids the saturn_ring.png alpha-layout that
@@ -358,6 +458,8 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     const rimTarget = hovered && page ? 0.9 : 0.35;
     const uI = rimUniforms.uIntensity;
     uI.value += (rimTarget - uI.value) * Math.min(1, dt * 6);
+    // A2: drive the flow/haze animation (all planets that compiled the shader).
+    if (hiShader.current) hiShader.current.uniforms.uTime.value = state.clock.elapsedTime;
     // A1: crossfade the hi-res map toward its target; once fully faded out, free the GPU
     // texture (budget: at most one hi texture resident, since only one world is focused).
     if (page && hiShader.current) {
@@ -417,6 +519,8 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       <group ref={spinGroup} rotation={[0, 0, spec.tilt ?? 0]} scale={hovered && page ? 1.12 : 1}>
         <mesh ref={mesh} {...bind} material={material}>
           <sphereGeometry args={[spec.size, 64, 64]} />
+          {/* A2: Earth's cloud + night-lights shells ride the surface spin. */}
+          {spec.earth && <EarthLayers radius={spec.size} />}
         </mesh>
         {/* Atmospheric rim light (heightened realism, tinted from the planet). */}
         <mesh scale={1.05}>
