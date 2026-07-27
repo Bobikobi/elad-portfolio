@@ -31,6 +31,17 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   trailingSlash: false,
+  // This machine has 7.8 GB of RAM. The dev server's default behaviour — keep
+  // every compiled page resident and preload all entries on boot — is what
+  // pushed the system into OOM on 2026-07-27. Both settings are documented in
+  // next/dist/docs/01-app/02-guides/memory-usage.md and onDemandEntries.md.
+  onDemandEntries: {
+    maxInactiveAge: 25 * 1000,
+    pagesBufferLength: 2,
+  },
+  experimental: {
+    preloadEntriesOnStart: false,
+  },
   async redirects() {
     return [
       // Redirect non-www to www (canonical domain)
