@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/i18n';
 import { useMotionDisabled } from '@/hooks/useMotionDisabled';
 import { useWebGLAvailable } from '@/hooks/useWebGLAvailable';
 import { useScene } from '@/lib/sceneStore';
-import { SWAP_V, COVER_FALLOFF } from '@/lib/diveEnvelope';
+import { SWAP_V, COVER_PLATEAU, COVER_FALLOFF, coverageFor } from '@/lib/diveEnvelope';
 import About from '@/components/sections/About';
 import Services from '@/components/sections/Services';
 import Projects from '@/components/sections/Projects';
@@ -140,22 +140,33 @@ function GalaxyHome() {
     if (seenIntro !== false) return;
     const REST_MS = 320;
     const COMMIT_COV = 0.45; // only while the curtain actually obscures the frame
+    // Clear of the ENTIRE covered band: the plateau half-width AND the falloff, plus a
+    // margin. Landing on `SWAP_V + COVER_FALLOFF` alone stops one plateau short and parks
+    // the visitor at a permanent coverage of 0.25 — the same gold wash this is meant to
+    // clear, only now at a fixed depth instead of wherever they happened to stop.
+    const PAST = COVER_PLATEAU + COVER_FALLOFF + 0.01;
     let raf = 0;
     let committing = false;
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const s = useScene.getState();
       if (!s.scrollDriven || s.focusedPlanet) return;
+      // Judge the SCROLL POSITION, not the live coverage. Coverage is driven by the damped
+      // gate, which sweeps through the curtain whenever scroll jumps a long way at once
+      // (End key, scrollbar, scroll restoration). Reading it here made a legitimate fast
+      // transit look like a parked visitor, and the "help" yanked them BACKWARDS out of a
+      // finished dive. Where the page is actually scrolled to is the only honest test of
+      // "came to rest inside the curtain".
+      const parkedCov = coverageFor(s.scrollProgress);
       if (committing) {
-        if (s.coverage < COMMIT_COV) committing = false; // clear of the obscuring band → re-arm
+        if (parkedCov < COMMIT_COV) committing = false; // clear of the obscuring band → re-arm
         return;
       }
-      if (s.coverage < COMMIT_COV) return;
+      if (parkedCov < COMMIT_COV) return;
       if (performance.now() - lastScrollTs.current < REST_MS) return;
       const max = document.documentElement.scrollHeight - window.innerHeight;
       if (max <= 0) return;
-      // Just past the falloff on the side we were heading → coverage lands ≈0.
-      const target = lastDir.current >= 0 ? SWAP_V + COVER_FALLOFF + 0.005 : SWAP_V - COVER_FALLOFF - 0.005;
+      const target = lastDir.current >= 0 ? SWAP_V + PAST : SWAP_V - PAST;
       committing = true;
       lastScrollTs.current = performance.now();
       window.scrollTo({ top: clamp01(target) * max, behavior: 'smooth' });
