@@ -1,12 +1,13 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, PLANET_PAGES } from '@/lib/planetPositions';
 import { PLANET_SECTION, SECTIONS, sectionPath } from '@/lib/sections';
-import { BODY_FACTS, CV_HREF } from '@/lib/bodyFacts';
+import { BODY_FACTS, CV_HREF, DECORATIVE_BODIES } from '@/lib/bodyFacts';
+import { HUD_AVAILABLE } from './DebugHud';
 import { useI18n } from '@/lib/i18n';
 
 /**
@@ -48,6 +49,26 @@ const TOUR_STOPS = SECTIONS.length;
 const _wp = new THREE.Vector3();
 const _ndc = new THREE.Vector3();
 
+// --- R5.6 hover hysteresis -------------------------------------------------------------
+// A decorative body is a small disc that ORBITS, and the camera answers to the pointer, so
+// the body drifts under a perfectly still cursor and the pointer sits near its edge more
+// often than not. A bare enter/leave raycast therefore chatters: acquired, lost, acquired,
+// several times a second, and the tooltip strobes. The cure is an explicit hysteresis run
+// from the label driver, which already projects every body to the screen each frame:
+//   • acquire on a clean hit (pointer inside the projected disc),
+//   • HOLD while the pointer is within a STICKY-times-larger disc plus a small slack ring,
+//   • and only drop after the miss has PERSISTED — a single bad frame proves nothing.
+// Hovering the tooltip itself also holds, otherwise Mercury's CV download would vanish the
+// moment you reached for it.
+const HOVER_STICKY = 1.5;    // grown hit radius while a body is already hovered
+const HOVER_SLACK_PX = 24;   // dead-band ring beyond the sticky disc
+const HOVER_MISS_MS = 250;   // a miss must persist this long before the hover drops
+const TIP_TAU = 0.055;       // tooltip position smoothing time constant, in SECONDS
+const DEG2RAD = Math.PI / 180;
+
+/** Live pointer, updated from real events only — never polled, never a layout read. */
+const ptr = { x: -1, y: -1, seen: false, onScene: false, onTip: false };
+
 /** Hide a node without touching layout or leaving a focusable ghost behind. */
 function hide(el: HTMLElement) {
   if (el.style.visibility !== 'hidden') {
@@ -72,7 +93,35 @@ function place(el: HTMLElement, x: number, y: number, opacity: number, interacti
  * render, so the DOM and the pixels it labels are always from the same instant.
  */
 export function PlanetLabelDriver() {
-  useFrame((state) => {
+  // Hover bookkeeping lives in refs — none of it may cause a React render. Only the final
+  // enter/leave decision is published to the store.
+  const hoverMiss = useRef(0);
+  const tip = useRef({ x: 0, y: 0, key: '' });
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      // Touch has no hover: a tap toggles the tooltip (SolarAct) and the driver keeps out
+      // of it entirely, so a tapped card is never yanked away by a phantom "miss".
+      if (e.pointerType !== 'mouse') return;
+      const t = e.target as Element | null;
+      ptr.x = e.clientX;
+      ptr.y = e.clientY;
+      ptr.seen = true;
+      ptr.onScene = t?.tagName === 'CANVAS';
+      ptr.onTip = !!t?.closest?.('[data-body-tooltip]');
+    };
+    const out = () => { ptr.onScene = false; ptr.onTip = false; };
+    window.addEventListener('pointermove', move, { passive: true });
+    window.addEventListener('pointerout', out, { passive: true });
+    window.addEventListener('blur', out);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerout', out);
+      window.removeEventListener('blur', out);
+    };
+  }, []);
+
+  useFrame((state, delta) => {
     const st = useScene.getState();
     const cam = state.camera as THREE.PerspectiveCamera;
     const vw = state.size.width;
@@ -96,6 +145,21 @@ export function PlanetLabelDriver() {
       const off = behind || Math.abs(_ndc.x) > 0.97 || Math.abs(_ndc.y) > 0.97;
       return { x, y, off };
     };
+
+    // Verification handle: where the CURRENT frame's body positions say each pill belongs.
+    // Read between frames it reports frame N, and the pill's transform was written at
+    // priority 2 of frame N — so a driver working from stale positions (the drei <Html>
+    // failure this replaced) would disagree with it by one frame of camera motion.
+    if (HUD_AVAILABLE) {
+      (window as unknown as {
+        __labelProbe?: (k: string, lift?: number) => { x: number; y: number; off: boolean } | null;
+      }).__labelProbe = (k, lift) => {
+        const p = planetPositions.get(k);
+        if (!p) return null;
+        // Default lift = where the PILL goes; pass 0 for the body's own centre.
+        return project(p, lift ?? (planetRadii.get(k) ?? 0.4) + 0.35);
+      };
+    }
 
     // --- section pills ---------------------------------------------------------------
     for (const key of PAGE_KEYS) {
@@ -133,24 +197,87 @@ export function PlanetLabelDriver() {
       }
     }
 
+    // --- decorative hover, with hysteresis (R5.6) --------------------------------------
+    // Run from here rather than from raycast enter/leave events because this is the one
+    // place that already knows where every body IS this frame, in screen pixels.
+    if (!overviewOn || !ptr.seen || st.tourMode) {
+      if (st.hoveredBody && !st.tourMode) { st.setHoveredBody(null); hoverMiss.current = 0; }
+    } else {
+      const fovY = cam.fov * DEG2RAD;
+      /** Projected screen radius of a body, in px — same tan model as the HUD. */
+      const radiusPx = (key: string, pos: THREE.Vector3) => {
+        const d = cam.position.distanceTo(pos);
+        return d <= 0 ? 0 : ((2 * Math.atan((planetRadii.get(key) ?? 0.3) / d)) / fovY) * vh * 0.5;
+      };
+
+      // Nearest body to the pointer, measured from the EDGE of its disc.
+      let bestKey: string | null = null;
+      let bestGap = Infinity;
+      let bestHit = false;
+      for (const key of DECORATIVE_BODIES) {
+        const pos = planetPositions.get(key);
+        if (!pos) continue;
+        const p = project(pos, 0);
+        if (p.off) continue;
+        const r = radiusPx(key, pos);
+        const gap = Math.hypot(p.x - ptr.x, p.y - ptr.y) - r;
+        if (gap < bestGap) { bestGap = gap; bestKey = key; bestHit = gap <= 0; }
+      }
+
+      const cur = st.hoveredBody;
+      if (cur && DECORATIVE_BODIES.includes(cur)) {
+        const pos = planetPositions.get(cur);
+        const p = pos ? project(pos, 0) : null;
+        const r = pos ? radiusPx(cur, pos) : 0;
+        const dist = p && !p.off ? Math.hypot(p.x - ptr.x, p.y - ptr.y) : Infinity;
+        // Held by the sticky disc + slack ring, or by the pointer being on the card itself.
+        const held = ptr.onTip || (ptr.onScene && dist <= r * HOVER_STICKY + HOVER_SLACK_PX);
+        if (held) {
+          hoverMiss.current = 0;
+          // A clean hit on a DIFFERENT body still wins immediately — moving from one body
+          // to the next should feel direct, the hysteresis only resists letting go.
+          if (bestHit && bestKey && bestKey !== cur) st.setHoveredBody(bestKey);
+        } else if (!hoverMiss.current) {
+          hoverMiss.current = state.clock.elapsedTime;
+        } else if ((state.clock.elapsedTime - hoverMiss.current) * 1000 > HOVER_MISS_MS) {
+          hoverMiss.current = 0;
+          st.setHoveredBody(null);
+        }
+      } else {
+        hoverMiss.current = 0;
+        if (ptr.onScene && bestHit && bestKey) st.setHoveredBody(bestKey);
+      }
+    }
+
     // --- decorative tooltip -----------------------------------------------------------
-    const tip = nodes.get('tooltip');
-    if (tip) {
-      const key = st.hoveredBody;
+    const tipEl = nodes.get('tooltip');
+    if (tipEl) {
+      const key = useScene.getState().hoveredBody;
       const pos = key ? planetPositions.get(key) : null;
-      if (!overviewOn || !key || !pos) hide(tip);
+      if (!overviewOn || !key || !pos) { hide(tipEl); tip.current.key = ''; }
       else {
         const { x, y } = project(pos, (planetRadii.get(key) ?? 0.3) + 0.28);
         // Keep the card fully on screen — it is far wider than a pill.
-        const halfW = tip.offsetWidth / 2 || 130;
-        const halfH = tip.offsetHeight / 2 || 46;
-        place(
-          tip,
-          Math.min(vw - halfW - 12, Math.max(halfW + 12, x)),
-          Math.min(vh - halfH - 16, Math.max(halfH + 76, y)),
-          1,
-          true
-        );
+        const halfW = tipEl.offsetWidth / 2 || 130;
+        const halfH = tipEl.offsetHeight / 2 || 46;
+        const tx = Math.min(vw - halfW - 12, Math.max(halfW + 12, x));
+        const ty = Math.min(vh - halfH - 16, Math.max(halfH + 76, y));
+        if (tip.current.key !== key) {
+          // First frame on a new body: snap, so the card appears where it belongs rather
+          // than flying in from the previous body.
+          tip.current.key = key;
+          tip.current.x = tx;
+          tip.current.y = ty;
+        } else {
+          // Damped follow. The card is a big slab of text; letting it track the orbiting
+          // body pixel-for-pixel reads as jitter even when the position is exactly right.
+          // Wall-clock damping, not a per-frame lerp — under the tier composition law the
+          // card must land in the same place at 60Hz and at 144Hz.
+          const k = 1 - Math.exp(-delta / TIP_TAU);
+          tip.current.x += (tx - tip.current.x) * k;
+          tip.current.y += (ty - tip.current.y) * k;
+        }
+        place(tipEl, tip.current.x, tip.current.y, 1, true);
       }
     }
   }, 2);
@@ -184,7 +311,6 @@ export default function PlanetLabelsOverlay() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const hovered = useScene((s) => s.hoveredBody);
-  const setHoveredBody = useScene((s) => s.setHoveredBody);
   // A CV link that is not actually published would be a broken download, so probe once
   // and degrade Mercury to the same "coming soon" affordance Venus uses.
   const [cvOk, setCvOk] = useState<boolean | null>(null);
@@ -227,7 +353,6 @@ export default function PlanetLabelsOverlay() {
           willChange: 'transform',
           fontFamily: 'var(--font-body, var(--font-hebrew))',
         }}
-        onPointerLeave={() => setHoveredBody(null)}
       >
         {fact && (
           <>

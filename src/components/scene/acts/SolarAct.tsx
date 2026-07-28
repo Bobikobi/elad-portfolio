@@ -9,6 +9,7 @@ import { planetPositions, planetRadii, PLANET_PAGES } from '@/lib/planetPosition
 import { PLANET_SECTION, sectionPath } from '@/lib/sections';
 import { BODY_FACTS } from '@/lib/bodyFacts';
 import { useI18n } from '@/lib/i18n';
+import { HUD_AVAILABLE } from '../DebugHud';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
@@ -342,6 +343,11 @@ const MOON_DIST = 2.9; // Earth radii (compressed from 60 so it stays in the ORB
 const MOON_INCL = 22 * DEG2RAD; // exaggerated from 5.1° so the inclination reads
 const MOON_PERIOD = 26; // s per revolution — slow enough to feel orbital, not spun
 
+const _mwp = new THREE.Vector3();
+const _mdir = new THREE.Vector3();
+const _mrel = new THREE.Vector3();
+const _mearth = new THREE.Vector3();
+
 function EarthMoon({ planetSize }: { planetSize: number }) {
   const pivot = useRef<THREE.Group>(null);
   const body = useRef<THREE.Mesh>(null);
@@ -358,6 +364,28 @@ function EarthMoon({ planetSize }: { planetSize: number }) {
     if (pivot.current) pivot.current.rotation.y = a;
     // Tidal lock: the near face stays turned toward Earth as the pivot carries it round.
     if (body.current) body.current.rotation.y = -a;
+
+    // Verification handle (HUD_AVAILABLE gate — stripped from production). Ratio and
+    // inclination are geometry, and tidal lock is a relationship that only exists while
+    // the thing is moving, so publish the live numbers rather than the constants.
+    if (HUD_AVAILABLE && body.current) {
+      const w = window as unknown as { __moon?: unknown };
+      const earth = planetPositions.get('earth');
+      if (earth) {
+        body.current.getWorldPosition(_mwp);
+        body.current.getWorldDirection(_mdir); // the mesh's local +Z in world space
+        _mrel.copy(_mwp).sub(earth);
+        w.__moon = {
+          rel: [_mrel.x, _mrel.y, _mrel.z],
+          dist: _mrel.length(),
+          radius: planetSize * MOON_RATIO,
+          earthRadius: planetSize,
+          // Cosine of the angle between the face the Moon presents and the direction back
+          // to Earth. Tidally locked ⇒ this stays constant as it goes round.
+          faceDot: _mdir.dot(_mearth.copy(_mrel).normalize()),
+        };
+      }
+    }
   });
   return (
     <group rotation={[MOON_INCL, 0, 0]}>
@@ -561,16 +589,17 @@ function Planet({ spec }: { spec: PlanetSpec }) {
               s.setHoveredBody(s.hoveredBody === spec.key ? null : spec.key);
             }
           },
+          // Only the page planets take their hover from the raycaster (it drives the scale
+          // + atmosphere lift, where a dropped frame of hover costs nothing). A DECORATIVE
+          // body's tooltip is driven by the hysteresis in PlanetLabelDriver instead: raw
+          // enter/leave chatters on a small disc that orbits under a still cursor, and two
+          // writers for one piece of state would only fight each other.
           onPointerOver: (e: { stopPropagation: () => void }) => {
             e.stopPropagation();
             setHovered(true);
-            if (decorative) useScene.getState().setHoveredBody(spec.key);
           },
           onPointerOut: () => {
             setHovered(false);
-            if (decorative && useScene.getState().hoveredBody === spec.key) {
-              useScene.getState().setHoveredBody(null);
-            }
           },
         }
       : {};

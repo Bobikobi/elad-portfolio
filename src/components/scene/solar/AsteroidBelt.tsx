@@ -2,6 +2,7 @@
 import { useMemo, useRef, useLayoutEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { HUD_AVAILABLE } from '../DebugHud';
 
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
@@ -93,6 +94,28 @@ export default function AsteroidBelt({ count = 1100 }: { count?: number }) {
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+
+    // Verification handle (same HUD_AVAILABLE gate as the debug HUD, so it is stripped
+    // from the production bundle). The R5.3 corridor is a claim about the rocks that were
+    // ACTUALLY seeded in this build, so publish their real radial extremes — including
+    // each rock's own half-extent — rather than asking a reader to trust the constants.
+    if (HUD_AVAILABLE && typeof window !== 'undefined') {
+      let rMin = Infinity;
+      let rMax = -Infinity;
+      for (const r of rocks) {
+        const reach = r.size * Math.max(r.lump[0], r.lump[1], r.lump[2]);
+        if (r.radius - reach < rMin) rMin = r.radius - reach;
+        if (r.radius + reach > rMax) rMax = r.radius + reach;
+      }
+      (window as unknown as { __belt?: unknown }).__belt = {
+        count: rocks.length,
+        rMin, rMax,
+        marsReach: MARS_REACH,
+        jupiterReach: JUPITER_REACH,
+        nearGone: NEAR_GONE,
+        nearFull: NEAR_FULL,
+      };
+    }
   }, [rocks]);
 
   // Near-camera dissolve, injected into the standard material so the rocks keep real
