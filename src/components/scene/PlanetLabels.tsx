@@ -99,9 +99,9 @@ export function PlanetLabelDriver() {
   const tip = useRef({ x: 0, y: 0, key: '' });
 
   useEffect(() => {
-    const move = (e: PointerEvent) => {
-      // Touch has no hover: a tap toggles the tooltip (SolarAct) and the driver keeps out
-      // of it entirely, so a tapped card is never yanked away by a phantom "miss".
+    // Touch has no hover: a tap toggles the tooltip (SolarAct) and the driver keeps out of
+    // it entirely, so a tapped card is never yanked away by a phantom "miss".
+    const track = (e: PointerEvent) => {
       if (e.pointerType !== 'mouse') return;
       const t = e.target as Element | null;
       ptr.x = e.clientX;
@@ -110,14 +110,24 @@ export function PlanetLabelDriver() {
       ptr.onScene = t?.tagName === 'CANVAS';
       ptr.onTip = !!t?.closest?.('[data-body-tooltip]');
     };
-    const out = () => { ptr.onScene = false; ptr.onTip = false; };
-    window.addEventListener('pointermove', move, { passive: true });
-    window.addEventListener('pointerout', out, { passive: true });
-    window.addEventListener('blur', out);
+    // `pointerover` matters as much as `pointermove` here: the scene moves under a STILL
+    // cursor, so the element being hit-tested changes with no mouse motion at all. The
+    // moment the card slides beneath the pointer, the canvas raises pointerout — and with
+    // nothing else arriving, the flags stayed false and the hover died 250ms later, which
+    // is precisely the strobe this hysteresis exists to prevent. `pointerover` re-reads
+    // the new target, so being covered by the card counts as still being on target.
+    window.addEventListener('pointermove', track, { passive: true });
+    window.addEventListener('pointerover', track, { passive: true });
+    // Only a pointer that has genuinely left the document is "gone" — not one that merely
+    // crossed from one element to another.
+    const gone = () => { ptr.onScene = false; ptr.onTip = false; };
+    document.documentElement.addEventListener('pointerleave', gone, { passive: true });
+    window.addEventListener('blur', gone);
     return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerout', out);
-      window.removeEventListener('blur', out);
+      window.removeEventListener('pointermove', track);
+      window.removeEventListener('pointerover', track);
+      document.documentElement.removeEventListener('pointerleave', gone);
+      window.removeEventListener('blur', gone);
     };
   }, []);
 
