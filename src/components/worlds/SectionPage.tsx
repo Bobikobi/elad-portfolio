@@ -2,7 +2,7 @@ import type { Locale } from '@/lib/translations';
 import { translations as tr } from '@/lib/translations';
 import { SECTIONS, type SectionId } from '@/lib/sections';
 import { JsonLd } from '@/components/JsonLd';
-import PlanetWorld from '@/components/scene/PlanetWorld';
+import PlanetWorld from '@/components/worlds/PlanetWorld';
 import AboutWorld from './AboutWorld';
 import ServicesWorld from './ServicesWorld';
 import ProjectsWorld from './ProjectsWorld';

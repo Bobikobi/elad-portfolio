@@ -142,6 +142,7 @@ export default function ProjectsStage({
           </div>
           <Link
             href={homePath(locale)}
+            data-world-back=""
             onClick={(e) => { e.preventDefault(); returnHome(); }}
             className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-[rgba(5,7,20,0.6)] px-3 py-1 text-xs text-[var(--color-star-white)]/75 transition-colors hover:border-[var(--color-core-gold)]/60 hover:text-[var(--color-core-gold)]"
           >

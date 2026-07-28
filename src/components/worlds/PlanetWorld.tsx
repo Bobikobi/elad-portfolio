@@ -48,6 +48,7 @@ export default function PlanetWorld({
               meter is cleared and the overview — not a re-dive — is what we land in. */}
           <Link
             href={homePath(locale)}
+            data-world-back=""
             onClick={(e) => { e.preventDefault(); returnHome(); }}
             className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-[var(--color-star-white)]/70 transition-colors hover:border-[var(--color-core-gold)]/60 hover:text-[var(--color-core-gold)]"
           >
