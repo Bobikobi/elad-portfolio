@@ -65,6 +65,7 @@ security-reports/
 
 # Local visual-verification harness (not for commit) — all root _*.mjs are temp harness
 /_*.mjs
+/_shot-*.png
 
 # local visual-verification chrome profile (never commit)
 .automation-profile/

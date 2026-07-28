@@ -362,8 +362,14 @@ function EarthMoon({ planetSize }: { planetSize: number }) {
   useFrame((state) => {
     const a = (state.clock.elapsedTime / MOON_PERIOD) * Math.PI * 2;
     if (pivot.current) pivot.current.rotation.y = a;
-    // Tidal lock: the near face stays turned toward Earth as the pivot carries it round.
-    if (body.current) body.current.rotation.y = -a;
+    // Tidal lock. The mesh is a CHILD of the pivot, so it already inherits the pivot's yaw
+    // — which is exactly the lock: one rotation per revolution, in the same sense, keeping
+    // the same face turned inward. Counter-rotating it by -a (as this did) cancels that
+    // inheritance and pins the Moon's orientation in world space, so over one orbit it
+    // presents every face to Earth in turn: the precise opposite of the claim. Measured on
+    // the alias as faceDot swinging across 0.97 of its full range per revolution.
+    // Its local -X side is what points at Earth, and -X is the centre of an equirectangular
+    // lunar map, so the near side is the face on show.
 
     // Verification handle (HUD_AVAILABLE gate — stripped from production). Ratio and
     // inclination are geometry, and tidal lock is a relationship that only exists while

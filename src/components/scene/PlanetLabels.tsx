@@ -152,12 +152,15 @@ export function PlanetLabelDriver() {
     // failure this replaced) would disagree with it by one frame of camera motion.
     if (HUD_AVAILABLE) {
       (window as unknown as {
-        __labelProbe?: (k: string, lift?: number) => { x: number; y: number; off: boolean } | null;
+        __labelProbe?: (k: string, lift?: number) => { x: number; y: number; off: boolean; rPx: number } | null;
       }).__labelProbe = (k, lift) => {
         const p = planetPositions.get(k);
         if (!p) return null;
         // Default lift = where the PILL goes; pass 0 for the body's own centre.
-        return project(p, lift ?? (planetRadii.get(k) ?? 0.4) + 0.35);
+        const at = project(p, lift ?? (planetRadii.get(k) ?? 0.4) + 0.35);
+        const d = cam.position.distanceTo(p);
+        const rPx = d <= 0 ? 0 : ((2 * Math.atan((planetRadii.get(k) ?? 0.3) / d)) / (cam.fov * DEG2RAD)) * vh * 0.5;
+        return { ...at, rPx };
       };
     }
 

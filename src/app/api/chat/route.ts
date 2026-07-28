@@ -101,6 +101,17 @@ function getAllowedHosts() {
     }
   }
 
+  // A PREVIEW deployment serves from its own hostname, so a chat request made from the
+  // preview's own page failed this check and every message came back 403 — the widget was
+  // dead on every branch deploy, which is also the one place this project verifies things.
+  // Trust the deployment's own hosts there. Production keeps the strict list above: these
+  // are only added when Vercel says this is not the production environment.
+  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') {
+    for (const h of [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]) {
+      if (h) hosts.add(h);
+    }
+  }
+
   return hosts;
 }
 
