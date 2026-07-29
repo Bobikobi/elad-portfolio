@@ -55,7 +55,6 @@ export default function ProjectsStage({
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [portrait, setPortrait] = useState(false);
-  const [rtl, setRtl] = useState(false);
   // Escape / scroll-away / back — the shared world exit (R5.1, R5.10). Scrolling inside
   // the window list stays native content scroll; anywhere else builds the meter.
   const { meter, returnHome } = useWorldExit(locale, listRef);
@@ -67,10 +66,6 @@ export default function ProjectsStage({
     on();
     mq.addEventListener('change', on);
     return () => mq.removeEventListener('change', on);
-  }, []);
-
-  useEffect(() => {
-    setRtl(document.documentElement.dir === 'rtl');
   }, []);
 
   // --- Arc layout: curve each window's inner edge against the planet limb. ---
@@ -94,6 +89,7 @@ export default function ProjectsStage({
     }
 
     let raf = 0;
+    const rtl = document.documentElement.dir === 'rtl';
     const signEnd = rtl ? -1 : 1; // inline-end physical direction (planet side)
     const column = list.parentElement as HTMLElement | null;
     const update = () => {
@@ -176,15 +172,6 @@ export default function ProjectsStage({
               }
         }
       >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-[1.4rem]"
-          style={{
-            background: 'linear-gradient(90deg, rgba(5,7,20,0.16) 0%, rgba(5,7,20,0.22) 32%, rgba(5,7,20,0.58) 100%)',
-            maskImage: rtl ? 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.98) 30%, rgba(0,0,0,0.98) 100%)' : 'linear-gradient(90deg, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.98) 70%, transparent 100%)',
-            WebkitMaskImage: rtl ? 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.98) 30%, rgba(0,0,0,0.98) 100%)' : 'linear-gradient(90deg, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.98) 70%, transparent 100%)',
-          }}
-        />
         <header className="pointer-events-auto flex items-start justify-between gap-4 pt-1">
           <div>
             <h1
