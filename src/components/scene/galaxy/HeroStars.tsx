@@ -58,7 +58,7 @@ export default function HeroStars() {
   });
 
   return (
-    <group ref={group}>
+    <group ref={group} name="heroStars">
       {stars.map((s, i) => (
         <sprite key={i} position={s.pos} scale={[s.scale, s.scale, 1]}>
           <spriteMaterial map={tex} color={s.color} transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />

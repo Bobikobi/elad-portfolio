@@ -315,7 +315,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
   });
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} name="belt">
       <instancedMesh
         ref={meshRef}
         args={[undefined, undefined, Math.max(1, belt.rocks.length)]}

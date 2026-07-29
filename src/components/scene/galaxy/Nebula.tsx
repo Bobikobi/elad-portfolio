@@ -56,7 +56,7 @@ export default function Nebula({ intensity = 1 }: { intensity?: number }) {
     }
   });
   return (
-    <group ref={group}>
+    <group ref={group} name="nebula">
       {NEBULAE.map((p, i) => (
         <sprite key={`n${i}`} position={p.pos} scale={[p.scale, p.scale * 0.72, 1]}>
           <spriteMaterial map={tex} color={p.color} transparent opacity={p.op * intensity} blending={THREE.AdditiveBlending} depthWrite={false} />

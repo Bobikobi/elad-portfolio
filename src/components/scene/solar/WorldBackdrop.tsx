@@ -96,7 +96,7 @@ export default function WorldBackdrop() {
 
   if (!cfg || !texes) return null;
   return (
-    <group ref={group}>
+    <group ref={group} name="worldBackdrop">
       {LAYERS.map((L, i) => (
         <sprite key={i} position={L.off} scale={[L.scale, L.scale * 0.7, 1]} userData={{ op: L.op }}>
           <spriteMaterial map={texes[i]} color={cfg.tint} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />

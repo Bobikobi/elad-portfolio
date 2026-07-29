@@ -44,7 +44,7 @@ export default function GradientSky({ solar = false }: { solar?: boolean }) {
     u.value += ((solar ? 1 : 0) - u.value) * Math.min(1, dt * 1.5);
   });
   return (
-    <mesh scale={-1}>
+    <mesh scale={-1} name="sky">
       <sphereGeometry args={[90, 32, 32]} />
       <shaderMaterial ref={matRef} vertexShader={vert} fragmentShader={frag} uniforms={uniforms} side={THREE.BackSide} depthWrite={false} />
     </mesh>

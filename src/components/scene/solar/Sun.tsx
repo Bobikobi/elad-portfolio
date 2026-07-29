@@ -137,7 +137,7 @@ export default function Sun() {
   });
 
   return (
-    <group>
+    <group name="sun">
       <pointLight position={[0, 0, 0]} intensity={650} distance={90} decay={2} color="#ffd9a0" />
       {/* Plasma surface (the God Rays source) */}
       <mesh ref={meshRef}>

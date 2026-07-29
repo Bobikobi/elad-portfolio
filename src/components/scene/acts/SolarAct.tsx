@@ -13,6 +13,7 @@ import { HUD_AVAILABLE } from '../DebugHud';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
+import ZodiacalDust from '../solar/ZodiacalDust';
 
 const _wp = new THREE.Vector3();
 const DEG2RAD = Math.PI / 180;
@@ -172,31 +173,6 @@ const PLANETS: PlanetSpec[] = [
   { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 10.6, size: 0.42, speed: 0.0062, phase: 0.4, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
 ];
 
-/** Zodiacal light — a faint gold dust glow lying in the ecliptic plane, catching
- *  the sun. One flat disc (2 tris) with a soft radial band; fills the "full system"
- *  feeling cheaply without adding geometry. */
-const zodiacFrag = /* glsl */ `
-  varying vec2 vUv;
-  void main() {
-    vec2 c = vUv - 0.5;
-    float r = length(c) * 2.0;                       // 0 centre .. 1 edge
-    float band = smoothstep(0.05, 0.30, r) * (1.0 - smoothstep(0.38, 0.7, r));
-    gl_FragColor = vec4(vec3(1.0, 0.84, 0.55) * band, band * 0.05);
-  }
-`;
-const zodiacVert = /* glsl */ `
-  varying vec2 vUv;
-  void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-`;
-function ZodiacalDust() {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[36, 36]} />
-      <shaderMaterial vertexShader={zodiacVert} fragmentShader={zodiacFrag} transparent blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
-    </mesh>
-  );
-}
-
 // Kept for Pass B (Layout v2), where it returns as the reference poster's "cropped
 // giant" with CORRECT sun lighting. Unmounted for now: at the poster pose it faced the
 // camera with its far (unlit) side → a black sphere. Flip to true only once relit.
@@ -235,33 +211,54 @@ function ForegroundAnchor() {
   );
 }
 
-// A3: atmospheric limb scattering. A two-tone fresnel on a slightly-larger BackSide shell
-// (sun at world origin): a broad haze in the atmosphere hue plus a thin, whiter bright
-// line at the very limb (forward scatter), living on the DAY side and fading through the
-// terminator into night. This is what separates a "textured ball" from a "world".
+// A3 / B13: atmospheric limb scattering, driven by the IMPACT PARAMETER rather than by a
+// fresnel term.
+//
+// The old version shaded a BackSide shell with `1 - dot(view, normal)`. On a back face the
+// outward normal points away from the camera, so that expression is 1 over the entire far
+// hemisphere: the whole visible annulus came out at full brightness and then stopped dead
+// at the shell's own silhouette. That is a hard-edged outline ring, which is what the
+// planets were wearing — read as "grey edges" around the disc.
+//
+// What an atmosphere actually does is fall off with height above the surface, so the value
+// to shade with is `b`, the perpendicular distance from the planet's centre to the view
+// ray. It is exactly the height of the sightline's closest approach. An exponential in
+// (b − planetR) gives a real scale-height falloff, and a smoothstep to zero before the
+// shell's silhouette guarantees the geometry's own edge can never be visible.
+const ATMO_SHELL = 1.12; // shell radius as a multiple of the planet radius
 const rimVert = /* glsl */ `
-  varying vec3 vN; varying vec3 vV; varying vec3 vWPos; varying vec3 vWN;
+  varying vec3 vWPos; varying vec3 vWN; varying vec3 vCenter; varying float vScale;
   void main() {
-    vec4 mv = modelViewMatrix * vec4(position,1.0);
-    vV = normalize(-mv.xyz);
-    vN = normalize(normalMatrix*normal);
-    vec4 wp = modelMatrix * vec4(position,1.0);
+    vec4 wp = modelMatrix * vec4(position, 1.0);
     vWPos = wp.xyz;
     vWN = normalize(mat3(modelMatrix) * normal);
-    gl_Position = projectionMatrix*mv;
+    vCenter = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vScale = length(modelMatrix[0].xyz);   // carries the hover scale-up too
+    gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
 const rimFrag = /* glsl */ `
-  uniform vec3 uColor; uniform float uIntensity;
-  varying vec3 vN; varying vec3 vV; varying vec3 vWPos; varying vec3 vWN;
+  uniform vec3 uColor; uniform float uIntensity; uniform float uBaseR;
+  varying vec3 vWPos; varying vec3 vWN; varying vec3 vCenter; varying float vScale;
   void main() {
-    float f = 1.0 - max(dot(vV, vN), 0.0);              // 0 disc centre .. 1 silhouette limb
-    float glow = pow(f, 3.0);                            // broad atmospheric haze
-    float edge = pow(f, 9.0);                            // thin bright scattering line at the limb
-    vec3 L = normalize(-vWPos);                          // toward the sun at origin
-    float lit = smoothstep(-0.25, 0.35, dot(normalize(vWN), L)); // day-side, softly through the terminator
-    vec3 col = uColor + vec3(0.55) * edge;               // two-tone: hue + whiter forward-scatter edge
-    float a = (glow * 0.75 + edge) * lit * uIntensity;
+    float shellR  = uBaseR * vScale;
+    float planetR = shellR / ${ATMO_SHELL.toFixed(2)};
+
+    // Height of this sightline's closest approach to the planet centre.
+    vec3 D = normalize(vWPos - cameraPosition);
+    vec3 OC = vCenter - cameraPosition;
+    float b = length(OC - D * dot(OC, D));
+    float x = clamp((b - planetR) / max(shellR - planetR, 1e-4), 0.0, 1.0);
+
+    float haze = exp(-x * 2.8);            // broad atmospheric glow hugging the limb
+    float edge = exp(-x * 11.0);           // thin, whiter forward-scattering line
+    float cut  = 1.0 - smoothstep(0.62, 1.0, x);  // zero well inside the geometry's edge
+
+    vec3 L = normalize(-vWPos);            // toward the sun at the origin
+    float lit = smoothstep(-0.25, 0.35, dot(normalize(vWN), L)); // softly through the terminator
+
+    vec3 col = uColor + vec3(0.5) * edge;
+    float a = (haze * 0.55 + edge * 0.8) * cut * lit * uIntensity;
     gl_FragColor = vec4(col, a);
   }
 `;
@@ -516,8 +513,12 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   }, [spec.rings, spec.size]);
   const atmoStrength = spec.atmoStrength ?? 0.4;
   const rimUniforms = useMemo(
-    () => ({ uColor: { value: new THREE.Color(spec.atmo ?? spec.rim) }, uIntensity: { value: atmoStrength } }),
-    [spec.atmo, spec.rim, atmoStrength]
+    () => ({
+      uColor: { value: new THREE.Color(spec.atmo ?? spec.rim) },
+      uIntensity: { value: atmoStrength },
+      uBaseR: { value: spec.size * ATMO_SHELL },
+    }),
+    [spec.atmo, spec.rim, atmoStrength, spec.size]
   );
 
   // EVERY body publishes its live world position + radius now, not just the four page
@@ -611,7 +612,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       : {};
 
   return (
-    <group ref={group}>
+    <group ref={group} name={`planet:${spec.key}`}>
       <group ref={spinGroup} rotation={[0, 0, spec.tilt ?? 0]} scale={hovered && page ? 1.12 : 1}>
         <mesh ref={mesh} {...bind} material={material}>
           <sphereGeometry args={[spec.size, 64, 64]} />
@@ -619,8 +620,8 @@ function Planet({ spec }: { spec: PlanetSpec }) {
           {spec.earth && <EarthLayers radius={spec.size} />}
         </mesh>
         {/* Atmospheric rim light (heightened realism, tinted from the planet). */}
-        <mesh scale={1.05}>
-          <sphereGeometry args={[spec.size, 32, 32]} />
+        <mesh scale={ATMO_SHELL} raycast={() => null}>
+          <sphereGeometry args={[spec.size, 48, 48]} />
           <shaderMaterial vertexShader={rimVert} fragmentShader={rimFrag} uniforms={rimUniforms} transparent side={THREE.BackSide} blending={THREE.AdditiveBlending} depthWrite={false} />
         </mesh>
         {spec.rings && ringTex && ringGeo && (
@@ -651,9 +652,9 @@ export default function SolarAct() {
     <>
       <ambientLight intensity={0.06} />
       {/* Star sphere + nebulae come from the shared SceneRoot sky (one universe). */}
-      <group ref={root} rotation={[0.42, 0, 0]}>
+      <group ref={root} rotation={[0.42, 0, 0]} name="solarRoot">
         <Sun />
-        <ZodiacalDust />
+        <ZodiacalDust count={high ? 5200 : 1900} />
         {PLANETS.map((p) => (
           <Planet key={p.key} spec={p} />
         ))}
