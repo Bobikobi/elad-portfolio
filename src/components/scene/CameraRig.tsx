@@ -37,6 +37,33 @@ const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupite
 const RINGED = new Set(['saturn']);
 const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
+// --- B7: the arrival, and why the curtain kept being torn open ---------------------------
+// Mounting the solar act is not free. Eight textured planets, a seventeen-thousand-body
+// belt, the dust buffers and every material's first compile all land in ONE React commit —
+// measured on the alias at 984ms for a single frame, with a 157ms frame beside it.
+//
+// The curtain exists precisely to hide that. It did not, because its coverage was a pure
+// function of the damped gate, and `damp()` is wall-clock: across a 984ms frame the gate
+// converges completely, so coverage was recomputed from the far side of the swap window
+// and came out at 0.48 — and the gold fill only starts at 0.5, so it was fully transparent.
+// The curtain went from covering the frame to gone in the single frame it existed to cover,
+// and what it uncovered was the camera part-way through its arrival dolly. That is the
+// "arrival": a freeze, then a lurch.
+//
+// The fix has to be counted in FRAMES, not seconds, because the thing being waited on is
+// "has the new act actually drawn yet" — a question no wall clock can answer. So: hold the
+// curtain fully shut for REVEAL_FRAMES drawn frames after a swap, then ease it open over
+// REVEAL_FADE seconds (wall-clock, so the fade itself looks identical on every machine —
+// the tier law is about what is drawn, and this is a readiness gate, not a look). The
+// ease also guarantees the handover back to the envelope is a fade rather than a step,
+// however far the gate ran on during the stall.
+//
+// And since we are already holding the frame, we use it: gl.compile() on the first frame
+// after the swap forces every new material's program to build inside the covered window
+// instead of dribbling out as hitches over the following second.
+const REVEAL_FRAMES = 8;
+const REVEAL_FADE = 0.35; // s
+
 // Immersive welcome: low + close, looking ACROSS the galaxy plane so it fills the
 // frame and spills off the left/right edges (you're inside space, not viewing a disc).
 const LOOK = new THREE.Vector3(0, 0.5, 0);
@@ -218,6 +245,12 @@ export default function CameraRig() {
                                         // arrival dolly is scroll-driven (settle lands at scrollY=max)
   const mobileArriveT = useRef(0);      // T7b: clock time the establishing shot settled (0 = not yet)
   const orbit = useRef({ yaw: 0, pitch: 0 }); // damped drag-to-rotate offset (T6)
+  // B7: the reveal latch. See REVEAL_FRAMES — after a swap the curtain is held shut for a
+  // number of DRAWN frames and then eased open, instead of being handed straight back to a
+  // schedule that assumes the swap was free.
+  const revealHold = useRef(0);
+  const revealFloor = useRef(0);
+  const compileAfterSwap = useRef(false);
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
   // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
   // replaced it (`parent === null` once three has detached the old one).
@@ -247,6 +280,31 @@ export default function CameraRig() {
     const cam = state.camera as THREE.PerspectiveCamera;
     const t = state.clock.elapsedTime;
 
+    // B7 — advance the reveal latch once per DRAWN frame, before anything reads it. While
+    // it is held the curtain is pinned shut; afterwards it eases open on a wall clock and
+    // becomes a FLOOR under whatever the envelope says, so the handover is never a step.
+    if (revealHold.current > 0) {
+      revealHold.current -= 1;
+      revealFloor.current = 1;
+      // The first frame after the swap: force every newly mounted material to compile now,
+      // inside the covered window, rather than hitching one at a time over the next second.
+      if (compileAfterSwap.current) {
+        compileAfterSwap.current = false;
+        state.gl.compile(state.scene, state.camera);
+      }
+    } else if (revealFloor.current > 0) {
+      revealFloor.current = Math.max(0, revealFloor.current - dt / REVEAL_FADE);
+    }
+    const holdCoverage = revealHold.current > 0 ? 1 : revealFloor.current;
+    /** Publish coverage, never letting it fall below the post-swap reveal floor. */
+    const setCoverage = (v: number) => store.setCoverage(Math.max(v, holdCoverage));
+    /** Called at every swap site: shut the curtain and keep it shut until the act draws. */
+    const latchReveal = () => {
+      revealHold.current = REVEAL_FRAMES;
+      revealFloor.current = 1;
+      compileAfterSwap.current = true;
+    };
+
     // --- T1: coverage-gated, bidirectional, ATOMIC galaxy↔solar swap --------------
     // Only the home dive owns this machine (never on a focused world route). The swap
     // is driven by ONE number — the mask coverage — and may fire ONLY while cov>0.95,
@@ -265,9 +323,9 @@ export default function CameraRig() {
       reconcile.current = 0;
       if (store.coverage > 0.001) {
         recCov.current = Math.max(0, store.coverage - dt / 0.3);
-        store.setCoverage(recCov.current);
+        setCoverage(recCov.current);
       } else if (store.coverage !== 0) {
-        store.setCoverage(0);
+        setCoverage(0);
       }
     } else if (!store.focusedPlanet) {
       // Scroll velocity (per second) → "at rest" detection for the T7c reconcile.
@@ -283,7 +341,7 @@ export default function CameraRig() {
         // Symmetric cover envelope: a full plateau centred on the swap point — identical
         // whether diving down or surfacing up, so the reverse is the dive played backwards.
         const cov = coverageFor(g);
-        store.setCoverage(cov);
+        setCoverage(cov);
         const desired: Act = g >= SWAP_V ? 'solar' : 'galaxy';
         if (desired !== act && cov > 0.95 && !swapLatch.current) {
           // Order is law — all inside this covered frame, each step logged in dev:
@@ -295,6 +353,7 @@ export default function CameraRig() {
           store.setAct(desired);
           act = desired;
           swapLatch.current = true;
+          latchReveal(); // B7 — the curtain stays shut until the new act has actually drawn
           arrivedViaDive.current = desired === 'solar'; // scroll-drive the arrival dolly (T7a); cleared on reverse
           if (desired === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
         }
@@ -318,12 +377,13 @@ export default function CameraRig() {
       } else if (reconcile.current === 1) {
         // Cover up to a full plateau, THEN swap (T1: only at full coverage).
         recCov.current = Math.min(1, recCov.current + dt / 0.3);
-        store.setCoverage(recCov.current);
+        setCoverage(recCov.current);
         if (recCov.current >= 0.999) {
           if (act !== scrollSide) {
             if (DEV) console.log(`[swap:reconcile] ${act}→${scrollSide}  cov=${recCov.current.toFixed(3)} scroll=${scrollProgress.toFixed(3)}`);
             store.setAct(scrollSide);
             act = scrollSide;
+            latchReveal(); // B7 — same hold on the reconciled swap
             pGate.current = scrollProgress;   // sync the gate so the normal machine resumes cleanly
             arrivedViaDive.current = false;   // a teleport, not a dive → time-damped reveal (overview/tour)
             if (scrollSide === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
@@ -333,7 +393,7 @@ export default function CameraRig() {
       } else {
         // Reveal: ease coverage back down over the new act.
         recCov.current = Math.max(0, recCov.current - dt / 0.3);
-        store.setCoverage(recCov.current);
+        setCoverage(recCov.current);
         if (recCov.current <= 0.001) { reconcile.current = 0; swapLatch.current = false; }
       }
     }
