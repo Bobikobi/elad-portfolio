@@ -19,8 +19,13 @@ import ZodiacalDust from '../solar/ZodiacalDust';
 const _wp = new THREE.Vector3();
 const DEG2RAD = Math.PI / 180;
 
-/** Live per-body eclipse strengths, published for verification (HUD gate only). */
+/** Live per-body eclipse strengths, published for verification (HUD gate only).
+ *  `__eclipse` is the DAMPED value the shader sees; `__eclipseRaw` is this frame's
+ *  geometry. Sampling the damped one to measure how OFTEN eclipses happen is a trap: its
+ *  time constant is longer than any sane sampling interval, so one real event smears
+ *  across the next several samples and the rate comes out several times too high. */
 const eclipseReport: Record<string, number> = {};
+const eclipseRawReport: Record<string, number> = {};
 /**
  * Orbital-phase setters, one per body (HUD gate only). Eclipses are a real geometric
  * consequence of where the planets happen to be, and the orbits take five to ten minutes
@@ -32,6 +37,7 @@ const phaseSetters: Record<string, (a: number) => void> = {};
 if (HUD_AVAILABLE && typeof window !== 'undefined') {
   const w = window as unknown as Record<string, unknown>;
   w.__eclipse = eclipseReport;
+  w.__eclipseRaw = eclipseRawReport;
   w.__orbitPhase = (key: string, angle: number) => phaseSetters[key]?.(angle);
   w.__orbitKeys = () => Object.keys(phaseSetters);
 }
@@ -668,7 +674,10 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       // The atmosphere must go out with the light — a lit limb over an eclipsed disc is
       // the giveaway that a shadow is painted on rather than cast.
       rimUniforms.uIntensity.value *= 1 - 0.8 * eclipse.current;
-      if (HUD_AVAILABLE) eclipseReport[spec.key] = +eclipse.current.toFixed(4);
+      if (HUD_AVAILABLE) {
+        eclipseReport[spec.key] = +eclipse.current.toFixed(4);
+        eclipseRawReport[spec.key] = +target.toFixed(4);
+      }
     }
     if (mesh.current) mesh.current.rotation.y += dt * 0.3;
   });
