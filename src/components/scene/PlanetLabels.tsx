@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
-import { planetPositions, planetRadii, PLANET_PAGES } from '@/lib/planetPositions';
+import { planetPositions, planetRadii, PLANET_PAGES, beltTourAnchor } from '@/lib/planetPositions';
 import { PLANET_SECTION, SECTIONS, sectionPath } from '@/lib/sections';
 import { BODY_FACTS, CV_HREF, DECORATIVE_BODIES } from '@/lib/bodyFacts';
 import { HUD_AVAILABLE } from './DebugHud';
@@ -39,9 +39,10 @@ const register = (key: string) => (el: HTMLElement | null) => {
   else nodes.delete(key);
 };
 
-/** World anchors for the belt marker (the belt has no body to hang a pill on). */
+/** World anchor for the belt marker in the overview (the belt has no body to hang a pill
+ *  on). The mobile tour's belt stop uses the LIVE anchor CameraRig writes instead — see
+ *  `beltTourAnchor`: that stop rides the band now, so a constant would strand the pill. */
 const BELT_ANCHOR = new THREE.Vector3(5.0, 0.15, 0);
-const BELT_TOUR_ANCHOR = new THREE.Vector3(1.4, 0.9, 0);
 
 const PAGE_KEYS = Object.keys(PLANET_PAGES);
 const TOUR_STOPS = SECTIONS.length;
@@ -199,7 +200,7 @@ export function PlanetLabelDriver() {
     if (belt) {
       if (!overviewOn || (st.tourMode && tourFocus !== 'belt')) hide(belt);
       else {
-        const { x, y } = project(st.tourMode ? BELT_TOUR_ANCHOR : BELT_ANCHOR, 0);
+        const { x, y } = project(st.tourMode ? beltTourAnchor : BELT_ANCHOR, 0);
         place(
           belt,
           Math.min(vw - 66, Math.max(66, x)),

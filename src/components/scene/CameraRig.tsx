@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { damp, damp3 } from 'maath/easing';
 import * as THREE from 'three';
 import { useScene, type Act } from '@/lib/sceneStore';
-import { planetPositions, planetRadii } from '@/lib/planetPositions';
+import { planetPositions, planetRadii, beltTourAnchor } from '@/lib/planetPositions';
 import { SECTIONS } from '@/lib/sections';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
@@ -79,6 +79,71 @@ const UP = new THREE.Vector3(0, 1, 0);
 const _orbOff = new THREE.Vector3();
 const _orbAxis = new THREE.Vector3();
 
+// --- B14: /technologies is the BELT world, so the belt has to be the shot ---------------
+// The old pose was a world-fixed point looking at (1.4, 0.2, 0) — which is a point two
+// units from the sun. So the page whose whole subject is the asteroid belt was framed on
+// the star, with the band as a thin arc somewhere behind it, and nothing in the screenshot
+// said "belt". It also ignored the solar root's own tilt and yaw entirely, so what little
+// band was in frame drifted out of alignment as the system turned.
+//
+// The camera now RIDES the ring: it sits just outside the dense zone and a little above
+// the plane, and looks along the band — yawed inward off the tangent so the ring curves
+// away into the distance instead of leaving the frame, and pitched down so the band reads
+// as a plane rather than a line. Measured against the belt's own annulus, that puts the
+// nearest visible grains ~2.6 units from the lens (past the near-dissolve floor, so the
+// foreground field actually draws) and carries the band out to ~10.5 units: a real
+// perspective recession, near to far, inside one frame.
+//
+// The sun stays out of it, which is the whole reason for the inward yaw being 26° and not
+// more: at this pose the star is 62° off the view axis and its limb clears the frame
+// corner by ~11°, so it lights the dust from the side without ever appearing. And the ride
+// direction mirrors with the writing direction — the band takes the side of the frame the
+// content panel does NOT (panel inline-start, band inline-end), same contract as the
+// planet worlds.
+//
+// The pose is expressed in the SOLAR ROOT's own frame and transformed out, so it tracks
+// the ecliptic's tilt and slow yaw instead of pretending the plane is world-flat.
+const BELT_RING_R = 5.1; // must match AsteroidBelt's BELT_R
+/**
+ * `out` — how far outside the ring centre the camera rides · `y` — height above the
+ * ecliptic · `yaw` — inward off the tangent (this is what keeps the receding ring in
+ * frame, and every degree of it walks the sun closer to the corner) · `pitch` — look-down
+ * onto the band, which also lifts the band UP the frame, so portrait uses more of it to
+ * clear the bottom content sheet.
+ */
+const BELT_RIDE = {
+  landscape: { out: 1.6, y: 1.35, yaw: 26 * DEG2RAD, pitch: 14 * DEG2RAD, fov: 46 },
+  portrait: { out: 0.9, y: 1.15, yaw: 26 * DEG2RAD, pitch: 26 * DEG2RAD, fov: 64 },
+  // The mobile tour's belt stop, which had the identical defect: it looked at (1.4,0.2,0)
+  // and so filled 44% of a phone screen with the SUN while the belt it was naming lay in
+  // a corner. Same ride, further out and higher, so the stop establishes the band and
+  // entering the world moves into it.
+  tour: { out: 1.3, y: 2.5, yaw: 32 * DEG2RAD, pitch: 16 * DEG2RAD, fov: 58 },
+};
+const BELT_DRIFT = 0.011; // rad/s the vantage creeps round the ring
+const _beltPos = new THREE.Vector3();
+const _beltLook = new THREE.Vector3();
+const _beltDir = new THREE.Vector3();
+type BeltRide = (typeof BELT_RIDE)['landscape'];
+/**
+ * A belt-riding pose in the SOLAR ROOT's OWN frame (the caller lifts it to world space so
+ * it tracks the ecliptic's tilt and yaw). `dirSign` is the direction of travel round the
+ * ring: reversing it mirrors the whole composition left-to-right, which is how the band
+ * ends up on the side of the frame the content panel does not use.
+ */
+function beltRidePose(pos: THREE.Vector3, look: THREE.Vector3, ride: BeltRide, dirSign: number, phi: number) {
+  const cs = Math.cos(phi), sn = Math.sin(phi);
+  pos.set(cs * (BELT_RING_R + ride.out), ride.y, sn * (BELT_RING_R + ride.out));
+  // tangent · cos(yaw) + inward · sin(yaw), then pitched down.
+  const cy = Math.cos(ride.yaw), sy = Math.sin(ride.yaw), cp = Math.cos(ride.pitch);
+  _beltDir.set(
+    (dirSign * -sn * cy - cs * sy) * cp,
+    -Math.sin(ride.pitch),
+    (dirSign * cs * cy - sn * sy) * cp
+  );
+  look.copy(pos).addScaledVector(_beltDir, 8);
+}
+
 // --- T7b mobile tour (portrait / coarse pointer) --------------------------------------
 // Portrait crops the wide overview to mostly-sun, so instead of shrinking the system (and
 // making planets untappable) we run a guided tour: a brief WIDE establishing shot, then
@@ -91,7 +156,6 @@ const EST_HOLD = 1.7;                   // s — how long the establishing shot 
 const EST_EASE = 1.4;                   // s — glide from establishing to the first stop
 const TOUR_FOV = 44;                    // per-stop fov
 const TOUR_FILL = 0.4;                  // planet ≈ 40% of viewport height (huge; leaves room for the label)
-const BELT_TOUR_FOV = 46;
 const _tourPos = new THREE.Vector3();
 const _tourLook = new THREE.Vector3();
 const _est = new THREE.Vector3();
@@ -146,6 +210,16 @@ export default function CameraRig() {
                                         // arrival dolly is scroll-driven (settle lands at scrollY=max)
   const mobileArriveT = useRef(0);      // T7b: clock time the establishing shot settled (0 = not yet)
   const orbit = useRef({ yaw: 0, pitch: 0 }); // damped drag-to-rotate offset (T6)
+  // The solar root, cached: the belt poses are expressed in its frame and would otherwise
+  // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
+  // replaced it (`parent === null` once three has detached the old one).
+  const solarRoot = useRef<THREE.Object3D | null>(null);
+  const beltRoot = (scene: THREE.Scene) => {
+    if (!solarRoot.current || !solarRoot.current.parent) {
+      solarRoot.current = scene.getObjectByName('solarRoot') ?? null;
+    }
+    return solarRoot.current;
+  };
   // Read the store via getState() inside the frame loop — subscribing with the hook
   // would re-render this component on every scroll tick.
   useFrame((state, delta) => {
@@ -317,14 +391,7 @@ export default function CameraRig() {
         else cam.position.set(0, 8, 21);
       }
       const pp = focused && focused !== 'belt' ? planetPositions.get(focused) : null;
-      if (focused === 'belt') {
-        // Technologies = the asteroid belt: a lower, closer glide skimming the belt.
-        _tgt.set(Math.sin(t * 0.05) * 0.8 - 2.4, 1.9 + Math.sin(t * 0.06) * 0.2, 7.6 + Math.cos(t * 0.05) * 0.5);
-        damp3(cam.position, _tgt, 0.6, dt);
-        damp(cam, 'fov', 46, 0.6, dt);
-        _look.set(1.4, 0.2, 0);
-        cam.lookAt(_look.x, _look.y, _look.z);
-      } else {
+      {
         const aspect = state.size.width / Math.max(1, state.size.height);
         const portrait = aspect < 1;
 
@@ -348,7 +415,22 @@ export default function CameraRig() {
         // no overview), so a focused world is never rotated by the offset.
         applyOrbit(_ovPos, _ovLook, orbit.current.yaw, orbit.current.pitch);
 
-        if (pp) {
+        if (focused === 'belt') {
+          // --- B14: ride the band (see BELT_RIDE) -------------------------------------
+          const ride = portrait ? BELT_RIDE.portrait : BELT_RIDE.landscape;
+          const dirSign = document.documentElement.dir === 'rtl' ? -1 : 1;
+          beltRidePose(_beltPos, _beltLook, ride, dirSign, t * BELT_DRIFT + 1.35);
+          _beltPos.y += Math.sin(t * 0.06) * 0.05; // a hair of float, so it breathes
+          const root = beltRoot(state.scene);
+          if (root) { root.localToWorld(_beltPos); root.localToWorld(_beltLook); }
+          // Departure scrub, same contract as a planet world: the meter eases the ride
+          // back out to the overview so the exit gesture is visible while it is happening.
+          _tgt.copy(_beltPos).lerp(_ovPos, departure);
+          _look.copy(_beltLook).lerp(_ovLook, departure);
+          damp3(cam.position, _tgt, 0.5, dt);
+          damp(cam, 'fov', ride.fov + (ovFov - ride.fov) * departure, 0.5, dt);
+          cam.lookAt(_look.x, _look.y, _look.z);
+        } else if (pp) {
           // --- ORBIT: the "Jupiter frame". The focused planet is the DOMINANT hero —
           // framed huge and pinned to the inline-END side (left in RTL / right in LTR),
           // its inner limb curving through the frame; the sun is pushed OFF-frame so it
@@ -420,9 +502,24 @@ export default function CameraRig() {
           const focus = SECTIONS[stopIdx].focus;
           let stopFov = TOUR_FOV;
           if (focus === 'belt') {
-            _tourPos.set(Math.sin(t * 0.05) * 0.8 - 2.4, 1.9 + Math.sin(t * 0.06) * 0.2, 7.6 + Math.cos(t * 0.05) * 0.5);
-            _tourLook.set(1.4, 0.2, 0);
-            stopFov = BELT_TOUR_FOV;
+            // B14: the belt stop rides the band too — from further out, so it establishes
+            // the ring and entering the world moves into it.
+            beltRidePose(_tourPos, _tourLook, BELT_RIDE.tour, document.documentElement.dir === 'rtl' ? -1 : 1, t * BELT_DRIFT + 1.35);
+            // Where this pose is actually aimed on the ring — the pill's anchor. Drop the
+            // sightline onto the ecliptic, then pull that point back onto the ring radius,
+            // so the label lands on the band the stop is showing rather than on a constant.
+            _beltDir.copy(_tourLook).sub(_tourPos).normalize();
+            const s = _beltDir.y < -1e-3 ? -_tourPos.y / _beltDir.y : 8;
+            beltTourAnchor.copy(_tourPos).addScaledVector(_beltDir, s);
+            beltTourAnchor.y = 0;
+            beltTourAnchor.setLength(BELT_RING_R);
+            const root = beltRoot(state.scene);
+            if (root) {
+              root.localToWorld(_tourPos);
+              root.localToWorld(_tourLook);
+              root.localToWorld(beltTourAnchor);
+            }
+            stopFov = BELT_RIDE.tour.fov;
           } else {
             const tp = planetPositions.get(focus);
             const tr = planetRadii.get(focus) ?? 0.4;
