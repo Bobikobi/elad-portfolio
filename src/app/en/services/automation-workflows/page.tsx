@@ -147,7 +147,7 @@ export default function AutomationWorkflowsPage() {
           href="/#contact"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
-          Let's Talk <ArrowLeft size={14} />
+          Let’s Talk <ArrowLeft size={14} />
         </Link>
       </section>
     </main>

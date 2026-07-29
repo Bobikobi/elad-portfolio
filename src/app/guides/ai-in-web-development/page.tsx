@@ -138,7 +138,7 @@ export default function AiInWebDevelopmentPage() {
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
         בינה מלאכותית כבר לא רק עוזרת לכתוב קוד — היא משנה את האופן שבו אתרים נבנים, מאובטחים, 
-        מדורגים ומשרתים משתמשים. מ-GEO (Generative Engine Optimization) ועד צ\'אטבוטים חכמים 
+        {"מדורגים ומשרתים משתמשים. מ-GEO (Generative Engine Optimization) ועד צ'אטבוטים חכמים"} 
         שעונים על שאלות בזמן אמת — AI הופך מחלק אופציונלי לחלק בלתי נפרד מפיתוח אתרים מודרני.
       </p>
 

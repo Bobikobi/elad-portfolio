@@ -171,7 +171,7 @@ export default function SeoForSmallBusinessPage() {
 
       {/* Quick checklist table */}
       <section className="mt-12">
-        <h2 className="mb-4 text-xl font-semibold text-[var(--color-text-primary)]">צ\'קליסט SEO מהיר</h2>
+        <h2 className="mb-4 text-xl font-semibold text-[var(--color-text-primary)]">{"צ'קליסט SEO מהיר"}</h2>
         <div className="overflow-x-auto rounded-xl border border-[var(--color-border-default)]">
           <table className="min-w-full border-collapse text-right text-sm">
             <thead>

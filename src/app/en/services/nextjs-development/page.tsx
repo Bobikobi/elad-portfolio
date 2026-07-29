@@ -132,7 +132,7 @@ export default function NextJsDevelopmentPage() {
         <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
           <h3 className="text-base font-medium text-[var(--color-text-primary)]">Can you upgrade what I have without rebuilding?</h3>
           <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-            Yes. We diagnose first: performance, architecture, SEO. Then improve in focused stages that don't break what works.
+            Yes. We diagnose first: performance, architecture, SEO. Then improve in focused stages that don’t break what works.
           </p>
         </article>
       </section>
@@ -141,13 +141,13 @@ export default function NextJsDevelopmentPage() {
       <section className="mt-14 flex flex-col gap-4 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-lg font-semibold text-[var(--color-text-primary)]">Have a Next.js project?</p>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Share the details and let's see what we can do together.</p>
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Share the details and let’s see what we can do together.</p>
         </div>
         <Link
           href="/#contact"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
-          Let's Talk <ArrowLeft size={14} />
+          Let’s Talk <ArrowLeft size={14} />
         </Link>
       </section>
     </main>

@@ -132,7 +132,7 @@ export default function AutomationWorkflowsPage() {
       <div className="mt-8 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
         <p className="text-sm leading-7 text-[var(--color-text-secondary)]">
           <strong className="text-[var(--color-text-primary)]">תשובה קצרה:</strong>{' '}
-          אוטומציה של תהליכים עסקיים — חיבור מערכות, סנכרון נתונים אוטומטי, שליחת התראות בזמן אמת, ויצירת דו"חות ללא מגע יד אדם. מתחילים מהתהליך הכי חוזר וכואב, ומודדים הצלחה בזמן שנחסך, ירידה בטעויות ועלייה בתפוקה.
+          אוטומציה של תהליכים עסקיים — חיבור מערכות, סנכרון נתונים אוטומטי, שליחת התראות בזמן אמת, {'ויצירת דו"חות ללא מגע יד אדם.'} מתחילים מהתהליך הכי חוזר וכואב, ומודדים הצלחה בזמן שנחסך, ירידה בטעויות ועלייה בתפוקה.
         </p>
       </div>
 

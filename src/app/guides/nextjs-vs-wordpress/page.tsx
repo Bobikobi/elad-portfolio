@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Zap, Shield, DollarSign, Gauge, ArrowLeft, Search } from 'lucide-react';
+import { Shield, DollarSign, Gauge, ArrowLeft, Search } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 

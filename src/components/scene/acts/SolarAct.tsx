@@ -252,44 +252,6 @@ const PLANETS: PlanetSpec[] = [
   { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 9.8, size: 0.42, speed: 0.0062, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
 ];
 
-// Kept for Pass B (Layout v2), where it returns as the reference poster's "cropped
-// giant" with CORRECT sun lighting. Unmounted for now: at the poster pose it faced the
-// camera with its far (unlit) side → a black sphere. Flip to true only once relit.
-const SHOW_FOREGROUND_ANCHOR = false;
-
-/** Foreground anchor — one big, near-static decorative planet cropped into a bottom
- *  corner (steals the "cropped giant" from the reference poster). It instantly makes
- *  the frame feel full and deep. Darker + desaturated so hierarchy stays clear; NOT
- *  clickable, no label. Lit by the sun so it has its own terminator. Lives outside
- *  the orbiting root group (world-fixed), drifting a hair. */
-function ForegroundAnchor() {
-  const ref = useRef<THREE.Group>(null);
-  const tex = useMemo(() => {
-    const tx = new THREE.TextureLoader().load('/textures/jupiter.jpg');
-    tx.colorSpace = THREE.SRGBColorSpace;
-    tx.anisotropy = 8;
-    return tx;
-  }, []);
-  useEffect(() => () => { tex.dispose(); }, [tex]);
-  useFrame((state, dt) => {
-    if (ref.current) {
-      ref.current.rotation.y += dt * 0.02;
-      // barely-there drift so it feels alive but never distracts
-      ref.current.position.x = -4.9 + Math.sin(state.clock.elapsedTime * 0.05) * 0.12;
-      ref.current.position.y = -3.1 + Math.cos(state.clock.elapsedTime * 0.04) * 0.1;
-    }
-  });
-  return (
-    <group ref={ref} position={[-4.9, -3.1, 4.6]}>
-      <mesh>
-        <sphereGeometry args={[2.35, 64, 64]} />
-        {/* darker + desaturated (grey tint) → clearly subordinate to the page-planets */}
-        <meshStandardMaterial map={tex} color="#6a6a72" roughness={0.95} metalness={0.02} />
-      </mesh>
-    </group>
-  );
-}
-
 // A3 / B13: atmospheric limb scattering, driven by the IMPACT PARAMETER rather than by a
 // fresnel term.
 //
@@ -821,8 +783,6 @@ export default function SolarAct() {
       <WorldBackdrop />
       {/* Section pills, the belt marker and the decorative-body tooltips all live in the
           DOM overlay now (PlanetLabels) — see the note there on frame ordering. */}
-      {/* World-fixed foreground giant — disabled until relit in Pass B (see flag). */}
-      {SHOW_FOREGROUND_ANCHOR && <ForegroundAnchor />}
     </>
   );
 }

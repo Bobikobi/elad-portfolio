@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Workflow, Clock, FileText, TrendingUp, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Workflow, Clock, FileText, TrendingUp, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 

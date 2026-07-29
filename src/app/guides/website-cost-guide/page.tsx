@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Calculator, Globe, Bot, Workflow, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Globe, Bot, Workflow, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master, main, 'feat/**', 'fix/**']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Blocking. Nothing that fails to type-check may reach a branch.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Not blocking YET, and the reason is written down rather than implied: there are
+      # 74 pre-existing errors, 50 of them react-hooks/purity on the procedural scene
+      # seeding (Math.random() inside useMemo across the galaxy, the belt, the dust and
+      # the sun). Clearing those means seeding a deterministic PRNG, which changes every
+      # generated position in the scene and so needs its own verified pass — not a commit
+      # that also does five other things. Until then this step reports and does not gate,
+      # and `--max-warnings 0` on a clean tree is the switch to flip.
+      - name: Lint (reporting only — see the note above)
+        run: pnpm lint
+        continue-on-error: true
+
+      - name: Lint debt budget (blocks NEW errors)
+        run: |
+          COUNT=$(pnpm exec eslint src --format json \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log(j.reduce((n,f)=>n+f.errorCount,0));})")
+          echo "eslint errors: $COUNT (budget 74)"
+          if [ "$COUNT" -gt 74 ]; then
+            echo "::error::Lint errors went UP ($COUNT > 74). The debt is allowed to shrink, never to grow."
+            exit 1
+          fi
