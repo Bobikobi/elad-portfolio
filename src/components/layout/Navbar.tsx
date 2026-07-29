@@ -155,17 +155,17 @@ export default function Navbar() {
                   href={sectionPath(sectionIds[item], locale)}
                   onClick={closeMenu}
                   aria-current={activeSection === item ? 'page' : undefined}
-                  className={`relative block text-sm px-1 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:rounded-md transition-colors ${
+                  className={`relative block text-sm px-1 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)] focus-visible:rounded-md transition-colors ${
                     activeSection === item
-                      ? 'text-white'
-                      : 'text-white/75 hover:text-white'
+                      ? 'text-[var(--color-core-gold)]'
+                      : 'text-[var(--color-star-white)]/75 hover:text-[var(--color-star-white)]'
                   }`}
                 >
                   {t(`nav.${item}`)}
                   {activeSection === item && (
                     <motion.span
                       layoutId="nav-indicator"
-                      className="absolute inset-x-0 -bottom-[2px] h-[2px] rounded-full bg-[var(--color-accent)]"
+                      className="absolute inset-x-0 -bottom-[2px] h-[2px] rounded-full bg-[var(--color-core-gold)]"
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                     />
                   )}
