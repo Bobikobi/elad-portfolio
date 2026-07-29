@@ -59,9 +59,11 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 // ease also guarantees the handover back to the envelope is a fade rather than a step,
 // however far the gate ran on during the stall.
 //
-// And since we are already holding the frame, we use it: gl.compile() on the first frame
-// after the swap forces every new material's program to build inside the covered window
-// instead of dribbling out as hitches over the following second.
+// A gl.compile() on the first frame after the swap was tried here and removed: it did
+// concentrate every new material's program build in one place, but it MOVED the cost
+// rather than removing it — the stall frame went from 984ms to 1926ms — and the hold
+// already covers those first draws, so the lazy compiles happen behind the curtain
+// regardless. Paying twice to be told the same thing is not an optimisation.
 const REVEAL_FRAMES = 8;
 const REVEAL_FADE = 0.35; // s
 
@@ -251,7 +253,6 @@ export default function CameraRig() {
   // schedule that assumes the swap was free.
   const revealHold = useRef(0);
   const revealFloor = useRef(0);
-  const compileAfterSwap = useRef(false);
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
   // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
   // replaced it (`parent === null` once three has detached the old one).
@@ -287,12 +288,6 @@ export default function CameraRig() {
     if (revealHold.current > 0) {
       revealHold.current -= 1;
       revealFloor.current = 1;
-      // The first frame after the swap: force every newly mounted material to compile now,
-      // inside the covered window, rather than hitching one at a time over the next second.
-      if (compileAfterSwap.current) {
-        compileAfterSwap.current = false;
-        state.gl.compile(state.scene, state.camera);
-      }
     } else if (revealFloor.current > 0) {
       revealFloor.current = Math.max(0, revealFloor.current - dt / REVEAL_FADE);
     }
@@ -312,7 +307,6 @@ export default function CameraRig() {
     const latchReveal = () => {
       revealHold.current = REVEAL_FRAMES;
       revealFloor.current = 1;
-      compileAfterSwap.current = true;
     };
 
     // --- T1: coverage-gated, bidirectional, ATOMIC galaxy↔solar swap --------------
