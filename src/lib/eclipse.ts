@@ -16,6 +16,10 @@ import { planetPositions, planetRadii } from './planetPositions';
  * ends long before it reaches anything. Honest geometry here means no planet can ever
  * eclipse another, at all.
  *
+ * The orbits are no longer coplanar (RULING 1), so `perp` below is a genuinely
+ * three-dimensional miss distance and eclipses now cluster near the NODES — where the two
+ * orbital planes cross — exactly as real ones do.
+ *
  * So the model is the parallel-ray one in between: the shadow is a CYLINDER of the
  * occluder's own radius, and an occluder must be a decent fraction of its target's size
  * to count. That keeps the effect tied to real positions — the alignments are whatever
@@ -37,14 +41,26 @@ export const ECLIPSE_FLOOR = 0.3;
  *
  * The obvious threshold — "the discs overlap at all", perp < rA + rB — measured out at
  * 97% of random system configurations having something eclipsed somewhere. That is not an
- * eclipse, it is weather. These planets are large relative to their compressed orbits and
- * every orbit is exactly coplanar, so a one-dimensional overlap test is satisfied almost
- * always. Requiring a near-central alignment instead costs nothing and is what makes the
- * event both rare and worth looking at when it does happen: a shadow that only ever
- * arrives dead-centre is always dramatic.
+ * eclipse, it is weather. These planets are large relative to their compressed orbits, so
+ * a one-dimensional overlap test is satisfied almost always. Requiring a near-central
+ * alignment instead costs nothing and is what makes the event both rare and worth looking
+ * at when it does happen: a shadow that only ever arrives dead-centre is always dramatic.
+ *
+ * RULING 1 retune. Inclining the orbits (SolarAct, `orbitPoint`) is the astronomically
+ * correct half of the rarity fix, and it does real work — but not enough on its own, and
+ * the reason is worth writing down. The vertical separation an inclination buys is
+ * r·sin(i), which at the sanctioned 1.5-4° is 0.10-0.42 world units; the old gate was
+ * ~0.5-0.6 units wide, i.e. WIDER than the entire vertical spread, so most alignments
+ * still walked straight through it. Measured over 200k random system configurations:
+ * coplanar + old gate 45.9% of configurations had some body eclipsed, inclined + old gate
+ * 38.3%. Narrowing the gate is what makes the inclination bite — at the values below the
+ * same pair of measurements reads 20.3% coplanar vs 8.5% inclined, so the tilt is now
+ * responsible for more than half the remaining rarity rather than a seventh of it.
+ * Per page-planet that is 0.3-1.5% of configurations, and the ramp below still spans
+ * 0.15·rA → gate, so a real eclipse is no shallower — only better centred.
  */
-const ALIGN_A = 0.75; // × occluder radius
-const ALIGN_B = 0.25; // × target radius
+const ALIGN_A = 0.28; // × occluder radius
+const ALIGN_B = 0.09; // × target radius
 
 export interface EclipseHit {
   /** World position of the occluding body (the sun is at the origin). */

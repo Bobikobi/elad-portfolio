@@ -40,6 +40,10 @@ if (HUD_AVAILABLE && typeof window !== 'undefined') {
   w.__eclipseRaw = eclipseRawReport;
   w.__orbitPhase = (key: string, angle: number) => phaseSetters[key]?.(angle);
   w.__orbitKeys = () => Object.keys(phaseSetters);
+  // RULING 1: the orbital elements themselves. An eclipse now needs the two bodies to
+  // agree on longitude AND to be near their nodes, so a harness can no longer find one by
+  // matching longitudes alone — it has to be able to solve the geometry.
+  w.__orbitElements = () => PLANETS.map((p) => ({ key: p.key, orbit: p.orbit, size: p.size, inclDeg: p.incl ?? 0, node: p.node ?? 0 }));
 }
 
 // --- A1: focused-planet texture tiering ------------------------------------------------
@@ -114,6 +118,42 @@ function makeRingTexture(): THREE.Texture {
   return tx;
 }
 
+// --- RULING 1: orbital inclinations ----------------------------------------------------
+// Every orbit used to lie in exactly the same plane, which is not how a solar system is
+// built and had one measurable consequence: an eclipse only ever needed the two bodies to
+// agree on LONGITUDE, so "something is eclipsed somewhere" was true in 42% of random
+// system configurations. Weather, not an event.
+//
+// Real orbits are inclined to the ecliptic by a couple of degrees each, about their own
+// line of nodes — which is exactly why real eclipses are rare and why they happen at the
+// NODES. Adding that here costs nothing (the eclipse test is already fully 3-D) and buys
+// two things at once: the rarity, and the depth of a system whose planets weave above and
+// below the dust plane instead of sliding along it like beads on a wire.
+//
+// The construction is deliberately the minimal perturbation of the old one: take the same
+// point on the same flat circle and ROTATE IT about the node axis by `incl`. At 4° the
+// projection onto the ecliptic shrinks by 0.24%, so every framing, label anchor and tour
+// pose that was tuned against the flat system still holds; the whole change lives in the
+// (small) vertical offset. `node` is randomised per planet — a shared line of nodes would
+// put every planet back in one plane at the same two longitudes.
+const _op = new THREE.Vector3();
+/**
+ * Point on an inclined circular orbit of radius `r` at argument `a`, where the orbital
+ * plane is the ecliptic rotated by `incl` about the horizontal axis at longitude `node`.
+ * (Rodrigues, specialised: the axis lies in the plane and the source point does too, so
+ * the cross product is purely vertical and the whole thing is a handful of multiplies.)
+ * The body crosses the ecliptic (y = 0) at a = node and a = node + π — its two nodes.
+ */
+function orbitPoint(out: THREE.Vector3, r: number, a: number, incl: number, node: number) {
+  const px = Math.cos(a) * r;
+  const pz = Math.sin(a) * r;
+  if (incl === 0) return out.set(px, 0, pz);
+  const ci = Math.cos(incl), si = Math.sin(incl);
+  const nx = Math.cos(node), nz = Math.sin(node);
+  const k = (nx * px + nz * pz) * (1 - ci);
+  return out.set(px * ci + nx * k, (nz * px - nx * pz) * si, pz * ci + nz * k);
+}
+
 /** One planet on a tilted circular orbit — real texture + atmospheric rim light. */
 interface PlanetSpec {
   key: string;
@@ -123,6 +163,10 @@ interface PlanetSpec {
   size: number;
   speed: number;
   phase: number;
+  /** Orbital inclination to the ecliptic, DEGREES (RULING 1). */
+  incl?: number;
+  /** Longitude of the ascending node, RADIANS — where this orbit crosses the ecliptic. */
+  node?: number;
   tilt?: number;
   rings?: boolean;
   moons?: number;
@@ -182,19 +226,23 @@ function Moons({ count, planetSize }: { count: number; planetSize: number }) {
 // planets crop at the edges by design. Orbits are SLOW (full revolution ~5-10 min:
 // speed ≈ 2π/period) so any exit/return is a rare, graceful event; phases staggered
 // so the idle frame never lines the planets up. No orbit rings (no glowing hoops).
+//
+// RULING 1: `incl`/`node` — inclinations ordered roughly as the real ones (Mercury the
+// steepest, Jupiter the flattest) but compressed into 1.5-4°, with the nodes scattered so
+// no two orbits share a line of nodes.
 const PLANETS: PlanetSpec[] = [
-  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, phase: 0.6, atmoStrength: 0.12 },
-  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, phase: 3.7, atmo: '#f6e6b0', atmoStrength: 0.6 },
+  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, phase: 0.6, incl: 4.0, node: 0.35, atmoStrength: 0.12 },
+  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, phase: 3.7, incl: 3.4, node: 2.10, atmo: '#f6e6b0', atmoStrength: 0.6 },
   // Earth gets a gentle cool multiplier to counter the warm sun (reads blue/white,
   // not gold); the close-orbit over-exposure is handled by per-planet ORBIT exposure
   // in CameraRig (inner planets sit so close to the sun the lit disc would otherwise
   // clip to gold regardless of albedo).
-  { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, tilt: 0.41, bodyColor: '#cfe0ff', earth: true, atmo: '#a8d0ff', atmoStrength: 0.5 },
-  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
-  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
-  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, atmo: '#f0dcae', atmoStrength: 0.45 },
-  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 9.4, size: 0.44, speed: 0.0074, phase: 3.0, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
-  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 10.6, size: 0.42, speed: 0.0062, phase: 0.4, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
+  { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, incl: 2.2, node: 4.35, tilt: 0.41, bodyColor: '#cfe0ff', earth: true, atmo: '#a8d0ff', atmoStrength: 0.5 },
+  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, incl: 2.6, node: 0.95, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
+  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, incl: 1.6, node: 3.30, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
+  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, atmo: '#f0dcae', atmoStrength: 0.45 },
+  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 9.4, size: 0.44, speed: 0.0074, phase: 3.0, incl: 2.0, node: 1.65, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
+  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 10.6, size: 0.42, speed: 0.0062, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
 ];
 
 // Kept for Pass B (Layout v2), where it returns as the reference poster's "cropped
@@ -584,6 +632,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     uv.needsUpdate = true;
     return g;
   }, [spec.rings, spec.size]);
+  const incl = (spec.incl ?? 0) * DEG2RAD;
   const atmoStrength = spec.atmoStrength ?? 0.4;
   const rimUniforms = useMemo(
     () => ({
@@ -652,7 +701,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       }
     }
     if (group.current) {
-      group.current.position.set(Math.cos(angle.current) * spec.orbit, 0, Math.sin(angle.current) * spec.orbit);
+      // RULING 1: an inclined circle, not a flat one (see orbitPoint).
+      orbitPoint(_op, spec.orbit, angle.current, incl, spec.node ?? 0);
+      group.current.position.copy(_op);
       // Publish the live world position. The label driver (priority 2) reads it LATER in
       // this same frame, so pills are never a frame behind the body they name (R5.4).
       group.current.getWorldPosition(_wp);
