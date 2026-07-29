@@ -549,10 +549,16 @@ export default function CameraRig() {
     const setCoverage = (v: number) => {
       const wanted = Math.max(v, held);
       const out = wanted >= covOut.current ? wanted : Math.max(wanted, covOut.current - fadeDt / REVEAL_FADE);
-      // The fade's own clock: it runs only while the curtain is actually coming down, and any
-      // rise (a new crossing, a reconcile covering up again) starts it over.
+      // The fade's budget counts fade APPLIED, not time elapsed — `fadeDt`, not `dt`. Charging
+      // it wall-clock had the same shape as every other bug this round: a single long frame in
+      // the middle of the fade spent the whole budget without drawing the fade, so the next
+      // frame found the budget exhausted, stopped shaping, and finished the dissolve in one
+      // step. Measured: a 396ms frame took coverage 0.686 → 0 and the reveal collapsed to two
+      // frames. Since each frame drops exactly `fadeDt / REVEAL_FADE`, accumulating `fadeDt`
+      // makes the budget mean what it says: the fade is spent when it has actually been spent.
+      // Any rise (a new crossing, a reconcile covering up again) starts it over.
       if (out >= covOut.current) fadeAge.current = 0;
-      else fadeAge.current += dt;
+      else fadeAge.current += fadeDt;
       covOut.current = out;
       if (HUD_AVAILABLE) {
         (window as unknown as { __reveal?: unknown }).__reveal = {
