@@ -658,7 +658,7 @@ export default function SolarAct() {
           <Planet key={p.key} spec={p} />
         ))}
         {/* Cost-only tier split (the composition LAW): identical belt, fewer bodies. */}
-        <AsteroidBelt count={high ? 12000 : 4200} />
+        <AsteroidBelt count={high ? 17000 : 6000} />
       </group>
       {/* A4: per-world nebula backdrop (world-fixed, shows only while a world is focused). */}
       <WorldBackdrop />

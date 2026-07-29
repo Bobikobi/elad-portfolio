@@ -167,6 +167,13 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     []
   );
 
+  const bandGeo = useMemo(() => new THREE.RingGeometry(R_MIN - 0.45, R_MAX + 0.45, 220, 3), []);
+  useEffect(() => () => bandGeo.dispose(), [bandGeo]);
+  const bandUniforms = useMemo(
+    () => ({ uTime: { value: 0 }, uChrome: chromeRects, uChromeN: chromeCount }),
+    []
+  );
+
   useLayoutEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -300,6 +307,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     if (groupRef.current) groupRef.current.rotation.y += dt * 0.025;
     updateChromeRects(state.gl);
     dustUniforms.uTime.value = state.clock.elapsedTime;
+    bandUniforms.uTime.value = state.clock.elapsedTime;
     // px per world unit at one unit of depth — kept live so the clamp survives a DPR
     // change from AdaptiveDpr (cost may vary per tier; the reading must not).
     dustUniforms.uProjScale.value =
@@ -321,6 +329,24 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         <meshStandardMaterial roughness={0.95} metalness={0.0} flatShading onBeforeCompile={onBeforeCompile} />
       </instancedMesh>
 
+      {/* The glowing dust band. Grains alone still resolve as countable specks; what makes
+          a belt read as a BELT is the unresolved dust between them, which no point cloud
+          can supply because every point is by definition resolved. So the connective glow
+          is one annulus with a gaussian radial profile and the same five-stream angular
+          clumping as the bodies (it shares the group, so the clumps stay registered with
+          the rocks that made them). Additive, never depth-written, and clamped low. */}
+      <mesh geometry={bandGeo} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} raycast={() => null}>
+        <shaderMaterial
+          uniforms={bandUniforms}
+          vertexShader={bandVert}
+          fragmentShader={bandFrag}
+          transparent
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
       {/* Dust: the nine-in-ten of the belt that is too small to be an object. Additive and
           depth-TESTED (never depth-written) so a planet still occludes it, but a dense
           stretch of it glows the way a real dust band catches sunlight. */}
@@ -337,6 +363,65 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     </group>
   );
 }
+
+const bandVert = /* glsl */ `
+  varying vec3 vWPos;
+  varying vec2 vLocal;
+  varying float vDepth;
+  void main() {
+    vLocal = position.xy;                       // ring-plane coords, before the -90° tilt
+    vec4 wp = modelMatrix * vec4( position, 1.0 );
+    vWPos = wp.xyz;
+    vec4 mv = viewMatrix * wp;
+    vDepth = -mv.z;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const bandFrag = /* glsl */ `
+  ${chromeMaskGLSL}
+  uniform float uTime;
+  varying vec3 vWPos;
+  varying vec2 vLocal;
+  varying float vDepth;
+
+  float h( vec2 p ){ return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
+  float n( vec2 p ){
+    vec2 i = floor( p ), f = fract( p ), u = f * f * ( 3.0 - 2.0 * f );
+    return mix( mix( h( i ), h( i + vec2( 1, 0 ) ), u.x ),
+                mix( h( i + vec2( 0, 1 ) ), h( i + vec2( 1, 1 ) ), u.x ), u.y );
+  }
+
+  void main() {
+    float r = length( vLocal );
+    // The rotation that lays the ring into the ecliptic maps local (x,y) to world (x,-y),
+    // so the seeding angle is the negated local one — that is what keeps the streams here
+    // registered with the streams in the point cloud.
+    float a = atan( -vLocal.y, vLocal.x );
+
+    float prof = exp( -pow( ( r - ${BELT_R.toFixed(2)} ) / 0.30, 2.0 ) );
+    prof *= smoothstep( ${(R_MIN - 0.45).toFixed(2)}, ${(R_MIN - 0.05).toFixed(2)}, r )
+          * ( 1.0 - smoothstep( ${(R_MAX + 0.05).toFixed(2)}, ${(R_MAX + 0.45).toFixed(2)}, r ) );
+
+    // Five-lobe stream modulation (the same CLUSTERS the bodies use) plus a slow drifting
+    // noise, so the band is never a uniform hoop and never sits still.
+    float streams = 0.82 + 0.18 * cos( ${CLUSTERS.toFixed(1)} * a );
+    float grain = n( vec2( a * 4.0 + uTime * 0.012, r * 3.0 ) );
+    float density = prof * streams * ( 0.72 + 0.42 * grain );
+
+    // Forward scattering: dust between the eye and the star is what actually glows.
+    vec3 toEye = normalize( cameraPosition - vWPos );
+    vec3 lightDir = normalize( vWPos );          // the sun sits at this group's origin
+    float scatter = 0.38 + 0.62 * pow( max( dot( toEye, lightDir ), 0.0 ), 2.2 );
+
+    float near = smoothstep( ${NEAR_GONE.toFixed(2)}, ${NEAR_FULL.toFixed(2)}, vDepth );
+    float alpha = density * scatter * near * 0.13 * chromeKeep( gl_FragCoord.xy );
+    if ( alpha < 0.002 ) discard;
+    gl_FragColor = vec4( vec3( 0.62, 0.50, 0.38 ), alpha );
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
 
 const dustVert = /* glsl */ `
   uniform float uTime;
