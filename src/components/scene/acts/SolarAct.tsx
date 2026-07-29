@@ -10,7 +10,7 @@ import { PLANET_SECTION, sectionPath } from '@/lib/sections';
 import { BODY_FACTS } from '@/lib/bodyFacts';
 import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from '../DebugHud';
-import { eclipseFor } from '@/lib/eclipse';
+import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
@@ -508,10 +508,11 @@ function Planet({ spec }: { spec: PlanetSpec }) {
              vec3 rayDir = normalize( vWPosP );          // the sun sits at the origin
              float along = dot( uOccPos, rayDir );
              if ( along > 0.0 ) {
+               // Parallel rays (see lib/eclipse.ts): the shadow keeps the occluder's own
+               // width instead of a point source's ever-growing cone.
                float perp = length( uOccPos - rayDir * along );
-               float sr = uOccR * ( length( vWPosP ) / max( along, 0.001 ) );
-               float lit = smoothstep( sr * 0.55, sr * 1.20, perp );
-               outgoingLight *= mix( 1.0, mix( 0.07, 1.0, lit ), uEclipse );
+               float lit = smoothstep( uOccR * 0.45, uOccR * 1.25, perp );
+               outgoingLight *= mix( 1.0, mix( ${ECLIPSE_FLOOR.toFixed(2)}, 1.0, lit ), uEclipse );
              }
            }
          }

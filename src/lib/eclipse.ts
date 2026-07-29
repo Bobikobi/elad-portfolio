@@ -4,18 +4,33 @@ import { planetPositions, planetRadii } from './planetPositions';
 /**
  * Inter-planet eclipses — analytic, per frame, essentially free.
  *
- * The sun is a POINT light at the origin, so a planet's shadow is a cone that GROWS with
- * distance: an occluder of radius rA at |a| casts a shadow of radius rA·L/|a| at distance
- * L. That single fact is the whole test. For a body B we ask which other body A lies
- * between it and the star, and how far A's centre sits from the sun→B line compared with
- * the shadow radius out at B. It costs one dot product and one length per pair, 56 pairs,
- * and it is exact rather than scripted — the alignments are whatever the orbits actually
- * produce, which is why they are rare and worth watching for.
+ * A note on the model, because the obvious one is wrong here. Treating the sun as a POINT
+ * source makes a shadow cone that GROWS with distance (radius rA·L/|a|), and in a system
+ * this compressed that turns every rough alignment into a total eclipse: Mercury, radius
+ * 0.16, would throw a 0.52-unit shadow out at Jupiter's orbit and black out a 0.64-unit
+ * planet. Measured on the alias, Neptune sat at strength 1.0 in the resting frame — a
+ * permanently dark planet.
+ *
+ * The physically exact model is worse for the opposite reason. This sun has radius 1.5
+ * while Mercury orbits at 1.95, so the true umbra behind Mercury is 0.23 units long and
+ * ends long before it reaches anything. Honest geometry here means no planet can ever
+ * eclipse another, at all.
+ *
+ * So the model is the parallel-ray one in between: the shadow is a CYLINDER of the
+ * occluder's own radius, and an occluder must be a decent fraction of its target's size
+ * to count. That keeps the effect tied to real positions — the alignments are whatever
+ * the orbits produce, never scripted — while making it rare and partial, which is what a
+ * shadow sweeping a disc should be.
  *
  * The result is not "dim the planet". The occluder's position and radius go to the
- * planet's own shader, which recomputes the same cone PER FRAGMENT and gets a real curved
- * penumbra sweeping across the sphere.
+ * planet's own shader, which recomputes the same geometry PER FRAGMENT and gets a real
+ * curved penumbra sweeping across the sphere.
  */
+
+/** An occluder smaller than this fraction of its target casts nothing worth drawing. */
+const MIN_SIZE_RATIO = 0.45;
+/** How dark the deepest point of a shadow gets. Not zero: this is a partial eclipse. */
+export const ECLIPSE_FLOOR = 0.3;
 
 export interface EclipseHit {
   /** World position of the occluding body (the sun is at the origin). */
@@ -48,6 +63,7 @@ export function eclipseFor(key: string, pos: THREE.Vector3, radius: number): Ecl
     if (other === key) return;
     const rA = planetRadii.get(other);
     if (!rA) return;
+    if (rA < radius * MIN_SIZE_RATIO) return; // too small to matter at this scale
     _a.copy(a);
     const distA = _a.length();
     if (distA >= distB) return; // an occluder has to be nearer the star than its target
@@ -58,10 +74,10 @@ export function eclipseFor(key: string, pos: THREE.Vector3, radius: number): Ecl
 
     _perp.copy(pos).multiplyScalar(t).sub(_a);
     const perp = _perp.length(); // A's centre off the sun→B line
-    const shadowR = rA * (distB / distA); // the cone at B's distance
-    if (perp > shadowR + radius * 1.5) return;
+    const shadowR = rA; // parallel rays: the shadow keeps the occluder's own width
+    if (perp > shadowR + radius) return;
 
-    const strength = 1 - smooth(shadowR * 0.85, shadowR + radius * 1.3, perp);
+    const strength = 1 - smooth(shadowR * 0.5, shadowR + radius * 0.9, perp);
     if (strength <= 0.002) return;
     if (!best || strength > best.strength) best = { occ: a, occR: rA, strength };
   });
