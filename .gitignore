@@ -68,6 +68,7 @@ security-reports/
 /_*.mjs
 /_*.sh
 /_*.png
+/_*.json
 
 # local visual-verification chrome profile (never commit)
 .automation-profile/
