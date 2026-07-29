@@ -36,6 +36,50 @@ const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupite
 // Ringed worlds need a much higher vantage so the rings open up instead of reading
 // edge-on (invisible). Others keep a low, "look up at a world" angle.
 const RINGED = new Set(['saturn']);
+const ORBIT_LIFT = (key: string) => (RINGED.has(key) ? 0.72 : 0.35);
+
+// --- The lit side is a target, not a hope --------------------------------------------
+// The ORBIT vantage was built as "sit A radians off the lit direction, then add a fixed
+// vertical lift". Both halves are reasonable and together they are not: the lift is a
+// CONSTANT added to a direction whose own y-component swings ±0.44 as the body orbits
+// inside a system tilted 0.42rad. So the phase angle — the thing that decides how much of
+// the disc is lit — came out as a function of where the planet happened to be.
+//
+// Measured on the alias across twelve orbital positions, Saturn's visible disc ran from
+// 45.7% lit to 71.7%, tracking sunDir.y exactly: darkest at +0.44, brightest at −0.44.
+// /projects therefore showed a mostly-NIGHT hero for half of every revolution, which is
+// not a composition anyone chose.
+//
+// So state the intent and solve for the azimuth that delivers it. With `c` the lift, `s`
+// the sun direction's y and `k` the target cos(phase), the vantage
+//     v = −sunDir·cos A + side·sin A + UP·c
+// gives cos(phase) = (cos A − c·s) / |v|, and setting that equal to k is a quadratic in
+// cos A with the closed form below. The phase is then EXACT at every orbital position and
+// the azimuth does the moving — which is what "favor the lit side" means geometrically.
+//
+// Rarely is a wobble worth keeping, but this one is: the terminator wandering across the
+// disc is what stops a world looking like a still. So the TARGET breathes instead of the
+// azimuth, which keeps the wander and still guarantees the floor.
+const LIT_TARGET: Record<string, number> = {
+  saturn: 0.80, // the ruling: a clearly lit hero, ≥70% at every position
+};
+const LIT_DEFAULT = 0.74; // ≥0.70 after the wobble — never darker than these worlds are now
+const LIT_WOBBLE = 0.04;
+/**
+ * Azimuth (radians off the lit direction) that puts a fraction `lit` of the disc in
+ * daylight, given the vertical lift and the sun direction's own y-component.
+ */
+function azimuthForLit(lit: number, lift: number, sunY: number): number {
+  const k = 2 * clamp01(lit) - 1;              // target cos(phase angle)
+  const cs = lift * sunY;
+  const b = cs * (1 - k * k);
+  const disc = b * b - cs * cs + k * k * (1 + lift * lift);
+  // The + root is the near-side solution (small azimuth = closer to the sun-camera line,
+  // which also pushes the sun further BEHIND the camera — so the off-frame rule gets
+  // safer, never tighter, as the target rises).
+  const x = b + Math.sqrt(Math.max(0, disc));
+  return Math.acos(clamp01(Math.abs(x)) * Math.sign(x || 1));
+}
 const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
 // --- B7: the arrival, and why the curtain kept being torn open ---------------------------
@@ -542,16 +586,27 @@ export default function CameraRig() {
           // ~72° off the lit direction: sits further behind the lit side so the sun (and
           // its off-frame bloom) is pushed fully out of frame — it was still bleeding a
           // warm glow into the top corner at 60° (F3). Terminator still crosses the disc.
-          // B5 "eclipse beat": the vantage angle breathes ±6° on a slow irregular cycle,
-          // so the terminator WANDERS across the disc instead of sitting where it was
-          // placed. The sun stays 103-115° off-view throughout, i.e. still fully outside
-          // the frustum — this buys a living light without touching the framing.
-          const A = 1.25 + Math.sin(t * 0.055) * 0.075 + Math.sin(t * 0.021 + 1.7) * 0.035;
+          // The azimuth is SOLVED for a target lit fraction rather than fixed — see
+          // azimuthForLit. A fixed angle plus a fixed vertical lift produced a phase that
+          // swung with the body's own orbital height (Saturn measured 45.7%..71.7% lit),
+          // so /projects showed a mostly-night hero for half of every revolution.
+          //
+          // B5's "eclipse beat" survives, moved one level up: the TARGET breathes on the
+          // same slow irregular cycle, so the terminator still wanders across the disc,
+          // but it wanders between two lit fractions we chose instead of wherever the
+          // orbit put it. The sun only gets further behind the camera as the target rises,
+          // so the off-frame rule is never at risk from this.
+          const lift = ORBIT_LIFT(focused as string);
+          const litTarget =
+            (LIT_TARGET[focused as string] ?? LIT_DEFAULT) +
+            Math.sin(t * 0.055) * LIT_WOBBLE * 0.62 +
+            Math.sin(t * 0.021 + 1.7) * LIT_WOBBLE * 0.38;
+          const A = azimuthForLit(litTarget, lift, _sunDir.y);
           _camDir.copy(_sunDir).multiplyScalar(-Math.cos(A));
           _camDir.addScaledVector(_side, Math.sin(A) * sideSign);
           // Elevation: ringed worlds get a high vantage so the rings open up (edge-on
           // rings read as nothing); others keep a low "look up at a world" angle.
-          _camDir.y += RINGED.has(focused as string) ? 0.72 : 0.35;
+          _camDir.y += lift;
           _camDir.normalize();
           _orbitPos.copy(pp).addScaledVector(_camDir, d);
           _orbitPos.x += Math.sin(t * 0.2) * 0.03 * d; // living micro-drift
