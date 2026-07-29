@@ -31,23 +31,25 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      # Not blocking YET, and the reason is written down rather than implied: there are
-      # 74 pre-existing errors, 50 of them react-hooks/purity on the procedural scene
-      # seeding (Math.random() inside useMemo across the galaxy, the belt, the dust and
-      # the sun). Clearing those means seeding a deterministic PRNG, which changes every
-      # generated position in the scene and so needs its own verified pass — not a commit
-      # that also does five other things. Until then this step reports and does not gate,
-      # and `--max-warnings 0` on a clean tree is the switch to flip.
-      - name: Lint (reporting only — see the note above)
+      # BLOCKING as of the grade round. The debt this step used to tolerate is gone: the 74
+      # errors were 50 react-hooks/purity from Math.random() seeding the procedural scene
+      # (now one seeded mulberry32 in lib/rng.ts), 7 non-inline useMemo callbacks, 6 refs
+      # written during render, 5 immutability errors from mutating memoised uniform objects,
+      # and 7 set-state-in-effect from browser values read a render too late. One documented
+      # exemption survives, in Hero — see the comment there.
+      #
+      # The budget below stays as a second gate rather than being deleted, because "blocking
+      # lint" and "zero errors" are not the same promise: an inline eslint-disable satisfies
+      # the first and not the second. The budget is what keeps the count at zero.
+      - name: Lint (blocking)
         run: pnpm lint
-        continue-on-error: true
 
-      - name: Lint debt budget (blocks NEW errors)
+      - name: Lint debt budget (must stay at zero)
         run: |
           COUNT=$(pnpm exec eslint src --format json \
             | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log(j.reduce((n,f)=>n+f.errorCount,0));})")
-          echo "eslint errors: $COUNT (budget 74)"
-          if [ "$COUNT" -gt 74 ]; then
-            echo "::error::Lint errors went UP ($COUNT > 74). The debt is allowed to shrink, never to grow."
+          echo "eslint errors: $COUNT (budget 0)"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::Lint errors ($COUNT). The budget is zero — fix it or justify a scoped disable with a written reason."
             exit 1
           fi

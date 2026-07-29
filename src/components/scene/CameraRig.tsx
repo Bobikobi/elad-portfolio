@@ -35,8 +35,6 @@ const DEV = process.env.NODE_ENV !== 'production';
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
 const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
-// Ringed worlds open against their OWN ring plane; every other world against the ecliptic.
-const RINGED = new Set(['saturn']);
 
 // --- The ORBIT vantage is SOLVED, not dialled in --------------------------------------
 // The old construction was "sit A radians off the lit direction, then add a fixed vertical

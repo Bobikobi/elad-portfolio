@@ -59,22 +59,26 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
   const side = isRTL ? 'start-6' : 'end-6';
 
   const [open, setOpen] = useState(false);
-  const [state, setState] = useState<A11yState>(DEFAULT_STATE);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  // Load saved state from localStorage
-  useEffect(() => {
+  // Restored in the state INITIALISER, not by setting state from an effect. The saved
+  // settings are known before the first client render, so reading them there means the
+  // visitor's chosen font size and contrast are applied on that render instead of on a second
+  // one — the old version rendered every page at default size first, then corrected, which is
+  // a visible reflow for exactly the visitors least able to tolerate one.
+  //
+  // Safe against hydration mismatch because nothing here is in the server markup: the panel
+  // is closed until opened, and the settings are applied to <html> by the effect below. The
+  // guard is for SSR, where there is no localStorage at all.
+  const [state, setState] = useState<A11yState>(() => {
+    if (typeof window === 'undefined') return DEFAULT_STATE;
     try {
       const saved = localStorage.getItem('a11y-settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setState(prev => ({ ...prev, ...parsed }));
-      }
+      return saved ? { ...DEFAULT_STATE, ...JSON.parse(saved) } : DEFAULT_STATE;
     } catch {
-      // Ignore parse errors
+      return DEFAULT_STATE; // unparseable or storage blocked
     }
-  }, []);
+  });
+  const panelRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   // Apply state to DOM and persist
   useEffect(() => {

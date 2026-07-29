@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
@@ -38,15 +38,16 @@ export const HUD_AVAILABLE = process.env.NEXT_PUBLIC_VERCEL_ENV !== 'production'
  * page is opened with `?hud=1`. Returns a constant `false` when !HUD_AVAILABLE so the
  * production bundle never wires up the query listener.
  */
+const hudSubscribe = () => () => {}; // dev mode and ?hud= cannot change while the page is open
+const hudOff = () => false;
+const hudOn = () => HUD_AVAILABLE && (process.env.NODE_ENV !== 'production' || new URLSearchParams(window.location.search).has('hud'));
+
 export function useHudEnabled(): boolean {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    if (!HUD_AVAILABLE) return;
-    const dev = process.env.NODE_ENV !== 'production';
-    const hudQuery = new URLSearchParams(window.location.search).has('hud');
-    setOn(dev || hudQuery);
-  }, []);
-  return on;
+  // The query string is not state — it is read-only, external, and fixed for the page's life.
+  // As `useState` + effect it was the `set-state-in-effect` error, and the server snapshot of
+  // `false` is exactly what the old initial value already was, so nothing about the rendered
+  // output changes: the HUD still appears only after hydration.
+  return useSyncExternalStore(hudSubscribe, hudOn, hudOff);
 }
 
 const DEG2RAD = Math.PI / 180;
@@ -105,17 +106,18 @@ const _p = new THREE.Vector3();
 export function HudProbe() {
   const gl = useThree((s) => s.gl);
   const lastRead = useRef(0);
-  const c2 = useRef<HTMLCanvasElement | null>(null);
-  const ctx2 = useRef<CanvasRenderingContext2D | null>(null);
-  if (!c2.current) {
-    c2.current = document.createElement('canvas');
+  // The readback canvas is created once, in a memo rather than by lazily filling refs during
+  // render — writing to a ref during render is the `refs` error, and there is nothing
+  // ref-shaped about this: it is a derived value with no dependencies.
+  const readback = useMemo(() => {
+    const canvas = document.createElement('canvas');
     // Must match the sample block below. It was 4x4 while `sample` draws and reads a
     // 10x10 block, so 84 of every 100 pixels came back as out-of-canvas transparent
     // black and every corner reading was fiction.
-    c2.current.width = CORNER_BLOCK;
-    c2.current.height = CORNER_BLOCK;
-    ctx2.current = c2.current.getContext('2d', { willReadFrequently: true });
-  }
+    canvas.width = CORNER_BLOCK;
+    canvas.height = CORNER_BLOCK;
+    return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: true }) };
+  }, []);
 
   useFrame((state, dt) => {
     const cam = state.camera as THREE.PerspectiveCamera;
@@ -161,7 +163,7 @@ export function HudProbe() {
     // Throttled to ~5Hz — readPixels is a GPU stall. Reads the previous frame (priority 0
     // useFrame runs before R3F's auto-render), which is invisible for a diagnostic.
     const now = performance.now();
-    if (now - lastRead.current > 200 && ctx2.current) {
+    if (now - lastRead.current > 200 && readback.ctx) {
       lastRead.current = now;
       try {
         const src = gl.domElement; // WebGL canvas (post-processed; needs preserveDrawingBuffer)
@@ -172,9 +174,9 @@ export function HudProbe() {
         // outermost pixel which the strong vignette crushes to pure black.
         const s = CORNER_BLOCK, m = Math.round(Math.min(W, H) * 0.03);
         const sample = (x: number, y: number) => {
-          ctx2.current!.clearRect(0, 0, s, s);
-          ctx2.current!.drawImage(src, x, y, s, s, 0, 0, s, s);
-          const data = ctx2.current!.getImageData(0, 0, s, s).data;
+          readback.ctx!.clearRect(0, 0, s, s);
+          readback.ctx!.drawImage(src, x, y, s, s, 0, 0, s, s);
+          const data = readback.ctx!.getImageData(0, 0, s, s).data;
           let lum = 0;
           for (let i = 0; i < s * s; i++) {
             lum += (0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2]) / 255;

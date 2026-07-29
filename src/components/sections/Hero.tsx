@@ -102,6 +102,16 @@ function GalaxyHome() {
     const fresh = !sessionEntered && !enteredOnAWorld();
     sessionEntered = true;
     const seen = !fresh && sessionStorage.getItem('seen-intro') === '1';
+    // The one set-state-in-effect left in the codebase, and it is deliberate — everything else
+    // that tripped this rule was a browser value being read a render too late, but this is the
+    // case the rule cannot express. The decision needs `sessionEntered`, a module flag this
+    // effect MUTATES, plus `sessionStorage`; neither is available during render, and doing it
+    // in a lazy initialiser would flip the flag twice under StrictMode's double-invoke and
+    // report a fresh visit as a return. The extra render is not a cost being overlooked, it is
+    // the design: `seenIntro` starts as `null` — a real third state, "not yet decided" — and
+    // that pass renders neither the dive driver nor the overview. Moving this would change
+    // which act a visitor arrives in, which is B11's bug, and B11 took a round to find.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above; changing this changes arrival behaviour
     setSeenIntro(seen);
     const scene = useScene.getState();
     scene.setFocusedPlanet(null);

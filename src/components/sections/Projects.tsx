@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import Image from 'next/image';
 import { motion, useInView, AnimatePresence } from 'framer-motion';
 import { ExternalLink } from 'lucide-react';
@@ -114,18 +114,30 @@ function getCaseStudy(locale: 'he' | 'en' | 'ru') {
   };
 }
 
+// matchMedia('(hover: hover)') — true for mouse/trackpad devices, false for touch.
+// Touch devices get the details inline instead of a hover-reveal panel.
+//
+// A media query is the textbook external store: it has a value, it has a change event, and it
+// is not owned by React. Written as `useState` + a `setState` in an effect it was both the
+// `set-state-in-effect` error and a guaranteed double render of every project card on every
+// desktop visit — first as touch, then corrected to hover.
+let hoverMq: MediaQueryList | null = null;
+const hoverQuery = () => (hoverMq ??= window.matchMedia('(hover: hover)'));
+
+function subscribeHover(cb: () => void) {
+  const mq = hoverQuery();
+  mq.addEventListener('change', cb);
+  return () => mq.removeEventListener('change', cb);
+}
+
 function useCanHover() {
-  // matchMedia('(hover: hover)') — true for mouse/trackpad devices, false for touch.
-  // Touch devices get the details inline instead of a hover-reveal panel.
-  const [canHover, setCanHover] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(hover: hover)');
-    setCanHover(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setCanHover(e.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return canHover;
+  return useSyncExternalStore(
+    subscribeHover,
+    () => hoverQuery().matches,
+    // The server cannot know, and assuming "no hover" is the safe default: it renders the
+    // details inline, which is readable on every device rather than hidden behind a hover.
+    () => false
+  );
 }
 
 function ProjectCardFeatured({
