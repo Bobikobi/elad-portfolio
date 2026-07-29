@@ -514,7 +514,13 @@ export default function CameraRig() {
     // shortening each step also keeps the curtain up longer, which is G1 again. So it shapes
     // the fade for REVEAL_FADE seconds and then gets out of the way — total fade time is
     // bounded at REVEAL_FADE plus one frame on every client, fast or slow.
-    const shaping = fadeAge.current < REVEAL_FADE;
+    // Two conditions, and the second one is the subtle half. Shaping is only meaningful while
+    // the fade still has budget left (`fadeAge`) AND while a single frame is shorter than the
+    // whole fade — because if one frame already exceeds REVEAL_FADE, there is no fade to shape:
+    // the client cannot draw an intermediate step, so clamping the first frame does not make
+    // the transition smoother, it just spends a whole extra frame with the curtain up. Measured
+    // at 8fps: exactly one wasted frame, 3 frames to clear where 2 is the floor.
+    const shaping = fadeAge.current < REVEAL_FADE && dt < REVEAL_FADE;
     const fadeDt = shaping ? Math.min(dt, Math.max(nominal * 3, 1 / 45)) : dt;
     const setCoverage = (v: number) => {
       const wanted = Math.max(v, held);
