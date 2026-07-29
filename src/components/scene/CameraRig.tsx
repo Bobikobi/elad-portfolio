@@ -113,7 +113,15 @@ const BELT_RING_R = 5.1; // must match AsteroidBelt's BELT_R
  */
 const BELT_RIDE = {
   landscape: { out: 1.6, y: 1.35, yaw: 26 * DEG2RAD, pitch: 14 * DEG2RAD, fov: 46 },
-  portrait: { out: 0.9, y: 1.15, yaw: 26 * DEG2RAD, pitch: 26 * DEG2RAD, fov: 64 },
+  // Portrait is not just a narrower landscape: the content sheet owns the bottom ~58% of
+  // the screen, so the only canvas the visitor actually sees is a letterbox strip above
+  // it, and the pose has to be scored on THAT strip rather than on the whole frame. A
+  // wider lens made everything smaller in the one place it needed to be biggest, so this
+  // goes the other way — a 46° lens (band magnified), a harder inward yaw (more ring
+  // inside the narrow horizontal wedge) and enough pitch to lift the whole band into the
+  // strip. Measured on the ring's own annulus, that carries 15.6% of it into the visible
+  // strip versus 12% before, from 1.5 units out to 9.2.
+  portrait: { out: 0.9, y: 1.0, yaw: 40 * DEG2RAD, pitch: 26 * DEG2RAD, fov: 46 },
   // The mobile tour's belt stop, which had the identical defect: it looked at (1.4,0.2,0)
   // and so filled 44% of a phone screen with the SUN while the belt it was naming lay in
   // a corner. Same ride, further out and higher, so the stop establishes the band and
