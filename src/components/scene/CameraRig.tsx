@@ -86,7 +86,7 @@ const DIVE_P1 = new THREE.Vector3(3.7, -0.9, 1.5);
 // the arm (camera below it) — the disc sweeps across the frame at an angle.
 const LOOK_START = new THREE.Vector3(0, 0.25, 0);
 const LOOK_END = new THREE.Vector3(5.2, 0.9, -1.5);
-const _bz = new THREE.Vector3();
+const _tmp = new THREE.Vector3();
 /** Cubic Bézier into `out`. */
 function cubicBezier(out: THREE.Vector3, p0: THREE.Vector3, c1: THREE.Vector3, c2: THREE.Vector3, p1: THREE.Vector3, e: number) {
   const u = 1 - e, a = u * u * u, b = 3 * u * u * e, c = 3 * u * e * e, d = e * e * e;
@@ -558,15 +558,34 @@ export default function CameraRig() {
           _orbitPos.y += Math.cos(t * 0.15) * 0.02 * d;
 
           // Offset the lookAt so the planet lands off-centre on the inline-end side
-          // (ndcX) and rides a little high (ndcY) — computed in the camera's own screen
-          // basis at the planet's depth.
-          _viewDir.copy(pp).sub(_orbitPos).normalize();
-          _right.copy(_viewDir).cross(UP).normalize();
-          _up2.copy(_right).cross(_viewDir).normalize();
+          // (ndcX) and rides a little high (ndcY).
+          //
+          // B8 — this used to build the screen basis from the direction to the PLANET and
+          // then hand the result to lookAt(), which rebuilds its own basis from the
+          // direction to the OFFSET POINT. Those two differ by a roll of about 9° here,
+          // and the horizontal offset is five times the vertical one, so the roll leaked
+          // enough of the horizontal into the vertical to cancel it almost exactly:
+          // measured on the alias, the planet landed at ndcY −0.008 against a design value
+          // of +0.12, i.e. dead centre instead of riding high, 57px from where the DOM arc
+          // believed the limb was. The horizontal was right the whole time, which is
+          // exactly why it never looked like a bug.
+          //
+          // Solved by iterating instead of assuming: build the basis from the LOOK point —
+          // the axis lookAt will actually use — and repeat until it stops moving. Three
+          // passes converge to well under a pixel, and it costs a handful of dot products.
+          // Depth comes from the same axis, so the offset scales by the planet's real
+          // depth rather than by the design distance.
           const tanHalf = Math.tan((f.fovDeg * DEG2RAD) / 2);
-          const nx = (rtl ? -f.ndcX : f.ndcX) * tanHalf * aspect * d;
-          const ny = f.ndcY * tanHalf * d;
-          _orbitLook.copy(pp).addScaledVector(_right, -nx).addScaledVector(_up2, -ny);
+          const sx = (rtl ? -f.ndcX : f.ndcX) * tanHalf * aspect;
+          const sy = f.ndcY * tanHalf;
+          _orbitLook.copy(pp);
+          for (let i = 0; i < 3; i++) {
+            _viewDir.copy(_orbitLook).sub(_orbitPos).normalize();
+            _right.copy(_viewDir).cross(UP).normalize();
+            _up2.copy(_right).cross(_viewDir).normalize();
+            const depth = _tmp.copy(pp).sub(_orbitPos).dot(_viewDir);
+            _orbitLook.copy(pp).addScaledVector(_right, -sx * depth).addScaledVector(_up2, -sy * depth);
+          }
 
           // Departure scrub: blend ORBIT → OVERVIEW by the departure meter (0..1).
           _tgt.copy(_orbitPos).lerp(_ovPos, departure);
