@@ -62,16 +62,25 @@ interface VeilDef {
 // the corners by under half a point, while hiding the GROUP took the frame from mean 140
 // to 63 and the corners from 33% to 8%. So it is the sum that is wrong, and the fix is a
 // level, not surgery.
+//
+// Then the dive was profiled end to end rather than judged from the one screenshot that
+// had been taken, and that changed the second cut. The haze was not spread over the
+// descent — it was a BAND. At scroll 0.05-0.35 the frame held a floor of p10 37-47 and a
+// range near 200; at 0.5-0.62 the floor rose to 67-72 and the range collapsed to 130-141.
+// That band is the middle of the corridor, where the `lagoon` close pass overlaps `bubble`
+// and `ring` — three of the largest sprites in the set, stacked. So those five came down
+// again while the rest stayed: the early dive was already right and cutting it further
+// would have taken colour out of a part that never had a problem.
 const VEILS: VeilDef[] = [
   // Three close passes on the flight line, distinct hues (spec acceptance: ≥2).
-  { slug: 'eagle',     u: 0.30, off: [1.3, 0.8],   scale: 16, tint: '#bfe6ea', op: 0.33, close: true,  phase: 0.0 },  // teal
-  { slug: 'lagoon',    u: 0.56, off: [-1.6, -1.0], scale: 15, tint: '#f0c39a', op: 0.32, close: true,  phase: 2.1 },  // warm/rose
-  { slug: 'orion',     u: 0.80, off: [-1.0, 1.4],  scale: 17, tint: '#e6b48c', op: 0.33, close: true,  phase: 4.0 },  // warm orange
+  { slug: 'eagle',     u: 0.30, off: [1.3, 0.8],   scale: 16, tint: '#bfe6ea', op: 0.22, close: true,  phase: 0.0 },  // teal
+  { slug: 'lagoon',    u: 0.56, off: [-1.6, -1.0], scale: 15, tint: '#f0c39a', op: 0.21, close: true,  phase: 2.1 },  // warm/rose
+  { slug: 'orion',     u: 0.80, off: [-1.0, 1.4],  scale: 17, tint: '#e6b48c', op: 0.22, close: true,  phase: 4.0 },  // warm orange
   // Depth layer — farther off the path, larger, fainter.
   { slug: 'helix',     u: 0.04, off: [-7, -6],     scale: 30, tint: '#c4bcf2', op: 0.15, close: false, phase: 1.2 },  // violet
   { slug: 'trifid',    u: 0.16, off: [10, 6],      scale: 30, tint: '#b9c4ff', op: 0.17, close: false, phase: 3.4 },  // indigo/blue
-  { slug: 'bubble',    u: 0.40, off: [-12, 4],     scale: 34, tint: '#aecbff', op: 0.15, close: false, phase: 0.7 },  // blue
-  { slug: 'ring',      u: 0.50, off: [13, 10],     scale: 34, tint: '#e6a8c8', op: 0.13, close: false, phase: 5.1 },  // pink
+  { slug: 'bubble',    u: 0.40, off: [-12, 4],     scale: 34, tint: '#aecbff', op: 0.10, close: false, phase: 0.7 },  // blue
+  { slug: 'ring',      u: 0.50, off: [13, 10],     scale: 34, tint: '#e6a8c8', op: 0.09, close: false, phase: 5.1 },  // pink
   { slug: 'veil',      u: 0.66, off: [9, -8],      scale: 28, tint: '#a9e0d6', op: 0.15, close: false, phase: 2.7 },  // teal
   { slug: 'crab',      u: 0.90, off: [-8, 7],      scale: 26, tint: '#dca6d0', op: 0.15, close: false, phase: 1.9 },  // magenta
   { slug: 'tarantula', u: 1.06, off: [4, -3],      scale: 24, tint: '#f0cba0', op: 0.20, close: false, phase: 3.9 },  // warm (final approach glow)
