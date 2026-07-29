@@ -5,7 +5,7 @@ import { useCursor } from '@react-three/drei';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
-import { planetPositions, planetRadii, PLANET_PAGES } from '@/lib/planetPositions';
+import { planetPositions, planetRadii, planetRingNormal, PLANET_PAGES } from '@/lib/planetPositions';
 import { PLANET_SECTION, sectionPath } from '@/lib/sections';
 import { BODY_FACTS } from '@/lib/bodyFacts';
 import { useI18n } from '@/lib/i18n';
@@ -463,6 +463,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   const group = useRef<THREE.Group>(null);
   const spinGroup = useRef<THREE.Group>(null);
   const mesh = useRef<THREE.Mesh>(null);
+  const ringMesh = useRef<THREE.Mesh>(null);
   const angle = useRef(spec.phase);
   // A1 hi-res crossfade state (page planets only).
   const hiShader = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
@@ -620,11 +621,12 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   useEffect(() => {
     planetPositions.set(spec.key, new THREE.Vector3());
     planetRadii.set(spec.key, spec.size);
+    if (spec.rings) planetRingNormal.set(spec.key, new THREE.Vector3(0, 1, 0));
     if (HUD_AVAILABLE) phaseSetters[spec.key] = (a: number) => { angle.current = a; };
     return () => {
       delete phaseSetters[spec.key];
       texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose();
-      planetPositions.delete(spec.key); planetRadii.delete(spec.key);
+      planetPositions.delete(spec.key); planetRadii.delete(spec.key); planetRingNormal.delete(spec.key);
       if (useScene.getState().hoveredBody === spec.key) useScene.getState().setHoveredBody(null);
     };
   }, [texture, ringTex, ringGeo, spec.key, spec.size]);
@@ -677,6 +679,14 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       // this same frame, so pills are never a frame behind the body they name (R5.4).
       group.current.getWorldPosition(_wp);
       planetPositions.get(spec.key)?.copy(_wp);
+      // The ring plane's world normal — its local +Z, since RingGeometry lies in XY. The
+      // camera needs it to keep the rings open (see azimuthForLit / the ring solve); it is
+      // published from here because this is the only place that knows the mesh's own
+      // rotation, and a second copy of that constant in the rig would go stale in silence.
+      if (spec.rings && ringMesh.current) {
+        const rn = planetRingNormal.get(spec.key);
+        if (rn) rn.set(0, 0, 1).transformDirection(ringMesh.current.matrixWorld).normalize();
+      }
 
       // B5: is anything standing between this body and the star? Occluder positions come
       // from the shared map, so they can be one frame old — for a shadow that takes tens
@@ -743,7 +753,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
           <shaderMaterial vertexShader={rimVert} fragmentShader={rimFrag} uniforms={rimUniforms} transparent side={THREE.BackSide} blending={THREE.AdditiveBlending} depthWrite={false} />
         </mesh>
         {spec.rings && ringTex && ringGeo && (
-          <mesh rotation={[Math.PI / 2.05, 0, 0]} geometry={ringGeo}>
+          <mesh ref={ringMesh} rotation={[Math.PI / 2.05, 0, 0]} geometry={ringGeo}>
             <meshBasicMaterial map={ringTex} transparent opacity={1} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
         )}

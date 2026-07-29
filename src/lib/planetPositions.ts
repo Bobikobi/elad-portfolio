@@ -12,6 +12,19 @@ export const planetPositions = new Map<string, THREE.Vector3>();
 export const planetRadii = new Map<string, number>();
 
 /**
+ * Live world-space NORMAL of a ringed planet's ring plane, published by the body that owns
+ * the rings so the camera never has to guess at it.
+ *
+ * The camera needs this because "the rings are open" is an angle between the sightline and
+ * this plane, and it was previously left to chance: the vantage swung the camera right
+ * through every angle to it as the body orbited, so the rings measured 0.4° (edge-on and
+ * invisible) at some longitudes and 73° (face-on, a target rather than a planet) at others.
+ * Deriving it in the rig instead would mean hard-coding the ring mesh's local rotation in a
+ * second file — exactly the kind of duplicated constant that goes stale silently.
+ */
+export const planetRingNormal = new Map<string, THREE.Vector3>();
+
+/**
  * B14 — where the belt pill hangs during the mobile tour's belt stop, in world space.
  * The belt has no body to anchor to, so the anchor used to be a hard-coded point that was
  * only correct for the pose that stop happened to use; when the stop learned to ride the

@@ -4,13 +4,15 @@ import { useFrame } from '@react-three/fiber';
 import { damp, damp3 } from 'maath/easing';
 import * as THREE from 'three';
 import { useScene, type Act } from '@/lib/sceneStore';
-import { planetPositions, planetRadii, beltTourAnchor } from '@/lib/planetPositions';
+import { planetPositions, planetRadii, planetRingNormal, beltTourAnchor } from '@/lib/planetPositions';
 import { SECTIONS } from '@/lib/sections';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 import { HUD_AVAILABLE } from './DebugHud';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+/** Clamp into [-1, 1] — the valid domain of acos, which clamp01 is NOT. */
+const clampUnit = (x: number) => (x < -1 ? -1 : x > 1 ? 1 : x);
 
 // --- T1 swap machine constants -------------------------------------------------
 const DEV = process.env.NODE_ENV !== 'production';
@@ -33,52 +35,147 @@ const DEV = process.env.NODE_ENV !== 'production';
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
 const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
-// Ringed worlds need a much higher vantage so the rings open up instead of reading
-// edge-on (invisible). Others keep a low, "look up at a world" angle.
+// Ringed worlds open against their OWN ring plane; every other world against the ecliptic.
 const RINGED = new Set(['saturn']);
-const ORBIT_LIFT = (key: string) => (RINGED.has(key) ? 0.72 : 0.35);
 
-// --- The lit side is a target, not a hope --------------------------------------------
-// The ORBIT vantage was built as "sit A radians off the lit direction, then add a fixed
-// vertical lift". Both halves are reasonable and together they are not: the lift is a
-// CONSTANT added to a direction whose own y-component swings ±0.44 as the body orbits
-// inside a system tilted 0.42rad. So the phase angle — the thing that decides how much of
-// the disc is lit — came out as a function of where the planet happened to be.
+// --- The ORBIT vantage is SOLVED, not dialled in --------------------------------------
+// The old construction was "sit A radians off the lit direction, then add a fixed vertical
+// lift". Both halves are reasonable and together they leave everything to chance, because
+// the lift is a CONSTANT added to a direction whose own y-component swings ±0.44 as a body
+// orbits inside a system tilted 0.42rad. Two separate things came out as functions of
+// orbital position rather than of intent, and each was measured on the alias:
 //
-// Measured on the alias across twelve orbital positions, Saturn's visible disc ran from
-// 45.7% lit to 71.7%, tracking sunDir.y exactly: darkest at +0.44, brightest at −0.44.
-// /projects therefore showed a mostly-NIGHT hero for half of every revolution, which is
-// not a composition anyone chose.
+//   • the LIT FRACTION — Saturn ran 45.7% to 71.7% lit, tracking sunDir.y exactly, so
+//     /projects showed a mostly-NIGHT hero for half of every revolution;
+//   • the RING OPENING — 0.4° at some longitudes (edge-on: the rings are not visible at
+//     all) to 73° at others (face-on: a vinyl record, the "beige swoosh").
 //
-// So state the intent and solve for the azimuth that delivers it. With `c` the lift, `s`
-// the sun direction's y and `k` the target cos(phase), the vantage
-//     v = −sunDir·cos A + side·sin A + UP·c
-// gives cos(phase) = (cos A − c·s) / |v|, and setting that equal to k is a quadratic in
-// cos A with the closed form below. The phase is then EXACT at every orbital position and
-// the azimuth does the moving — which is what "favor the lit side" means geometrically.
+// A direction has exactly two degrees of freedom and there are exactly two things to get
+// right, so spend them on the targets instead of on constants:
 //
-// Rarely is a wobble worth keeping, but this one is: the terminator wandering across the
-// disc is what stops a world looking like a still. So the TARGET breathes instead of the
-// azimuth, which keeps the wander and still guarantees the floor.
+//     camDir = f·cos α + (e1·cos φ + e2·sin φ)·sin α
+//
+// with f the direction to the sun and (e1, e2) any orthonormal pair perpendicular to it.
+// α alone fixes the phase — the lit fraction is (1 + cos α)/2 for EVERY φ — and φ then
+// swings the camera around the sun-planet axis, which is precisely the freedom needed to
+// choose the angle to the ring plane. Two independent targets, two closed forms, no
+// iteration, and neither depends on where the body happens to be.
 const LIT_TARGET: Record<string, number> = {
-  saturn: 0.80, // the ruling: a clearly lit hero, ≥70% at every position
+  // The ruling asks for ≥70%; this sits well clear of that floor and is also the most the
+  // ring-opening constraint above will allow at every orbital position. 0.76 ± 0.03 spans
+  // 73-79% lit — a clearly lit hero throughout, never a half-dark one.
+  saturn: 0.76,
 };
 const LIT_DEFAULT = 0.74; // ≥0.70 after the wobble — never darker than these worlds are now
-const LIT_WOBBLE = 0.04;
+const LIT_WOBBLE_DEFAULT = 0.04;
+const LIT_WOBBLE: Record<string, number> = { saturn: 0.03 };
+/** How far the sightline should sit off the reference plane, in radians. */
+const PLANE_TARGET: Record<string, number> = {
+  // Saturn's own ring plane. Real Saturn opens to about 27°; this is the poster version of
+  // that — unmistakably a ring system, nowhere near the face-on "vinyl record".
+  // Real Saturn opens to about 27°; this is the poster version of that — unmistakably a
+  // ring system, nowhere near the face-on "vinyl record" a free solve drifts into. Backed
+  // off from 26° so the whole wobble stays inside the reachable set.
+  saturn: 24 * DEG2RAD,
+};
+// Everything else measures against the ecliptic, and 19° is what the old fixed lift of
+// 0.35 produced on average — so the worlds that were already approved keep their vantage.
+const PLANE_DEFAULT = 19 * DEG2RAD;
+
+const _f = new THREE.Vector3();
+const _e1 = new THREE.Vector3();
+const _e2 = new THREE.Vector3();
+const _planeN = new THREE.Vector3();
+
 /**
- * Azimuth (radians off the lit direction) that puts a fraction `lit` of the disc in
- * daylight, given the vertical lift and the sun direction's own y-component.
+ * Build the ORBIT vantage direction (planet → camera).
+ *
+ * `lit` is delivered exactly. `planeN`/`planeAngle` are honoured when the geometry allows
+ * it and approached as closely as possible when it does not — the priority order matters:
+ * a world that is too dark is a worse frame than a ring that is a few degrees flatter.
  */
-function azimuthForLit(lit: number, lift: number, sunY: number): number {
-  const k = 2 * clamp01(lit) - 1;              // target cos(phase angle)
-  const cs = lift * sunY;
-  const b = cs * (1 - k * k);
-  const disc = b * b - cs * cs + k * k * (1 + lift * lift);
-  // The + root is the near-side solution (small azimuth = closer to the sun-camera line,
-  // which also pushes the sun further BEHIND the camera — so the off-frame rule gets
-  // safer, never tighter, as the target rises).
-  const x = b + Math.sqrt(Math.max(0, disc));
-  return Math.acos(clamp01(Math.abs(x)) * Math.sign(x || 1));
+function orbitVantage(
+  out: THREE.Vector3,
+  sunDir: THREE.Vector3,     // sun → planet, unit
+  planeN: THREE.Vector3,     // unit normal of the plane to open against
+  lit: number,
+  planeAngle: number,
+  sideSign: number,
+  prevPhi: number | null     // last frame's choice, for branch continuity — see below
+): number {
+  // Phase angle straight from the target: lit = (1 + cos α)/2.
+  const alpha = Math.acos(clampUnit(2 * clamp01(lit) - 1));
+  _f.copy(sunDir).negate();                      // planet → sun
+  _e1.copy(UP).cross(_f);
+  if (_e1.lengthSq() < 1e-6) _e1.set(1, 0, 0);
+  _e1.normalize();
+  _e2.copy(_f).cross(_e1).normalize();
+
+  const ca = Math.cos(alpha), sa = Math.sin(alpha);
+  // camDir·planeN = P·cos α + sin α·(Q·cos φ + R·sin φ) = P·cos α + sin α·M·cos(φ − ψ)
+  const P = _f.dot(planeN);
+  const Q = _e1.dot(planeN) * sideSign;
+  const R = _e2.dot(planeN);
+  const M = Math.hypot(Q, R);
+  const psi = Math.atan2(R, Q);
+  // The sightline may sit `planeAngle` off the plane on EITHER side of it — above the rings
+  // or below them — and each side has two solutions, φ = ψ ± dφ. Four candidates, all of
+  // them correct on both targets, and they are genuinely different places to stand.
+  //
+  // Which one is chosen has to be decided ONCE and then held, because picking per-frame by
+  // "whichever is higher" is right in a still and wrong over time: as the body orbits, the
+  // candidates' heights cross, the argmax swaps and the camera TELEPORTS. Simulated over a
+  // full revolution at every root yaw, that measured a 106° jump for Saturn and 122° for
+  // the others, against ~0.2° for a smooth step. Holding only the branch and still flipping
+  // the SIDE — which flips when the sun crosses the ring plane — left 52°. Both have to be
+  // continuous, so both are chosen the same way.
+  //
+  // Height decides the first frame; after that the candidate nearest last frame's is taken
+  // and the camera walks its orbit. (Damping would have turned the teleport into a fast
+  // unexplained swing, not removed it — a discontinuity has to go from the solve.)
+  // Out-of-reach sides are CLAMPED rather than dropped — dropping one makes it vanish from
+  // the candidate set the instant it becomes unreachable, stranding whatever was being
+  // tracked and jumping the camera (77.7° of it, measured). But a clamped candidate is only
+  // an approximation of the target, so it must never be PREFERRED: tracking one parked
+  // Saturn near edge-on for 8.6% of its revolution, which is the very thing the ruling is
+  // about. Exact solutions win over clamped ones; continuity decides among equals.
+  // ONE side, always. The sightline could sit `planeAngle` off the plane above it or below
+  // it, and letting the solve choose per-frame delivers the target 100% of the time — at
+  // the cost of a 76° camera JUMP twice a revolution, when the side it was tracking becomes
+  // unreachable. Fixing the side removes that entirely (worst step 3.8°) and means Saturn's
+  // rings are always seen from the same face, which is what a held composition wants.
+  //
+  // The price is that the side has to be REACHABLE at every orbital position, and that is
+  // a real constraint rather than a preference. Reachability works out to
+  //     |acos(f·n) − α| ≤ 90° − planeAngle
+  // and for Saturn f·n spans ±0.453 (its axial tilt, 0.47rad, seen from an orbit in the
+  // root's own plane). At 80% lit, α = 53.1° and the requirement is f·n ≥ −0.454 — inside
+  // the span by a thousandth, i.e. failing about a fifth of the time. That is why the
+  // targets below sit where they do: they are not taste, they are the edge of the geometry
+  // with a margin, and they still clear the ruling's 70% floor at every point of the wobble.
+  let best = 0, bestScore = -Infinity, bestExact = false;
+  {
+    const sign = 1;
+    const want = Math.sin(planeAngle) * sign;
+    const rhs = M < 1e-6 ? 2 : (want - P * ca) / (sa * M);
+    const exact = Math.abs(rhs) <= 1;
+    const dphi = Math.acos(clampUnit(rhs));
+    for (const phi of [psi + dphi, psi - dphi]) {
+      const score =
+        prevPhi === null
+          ? _f.y * ca + sa * (_e1.y * Math.cos(phi) * sideSign + _e2.y * Math.sin(phi))
+          : -Math.abs(Math.atan2(Math.sin(phi - prevPhi), Math.cos(phi - prevPhi)));
+      if ((exact && !bestExact) || (exact === bestExact && score > bestScore)) {
+        bestScore = score; best = phi; bestExact = exact;
+      }
+    }
+  }
+  if (bestScore === -Infinity) best = psi;   // degenerate geometry only
+  out.copy(_f).multiplyScalar(ca)
+    .addScaledVector(_e1, sa * Math.cos(best) * sideSign)
+    .addScaledVector(_e2, sa * Math.sin(best));
+  out.normalize();
+  return best;
 }
 const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
@@ -299,6 +396,10 @@ export default function CameraRig() {
   // B7: the reveal latch. See REVEAL_FRAMES — after a swap the curtain is held shut for a
   // number of DRAWN frames and then eased open, instead of being handed straight back to a
   // schedule that assumes the swap was free.
+  // The ORBIT vantage's chosen branch, kept across frames so it never flips (see
+  // orbitVantage). Cleared whenever the focused world changes.
+  const vantagePhi = useRef<number | null>(null);
+  const vantageFor = useRef<string | null>(null);
   const revealHold = useRef(0);
   const covOut = useRef(0); // last published coverage — the rate limiter's state
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
@@ -575,39 +676,42 @@ export default function CameraRig() {
           const r = planetRadii.get(focused as string) ?? 0.4;
           const d = orbitDistance(r, f);
 
-          // Sun-relative gibbous vantage (sun at world origin): sit on the lit side,
-          // ~60° off the lit direction, so there's ALWAYS a terminator crossing the
-          // disc and the sun sits ~110° from the view centre = well outside the frustum.
-          _sunDir.copy(pp).normalize();
-          _side.copy(UP).cross(_sunDir);
-          if (_side.lengthSq() < 1e-4) _side.set(1, 0, 0);
-          _side.normalize();
-          const sideSign = rtl ? -1 : 1; // keep the lit limb on the outer (planet) edge
-          // ~72° off the lit direction: sits further behind the lit side so the sun (and
-          // its off-frame bloom) is pushed fully out of frame — it was still bleeding a
-          // warm glow into the top corner at 60° (F3). Terminator still crosses the disc.
-          // The azimuth is SOLVED for a target lit fraction rather than fixed — see
-          // azimuthForLit. A fixed angle plus a fixed vertical lift produced a phase that
-          // swung with the body's own orbital height (Saturn measured 45.7%..71.7% lit),
-          // so /projects showed a mostly-night hero for half of every revolution.
+          // Sun-relative vantage, SOLVED rather than dialled in — see orbitVantage. The
+          // two things this pose has to get right are how much of the disc is in daylight
+          // and, for a ringed world, how far open the rings are; a direction has exactly
+          // two degrees of freedom, and the old "fixed azimuth + fixed vertical lift"
+          // spent them both on constants, leaving the orbit to decide both outcomes.
           //
-          // B5's "eclipse beat" survives, moved one level up: the TARGET breathes on the
-          // same slow irregular cycle, so the terminator still wanders across the disc,
-          // but it wanders between two lit fractions we chose instead of wherever the
-          // orbit put it. The sun only gets further behind the camera as the target rises,
-          // so the off-frame rule is never at risk from this.
-          const lift = ORBIT_LIFT(focused as string);
+          // B5's "eclipse beat" survives, moved one level up: the lit TARGET breathes on
+          // the same slow irregular cycle, so the terminator still wanders across the disc
+          // — but between two fractions we chose. The sun only moves further behind the
+          // camera as the target rises, so the off-frame rule is never at risk from it.
+          _sunDir.copy(pp).normalize();
+          const sideSign = rtl ? -1 : 1; // keep the lit limb on the outer (planet) edge
+          const wob = LIT_WOBBLE[focused as string] ?? LIT_WOBBLE_DEFAULT;
           const litTarget =
             (LIT_TARGET[focused as string] ?? LIT_DEFAULT) +
-            Math.sin(t * 0.055) * LIT_WOBBLE * 0.62 +
-            Math.sin(t * 0.021 + 1.7) * LIT_WOBBLE * 0.38;
-          const A = azimuthForLit(litTarget, lift, _sunDir.y);
-          _camDir.copy(_sunDir).multiplyScalar(-Math.cos(A));
-          _camDir.addScaledVector(_side, Math.sin(A) * sideSign);
-          // Elevation: ringed worlds get a high vantage so the rings open up (edge-on
-          // rings read as nothing); others keep a low "look up at a world" angle.
-          _camDir.y += lift;
-          _camDir.normalize();
+            Math.sin(t * 0.055) * wob * 0.62 +
+            Math.sin(t * 0.021 + 1.7) * wob * 0.38;
+          // The plane to open against: a ringed world's own ring plane (published live by
+          // the body that owns it), everything else the ecliptic.
+          const ringN = planetRingNormal.get(focused as string);
+          if (ringN) _planeN.copy(ringN);
+          else {
+            const root = beltRoot(state.scene);
+            if (root) _planeN.set(0, 1, 0).transformDirection(root.matrixWorld).normalize();
+            else _planeN.set(0, 1, 0);
+          }
+          if (vantageFor.current !== focused) { vantageFor.current = focused as string; vantagePhi.current = null; }
+          vantagePhi.current = orbitVantage(
+            _camDir,
+            _sunDir,
+            _planeN,
+            litTarget,
+            PLANE_TARGET[focused as string] ?? PLANE_DEFAULT,
+            sideSign,
+            vantagePhi.current
+          );
           _orbitPos.copy(pp).addScaledVector(_camDir, d);
           _orbitPos.x += Math.sin(t * 0.2) * 0.03 * d; // living micro-drift
           _orbitPos.y += Math.cos(t * 0.15) * 0.02 * d;
