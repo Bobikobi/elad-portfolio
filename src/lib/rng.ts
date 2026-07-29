@@ -48,6 +48,7 @@ export const SEED = {
   galaxyDetail: 0x5eed_000a,
   galaxyDetailHeroes: 0x5eed_000b,
   galaxyDetailDust: 0x5eed_000c,
+  backgroundStars: 0x5eed_000d,
   asteroidBelt: 0x5eed_0004,
   zodiacalDust: 0x5eed_0005,
   moons: 0x5eed_0006,

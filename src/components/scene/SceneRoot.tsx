@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { AdaptiveDpr, Stars } from '@react-three/drei';
+import { AdaptiveDpr } from '@react-three/drei';
+import SeededStars from './SeededStars';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import { sparkleClock } from '@/lib/spaceMaterials';
@@ -98,7 +99,9 @@ export default function SceneRoot() {
         {/* Shared SKY — lives outside both acts and never swaps, so the universe is
             continuous through the transition (only the "middle" changes). */}
         <GradientSky solar={act === 'solar'} />
-        <Stars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.55} fade speed={0.5} />
+        {/* Seeded (see SeededStars): drei's own Stars rolls this field fresh on every load, which
+            G5 caught after the seeding pass had closed every Math.random() in our own files. */}
+        <SeededStars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.55} fade speed={0.5} />
         <HeroStars />
         {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
             In the solar act the veils drop to a faint backdrop so they read as distant
