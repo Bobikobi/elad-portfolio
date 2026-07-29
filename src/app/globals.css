@@ -165,8 +165,12 @@ body::before {
   transform: translateX(-50%);
   z-index: 9999;
   padding: 0.75rem 1.5rem;
-  background: var(--color-accent);
-  color: white;
+  /* The same dark-glass surface as the rest of the floating chrome, with gold for the
+     state that matters here — it is only ever on screen because someone has focused it. */
+  background: rgba(5, 7, 20, 0.94);
+  border: 1px solid rgba(255, 201, 120, 0.55);
+  border-top: none;
+  color: var(--color-core-gold);
   border-radius: 0 0 0.5rem 0.5rem;
   font-weight: 500;
   transition: top 0.2s;
