@@ -514,13 +514,20 @@ export default function CameraRig() {
     // shortening each step also keeps the curtain up longer, which is G1 again. So it shapes
     // the fade for REVEAL_FADE seconds and then gets out of the way — total fade time is
     // bounded at REVEAL_FADE plus one frame on every client, fast or slow.
-    // Two conditions, and the second one is the subtle half. Shaping is only meaningful while
-    // the fade still has budget left (`fadeAge`) AND while a single frame is shorter than the
-    // whole fade — because if one frame already exceeds REVEAL_FADE, there is no fade to shape:
-    // the client cannot draw an intermediate step, so clamping the first frame does not make
-    // the transition smoother, it just spends a whole extra frame with the curtain up. Measured
-    // at 8fps: exactly one wasted frame, 3 frames to clear where 2 is the floor.
-    const shaping = fadeAge.current < REVEAL_FADE && dt < REVEAL_FADE;
+    // Whether to shape the fade is a question about the CLIENT, never about the frame in hand,
+    // and getting that distinction wrong cost two attempts.
+    //
+    // Gating on `dt < REVEAL_FADE` looked right and was measured wrong: the frame that RELEASES
+    // the hold is very often the act-mount stall itself — 1.1s on the alias — so the gate turned
+    // shaping off exactly when it was needed and dumped the entire fade into that one frame,
+    // which is B7's tear. The client was fine; `nominal` read 0.037 at that very moment. The
+    // frames that followed were 14-30ms and could have carried a proper dissolve.
+    //
+    // So the test is whether this client can DRAW a fade at all: at least four frames inside the
+    // fade window. A fast client having one terrible frame still qualifies, and shapes. A client
+    // whose every frame is long does not, and gets its curtain back immediately, which is G1.
+    const canFade = dtNominal.current < REVEAL_FADE / 4;
+    const shaping = fadeAge.current < REVEAL_FADE && canFade;
     const fadeDt = shaping ? Math.min(dt, Math.max(nominal * 3, 1 / 45)) : dt;
     const setCoverage = (v: number) => {
       const wanted = Math.max(v, held);
