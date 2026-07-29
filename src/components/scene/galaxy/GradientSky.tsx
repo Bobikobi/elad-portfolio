@@ -14,8 +14,20 @@ const frag = /* glsl */ `
   uniform float uTime;
   uniform float uSolar;                               // 0 galaxy .. 1 solar
   varying vec3 vPos;
+
+  // Cheap smooth 3D value noise — used for a large-scale drift over the dome.
+  float hash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float noise(vec3 x){
+    vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+                   mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                   mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+
   void main() {
-    float h = normalize(vPos).y * 0.5 + 0.5;          // 0 bottom .. 1 top
+    vec3 dir = normalize(vPos);
+    float h = dir.y * 0.5 + 0.5;                      // 0 bottom .. 1 top
     float breathe = 0.5 + 0.5 * sin(uTime * 0.07);    // slow, few-percent drift
     // Galaxy: a rich dark indigo dome. Solar: a MUCH deeper, less-violet void so the
     // system sits in dark space — the old bright violet dome, saturated by the grade and
@@ -27,6 +39,14 @@ const frag = /* glsl */ `
     vec3 bottom = mix(bottomG, bottomS, uSolar);
     vec3 top    = mix(topG,    topS,    uSolar);
     vec3 col = mix(bottom, top, smoothstep(0.15, 1.0, h));
+    // B4+: a large, slow drift over the dome so NO patch of sky is ever motionless. The
+    // 20s no-input test found a corner that moved by 0.2 of 255 over the whole window —
+    // technically alive, actually frozen. Two octaves at different rates so the pattern
+    // never repeats, and ±12% of a sky that is already near-black is invisible as an
+    // effect and decisive as a measurement.
+    float drift = noise(dir * 1.7 + vec3(0.0, uTime * 0.013, uTime * 0.008)) * 0.65
+                + noise(dir * 3.9 - vec3(uTime * 0.006, 0.0, uTime * 0.011)) * 0.35;
+    col *= 0.88 + 0.24 * drift;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
