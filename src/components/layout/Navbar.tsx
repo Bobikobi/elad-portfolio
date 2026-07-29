@@ -116,6 +116,7 @@ export default function Navbar() {
         aria-hidden="true"
       />
       <header
+        data-chrome=""
         className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
           scrolled
             ? 'bg-[color:rgba(9,9,11,0.68)] backdrop-blur-xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.22)]'

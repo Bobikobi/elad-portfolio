@@ -35,6 +35,7 @@ export default function PlanetWorld({
     <div className="pointer-events-none fixed inset-0 z-30 flex items-end justify-start px-4 pt-20 pb-6 md:items-start md:px-8">
       <div
         ref={panelRef}
+        data-chrome=""
         className="pointer-events-auto flex max-h-[58dvh] w-full flex-col overflow-hidden rounded-2xl border md:max-h-[calc(100dvh-6.5rem)] md:w-[34rem]"
         style={{ background: 'rgba(5,7,20,0.82)', borderColor: 'rgba(238,241,255,0.14)', boxShadow: '0 24px 70px rgba(8,10,34,0.5)' }}
       >

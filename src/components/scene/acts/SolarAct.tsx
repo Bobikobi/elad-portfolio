@@ -657,7 +657,8 @@ export default function SolarAct() {
         {PLANETS.map((p) => (
           <Planet key={p.key} spec={p} />
         ))}
-        <AsteroidBelt count={high ? 1400 : 500} />
+        {/* Cost-only tier split (the composition LAW): identical belt, fewer bodies. */}
+        <AsteroidBelt count={high ? 12000 : 4200} />
       </group>
       {/* A4: per-world nebula backdrop (world-fixed, shows only while a world is focused). */}
       <WorldBackdrop />

@@ -151,7 +151,7 @@ export default function ProjectsStage({
           </Link>
         </header>
 
-        <div ref={listRef} className="world-scroll pointer-events-auto flex-1 pt-1">
+        <div ref={listRef} data-chrome="" className="world-scroll pointer-events-auto flex-1 pt-1">
           <div className="flex flex-col gap-3 pb-6">{children}</div>
         </div>
       </div>
