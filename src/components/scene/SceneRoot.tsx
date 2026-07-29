@@ -1,5 +1,5 @@
 'use client';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { AdaptiveDpr, Stars } from '@react-three/drei';
 import * as THREE from 'three';
@@ -41,6 +41,14 @@ function Warmup() {
   const camera = useThree((s) => s.camera);
   const compiled = useRef(false);
   const frames = useRef(0);
+  // Verification handle (HUD_AVAILABLE gate — stripped from the production bundle). A
+  // screenshot can show that something is wrong in the frame but never WHICH object did
+  // it; with the live scene graph in hand a harness can bisect by hiding one node at a
+  // time, which is the only way to name the culprit instead of guessing at it.
+  useEffect(() => {
+    if (!HUD_AVAILABLE) return;
+    (window as unknown as Record<string, unknown>).__three = { scene, camera, gl, THREE };
+  }, [scene, camera, gl]);
   useFrame(() => {
     if (!compiled.current) {
       gl.compile(scene, camera);
