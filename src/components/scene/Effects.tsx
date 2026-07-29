@@ -16,12 +16,18 @@ const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 // cinematic mood on top of its nebula palette. Eased in on focus, out on departure.
 const OVERVIEW_SAT = 0.06;
 const GALAXY_SAT = 0.08; // A6: the same gentle grade enriches the galaxy arms (one universe)
+// B3: these were roughly halved. The grade runs AFTER tone mapping, so a saturation lift
+// takes a channel that the tone mapper had carefully landed at ~0.95 and pushes it over 1
+// — it does not enrich the colour, it clips it, and it clips the DOMINANT channel first.
+// Mars was the proof: at sat 0.19 its mean blue came out at 0.2 of 255 (saturation pulls
+// each channel away from luminance, and blue was already the low one), which is exactly
+// what "neon yellow" is. A mood is worth a few percent, never a channel.
 const WORLD_GRADE: Record<string, { hue: number; sat: number }> = {
-  earth: { hue: -0.03, sat: 0.15 }, // cool, clean
-  jupiter: { hue: 0.03, sat: 0.17 }, // warm, rich
-  saturn: { hue: 0.04, sat: 0.13 }, // golden
-  mars: { hue: 0.05, sat: 0.19 }, // hot rust
-  belt: { hue: -0.05, sat: 0.15 }, // teal-tech
+  earth: { hue: -0.02, sat: 0.08 }, // cool, clean
+  jupiter: { hue: 0.02, sat: 0.08 }, // warm, rich
+  saturn: { hue: 0.025, sat: 0.07 }, // golden
+  mars: { hue: 0.025, sat: 0.06 }, // hot rust
+  belt: { hue: -0.03, sat: 0.08 }, // teal-tech
 };
 
 /**

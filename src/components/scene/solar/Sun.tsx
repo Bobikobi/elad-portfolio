@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
-import { softSprite, CORE_GOLD } from '@/lib/spaceMaterials';
+import { softSprite, flameSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 
 // Shared compact value-noise (used by both the surface colour and the edge wobble).
 const NOISE_GLSL = /* glsl */ `
@@ -65,11 +65,21 @@ const SHOW_HALO_SPRITE = false;  // big soft gold disc (scale 4.4) — milky-hal
 const SHOW_CORONA_SHELL = false; // corona backside shell (scale 1.28) — primary milky-halo source
 const SHOW_ANAMORPHIC = true;    // short horizontal gold streak — kept (subtle, not a wash)
 
-/** Solar prominences — flame arcs licking off the limb, each on its own irregular
- *  cycle so some are erupting while others fade (spec: break in 10-25s cycles). */
+/**
+ * Solar prominences — flame arcs licking off the limb, each on its own irregular cycle so
+ * some are erupting while others fade (spec: break in 10-25s cycles).
+ *
+ * B3: they used to read as orange petals stuck to the sun, for two reasons. The sprite was
+ * the shared ROUND softSprite stretched 0.5 × 2.0 — an ellipse, not a flame — and the ring
+ * lived in the sun's own local XY plane, so as the camera moved off that axis the "limb"
+ * arcs slid inward over the disc and became lobes sitting on the face. Now: a tapered
+ * flame texture whose base is at the limb, the group BILLBOARDS to the camera so the ring
+ * always rides the silhouette from every vantage, and the colour/opacity sit close enough
+ * to the sun's own hot rim that they read as part of it.
+ */
 function Prominences() {
   const group = useRef<THREE.Group>(null);
-  const tex = useMemo(softSprite, []);
+  const tex = useMemo(flameSprite, []);
   const proms = useMemo(
     () =>
       Array.from({ length: PROM_COUNT }, (_, i) => {
@@ -89,6 +99,9 @@ function Prominences() {
     const t = state.clock.elapsedTime;
     const g = group.current;
     if (!g) return;
+    // Billboard: the ring of arcs lives in the plane facing the camera, so every one of
+    // them is on the silhouette no matter where the camera has flown to.
+    g.quaternion.copy(state.camera.quaternion);
     for (let i = 0; i < proms.length; i++) {
       const pr = proms[i];
       // Irregular eruption envelope: mostly small, occasionally licks out far.
@@ -96,10 +109,13 @@ function Prominences() {
       const burst = Math.max(0, Math.sin(t * pr.speed * 0.5 + pr.phase * 1.7) - 0.72) * 3.4;
       const e = Math.min(1.4, base * 0.5 + burst);
       const s = g.children[i] as THREE.Sprite;
-      const l = SUN_R * (1.0 + pr.len * 0.5 * e);
-      s.position.set(pr.x * (SUN_R + 0.05) * 1.02, pr.y * (SUN_R + 0.05) * 1.02, 0);
-      s.scale.set(0.5 + 0.4 * e, l, 1);
-      (s.material as THREE.SpriteMaterial).opacity = 0.12 + 0.5 * e;
+      const l = SUN_R * (0.30 + pr.len * 0.34 * e);
+      // The flame's BASE is at v=0, i.e. the bottom edge of the sprite, so the sprite's
+      // centre has to sit half a length outboard for the base to land on the limb.
+      const anchor = SUN_R * 0.985 + l * 0.5;
+      s.position.set(pr.x * anchor, pr.y * anchor, 0);
+      s.scale.set(SUN_R * (0.16 + 0.10 * e), l, 1);
+      (s.material as THREE.SpriteMaterial).opacity = 0.05 + 0.20 * e;
       s.material.rotation = pr.a - Math.PI / 2;
     }
   });
@@ -107,7 +123,9 @@ function Prominences() {
     <group ref={group}>
       {proms.map((_, i) => (
         <sprite key={i}>
-          <spriteMaterial map={tex} color={'#ff8a2a'} transparent opacity={0.2} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+          {/* Close to the sun's own hot rim, not a separate orange — the arcs must read as
+              the star's edge coming apart, never as decoration laid on top of it. */}
+          <spriteMaterial map={tex} color={'#ffb469'} transparent opacity={0.1} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </sprite>
       ))}
     </group>

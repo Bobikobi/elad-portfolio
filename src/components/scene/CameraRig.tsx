@@ -16,13 +16,16 @@ const DEV = process.env.NODE_ENV !== 'production';
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
 
-// Per-planet ORBIT exposure. Inner planets sit so close to the sun that their lit
-// disc clips to gold at full exposure (Earth/Mars washed out); normalising the
-// aperture down brings them to the same readable brightness as the outer worlds so
-// the texture/identity reads. Only applied while a world is focused — the solar
-// overview / galaxy stay at 1.0, so the approved arrival pose is untouched. The sun
-// surface + corona are toneMapped:false, so they stay burning regardless.
-const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.32, mars: 0.5, jupiter: 0.85, saturn: 0.6 };
+// Per-planet ORBIT exposure. The system is spatially compressed, so irradiance falls off
+// 25× between the innermost and outermost world; at a single aperture the near planets
+// clip while the far ones go muddy. This is the aperture per world, and it is the only
+// lever that works — albedo cannot rescue a diffuse radiance already well above 1.
+//
+// B3 retune, measured on the alias: at the old values Jupiter had 6.1% of its disc at
+// 250+ (p99 luminance 250.6, i.e. a white field, not a planet) and Mars 10.4% clipped in
+// the RED channel alone with mean blue at 0.2/255 — the "neon yellow". Values below put
+// each world's peak just under the roll-off instead of through it.
+const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.30, mars: 0.26, jupiter: 0.45, saturn: 0.5, belt: 0.75 };
 // Ringed worlds need a much higher vantage so the rings open up instead of reading
 // edge-on (invisible). Others keep a low, "look up at a world" angle.
 const RINGED = new Set(['saturn']);
