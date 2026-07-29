@@ -32,6 +32,20 @@ const MIN_SIZE_RATIO = 0.45;
 /** How dark the deepest point of a shadow gets. Not zero: this is a partial eclipse. */
 export const ECLIPSE_FLOOR = 0.3;
 
+/**
+ * How close to CENTRED the alignment has to be, as a blend of the two radii.
+ *
+ * The obvious threshold — "the discs overlap at all", perp < rA + rB — measured out at
+ * 97% of random system configurations having something eclipsed somewhere. That is not an
+ * eclipse, it is weather. These planets are large relative to their compressed orbits and
+ * every orbit is exactly coplanar, so a one-dimensional overlap test is satisfied almost
+ * always. Requiring a near-central alignment instead costs nothing and is what makes the
+ * event both rare and worth looking at when it does happen: a shadow that only ever
+ * arrives dead-centre is always dramatic.
+ */
+const ALIGN_A = 0.75; // × occluder radius
+const ALIGN_B = 0.25; // × target radius
+
 export interface EclipseHit {
   /** World position of the occluding body (the sun is at the origin). */
   occ: THREE.Vector3;
@@ -75,9 +89,10 @@ export function eclipseFor(key: string, pos: THREE.Vector3, radius: number): Ecl
     _perp.copy(pos).multiplyScalar(t).sub(_a);
     const perp = _perp.length(); // A's centre off the sun→B line
     const shadowR = rA; // parallel rays: the shadow keeps the occluder's own width
-    if (perp > shadowR + radius) return;
+    const gate = shadowR * ALIGN_A + radius * ALIGN_B;
+    if (perp > gate) return;
 
-    const strength = 1 - smooth(shadowR * 0.5, shadowR + radius * 0.9, perp);
+    const strength = 1 - smooth(shadowR * 0.15, gate, perp);
     if (strength <= 0.002) return;
     if (!best || strength > best.strength) best = { occ: a, occR: rA, strength };
   });

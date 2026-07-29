@@ -511,7 +511,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
                // Parallel rays (see lib/eclipse.ts): the shadow keeps the occluder's own
                // width instead of a point source's ever-growing cone.
                float perp = length( uOccPos - rayDir * along );
-               float lit = smoothstep( uOccR * 0.45, uOccR * 1.25, perp );
+               // Wide penumbra: a shadow edge on a world is soft over many pixels. A
+               // narrow one reads as a hard-edged mask laid over the disc (B13).
+               float lit = smoothstep( uOccR * 0.15, uOccR * 1.55, perp );
                outgoingLight *= mix( 1.0, mix( ${ECLIPSE_FLOOR.toFixed(2)}, 1.0, lit ), uEclipse );
              }
            }
