@@ -54,9 +54,13 @@ const fragmentShader = /* glsl */ `
 uniform float exposure;
 
 const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
-const float HL_KNEE  = 0.85; // brightest channel below this is never touched
-const float HL_RANGE = 2.20; // …and the rolloff reaches full strength this far past it
-const float HL_MAX   = 0.55; // most saturation a fully lopsided highlight may give up
+// Measured on the alias: at 0.85 / 2.20 / 0.55 the worst longitude still clipped 0.34% of
+// Mars's disc, red-only, centred at 0.35 of the radius — the sub-solar point. Tightened until
+// that reached zero, with the disc mean watched at every step so the rust did not drain
+// toward grey while chasing it.
+const float HL_KNEE  = 0.72; // brightest channel below this is never touched
+const float HL_RANGE = 1.70; // …and the rolloff reaches full strength this far past it
+const float HL_MAX   = 0.68; // most saturation a fully lopsided highlight may give up
 
 vec3 highlightRolloff( vec3 c ) {
   float peak = max( max( c.r, c.g ), c.b );
