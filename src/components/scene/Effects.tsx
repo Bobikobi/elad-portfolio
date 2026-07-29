@@ -1,7 +1,7 @@
 'use client';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation, SMAA } from '@react-three/postprocessing';
 import { useScene } from '@/lib/sceneStore';
 import ExposureToneMap from './ExposureToneMap';
 
@@ -128,6 +128,12 @@ export default function Effects() {
           brightness at the edges) while the sun keeps the centre warm. Darkness/offset
           are driven per-frame (vigRef) to ease across the swap — see above. */}
       <Vignette ref={(e: VignetteLike | null) => { vigRef.current = e ?? null; }} offset={0.28} darkness={0.62} />
+      {/* B13: the composer runs with multisampling 0, so nothing was anti-aliasing the
+          planet limbs — a lit rim against near-black space is the worst case for a
+          stair-stepped edge, and at DPR 1 it was visible on every world. SMAA is one
+          cheap fullscreen pass and it goes last, on the finished frame. Both tiers: a
+          jagged edge is a defect, not a quality setting. */}
+      <SMAA />
     </EffectComposer>
   );
 }

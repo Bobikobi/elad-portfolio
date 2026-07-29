@@ -1,7 +1,7 @@
 'use client';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
-import { softSprite, spikeSprite } from '@/lib/spaceMaterials';
+import { softSprite, makeSparkleMaterial } from '@/lib/spaceMaterials';
 
 const RADIUS = 6;
 const BRANCHES = 4;
@@ -23,7 +23,6 @@ function armPoint(rng: () => number): [number, number, number] {
  */
 export default function GalaxyDetail() {
   const soft = useMemo(softSprite, []);
-  const spike = useMemo(spikeSprite, []);
 
   const hii = useMemo(() => {
     let s = 1;
@@ -44,6 +43,13 @@ export default function GalaxyDetail() {
       hue: rng() > 0.4 ? '#dfe8ff' : '#ffe9c8',
     }));
   }, []);
+
+  // B13+: procedural tapered spikes with their own scintillation (shared clock).
+  const heroMats = useMemo(
+    () => heroStars.map((h, i) => makeSparkleMaterial({ color: h.hue, rayLen: 0.12 + (i % 4) * 0.025, secondary: i === 0 ? 1 : 0, phase: i * 1.7, rate: 0.5 + (i % 3) * 0.2, opacity: 0.9 })),
+    [heroStars]
+  );
+  useEffect(() => () => heroMats.forEach((m) => m.dispose()), [heroMats]);
 
   // Dark dust clouds — normal-blended near-void sprites that darken the stars
   // behind them (the identifying mark of a real galaxy), drawn after the arms.
@@ -66,9 +72,7 @@ export default function GalaxyDetail() {
         </sprite>
       ))}
       {heroStars.map((h, i) => (
-        <sprite key={`hero${i}`} position={h.pos} scale={[h.scale, h.scale, 1]}>
-          <spriteMaterial map={spike} color={h.hue} transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
-        </sprite>
+        <sprite key={`hero${i}`} position={h.pos} scale={[h.scale, h.scale, 1]} material={heroMats[i]} />
       ))}
     </group>
   );

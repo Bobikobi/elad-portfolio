@@ -1,9 +1,9 @@
 'use client';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { damp3 } from 'maath/easing';
 import * as THREE from 'three';
-import { starColor, spikeSprite } from '@/lib/spaceMaterials';
+import { starColor, makeSparkleMaterial } from '@/lib/spaceMaterials';
 import { useScene } from '@/lib/sceneStore';
 
 const smoothstep = (a: number, b: number, x: number) => {
@@ -151,7 +151,6 @@ export default function DiveField({ count = 4200 }: { count?: number }) {
   }, [count]);
 
   // Hero stars: a handful seeded ON the corridor axis so they sweep close by.
-  const spike = useMemo(spikeSprite, []);
   const heroes = useMemo(() => {
     let s = 7;
     const rng = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
@@ -169,6 +168,13 @@ export default function DiveField({ count = 4200 }: { count?: number }) {
       return { pos: p.toArray() as [number, number, number], scale: 0.7 + rng() * 1.1, hue: rng() > 0.45 ? '#dfe8ff' : '#ffe3bd', phase: rng() * 6.28 };
     });
   }, []);
+
+  // B13+: real tapered spikes with their own scintillation, not a stamped plus sign.
+  const heroMats = useMemo(
+    () => heroes.map((h, i) => makeSparkleMaterial({ color: h.hue, rayLen: 0.13 + (i % 3) * 0.03, secondary: i % 4 === 0 ? 1 : 0, phase: h.phase, rate: 0.6 + (i % 5) * 0.15, opacity: 0 })),
+    [heroes]
+  );
+  useEffect(() => () => heroMats.forEach((m) => m.dispose()), [heroMats]);
 
   const uniforms = useMemo(
     () => ({ uTime: { value: 0 }, uViewportH: { value: 1000 }, uStretchK: { value: 15 }, uReveal: { value: 0 }, uPrevOffsetView: { value: new THREE.Vector3() } }),
@@ -225,9 +231,7 @@ export default function DiveField({ count = 4200 }: { count?: number }) {
       </mesh>
       <group ref={heroRef}>
         {heroes.map((h, i) => (
-          <sprite key={i} position={h.pos} scale={[h.scale, h.scale, 1]}>
-            <spriteMaterial map={spike} color={h.hue} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
-          </sprite>
+          <sprite key={i} position={h.pos} scale={[h.scale, h.scale, 1]} material={heroMats[i]} />
         ))}
       </group>
     </group>

@@ -3,7 +3,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
-import { softSprite, spikeSprite, CORE_GOLD } from '@/lib/spaceMaterials';
+import { softSprite, makeSparkleMaterial, CORE_GOLD } from '@/lib/spaceMaterials';
 
 /**
  * The swap mask (T3) — the in-world curtain that hides the galaxy↔solar crossover,
@@ -15,9 +15,14 @@ import { softSprite, spikeSprite, CORE_GOLD } from '@/lib/spaceMaterials';
  *      actually covers the whole frame (incl. corners), so the periphery can't reveal
  *      the swap (galaxy edges ~8% → solar edges 0% would otherwise flicker);
  *   2) a soft additive centre glow for a warm bloomed core (kept low, not a white flash);
- *   3) a burst of "waypoint stars" (diffraction spikes) the dive flies into.
+ *   3) ONE waypoint star the dive flies into.
  * Warm gold, never clinical white — keeps the Act-1 core / Act-2 sun colour bridge and
  * avoids a photosensitive flash. Peaks once per crossing (coverage is one eased hump).
+ *
+ * B6: there were SIX waypoint stars, all rising together into the peak, and six
+ * overlapping diffraction crosses at maximum coverage is not a crossing — it is a blast.
+ * A single star is a destination; a constellation of them is glare. So: one, dead ahead,
+ * with its own scintillation, and the exposure it reaches is capped rather than stacked.
  *
  * Coverage stays the geometric envelope, not a pixel-measured composite, on purpose:
  * it must be symmetric (scroll-up mirrors the dive; the solar-side camera never flies
@@ -25,17 +30,8 @@ import { softSprite, spikeSprite, CORE_GOLD } from '@/lib/spaceMaterials';
  * quality tier (composition LAW) — a bloom/luminance readback would be neither.
  */
 
-interface Waypoint {
-  ox: number; oy: number; dz: number; scale: number; hue: string; appear: number;
-}
-const WAYPOINTS: Waypoint[] = [
-  { ox: 0.0, oy: 0.05, dz: 2.0, scale: 2.4, hue: '#fff3da', appear: 0.28 },
-  { ox: -0.9, oy: 0.5, dz: 2.6, scale: 1.6, hue: CORE_GOLD, appear: 0.34 },
-  { ox: 1.0, oy: -0.35, dz: 2.4, scale: 1.8, hue: '#ffe9c4', appear: 0.3 },
-  { ox: 0.7, oy: 0.7, dz: 3.0, scale: 1.1, hue: CORE_GOLD, appear: 0.42 },
-  { ox: -0.7, oy: -0.7, dz: 2.9, scale: 1.2, hue: '#e9efff', appear: 0.4 },
-  { ox: -1.3, oy: -0.1, dz: 3.2, scale: 1.0, hue: '#ffe9c4', appear: 0.5 },
-];
+/** The one waypoint star: slightly off dead-centre, a little above the horizon line. */
+const WAYPOINT = { ox: 0.12, oy: 0.18, dz: 2.2, scale: 2.6, hue: '#fff1d6', appear: 0.26 };
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -50,11 +46,14 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 export default function SwapMask() {
   const soft = useMemo(softSprite, []);
-  const spike = useMemo(spikeSprite, []);
+  const starMat = useMemo(
+    () => makeSparkleMaterial({ color: WAYPOINT.hue, rayLen: 0.22, secondary: 1, rate: 1.1, opacity: 0 }),
+    []
+  );
   const group = useRef<THREE.Group>(null);
   const fill = useRef<THREE.Mesh>(null);
   const glow = useRef<THREE.Sprite>(null);
-  const spikes = useRef<THREE.Group>(null);
+  const star = useRef<THREE.Sprite>(null);
 
   useFrame((state) => {
     const g = group.current;
@@ -89,19 +88,19 @@ export default function SwapMask() {
       (glow.current.material as THREE.SpriteMaterial).opacity = smoothstep(0.2, 0.9, cov) * 0.32;
     }
 
-    // 3) Waypoint stars — the burst the dive flies into.
-    const sg = spikes.current;
-    if (sg) {
-      for (let i = 0; i < WAYPOINTS.length; i++) {
-        const w = WAYPOINTS[i];
-        const spr = sg.children[i] as THREE.Sprite;
-        spr.position.copy(cam.position).addScaledVector(_fwd, w.dz).addScaledVector(_right, w.ox).addScaledVector(_up, w.oy);
-        const rise = smoothstep(w.appear, w.appear + 0.28, cov);
-        const sink = 1 - 0.4 * smoothstep(0.9, 1.0, cov);
-        const k = w.scale * (0.7 + 0.9 * rise);
-        spr.scale.set(k, k, 1);
-        (spr.material as THREE.SpriteMaterial).opacity = rise * sink;
-      }
+    // 3) The waypoint star — one destination the dive flies into.
+    const spr = star.current;
+    if (spr) {
+      const w = WAYPOINT;
+      spr.position.copy(cam.position).addScaledVector(_fwd, w.dz).addScaledVector(_right, w.ox).addScaledVector(_up, w.oy);
+      const rise = smoothstep(w.appear, w.appear + 0.34, cov);
+      // Ease OFF into the peak instead of stacking onto it: at full coverage the gold
+      // fill is already carrying the frame, and a star still climbing there is what
+      // turned the crossing into a flash.
+      const sink = 1 - 0.55 * smoothstep(0.82, 1.0, cov);
+      const k = w.scale * (0.7 + 0.8 * rise);
+      spr.scale.set(k, k, 1);
+      (spr.material as THREE.SpriteMaterial).opacity = rise * sink * 0.85;
     }
   });
 
@@ -114,13 +113,7 @@ export default function SwapMask() {
       <sprite ref={glow} renderOrder={20}>
         <spriteMaterial map={soft} color={'#fff0d2'} transparent opacity={0} depthWrite={false} depthTest={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </sprite>
-      <group ref={spikes}>
-        {WAYPOINTS.map((w, i) => (
-          <sprite key={i} renderOrder={21}>
-            <spriteMaterial map={spike} color={w.hue} transparent opacity={0} depthWrite={false} depthTest={false} blending={THREE.AdditiveBlending} toneMapped={false} />
-          </sprite>
-        ))}
-      </group>
+      <sprite ref={star} renderOrder={21} material={starMat} />
     </group>
   );
 }

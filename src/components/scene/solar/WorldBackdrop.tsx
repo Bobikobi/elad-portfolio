@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions } from '@/lib/planetPositions';
-import { featherSpriteProps, spikeSprite } from '@/lib/spaceMaterials';
+import { featherSpriteProps, makeSparkleMaterial } from '@/lib/spaceMaterials';
 
 /**
  * A4 — reference-grade per-world backdrop. When a world is FOCUSED, real Hubble nebula
@@ -55,7 +55,6 @@ const _target = new THREE.Vector3();
 export default function WorldBackdrop() {
   const focused = useScene((s) => s.focusedPlanet);
   const cfg = focused ? WORLD_NEBULA[focused] : null;
-  const spike = useMemo(spikeSprite, []);
   const texes = useMemo(() => {
     if (!cfg) return null;
     const loader = new THREE.TextureLoader();
@@ -66,6 +65,16 @@ export default function WorldBackdrop() {
     });
   }, [cfg]);
   useEffect(() => () => texes?.forEach((t) => t.dispose()), [texes]);
+
+  // B13+: procedural tapered spikes, one material per star, one shared clock.
+  const starMats = useMemo(
+    () =>
+      (cfg?.stars ?? []).map((col, i) =>
+        makeSparkleMaterial({ color: col, rayLen: 0.14 + i * 0.02, secondary: i === 0 ? 1 : 0, phase: i * 2.1, rate: 0.5 + i * 0.2, opacity: 0 })
+      ),
+    [cfg]
+  );
+  useEffect(() => () => starMats.forEach((m) => m.dispose()), [starMats]);
 
   const group = useRef<THREE.Group>(null);
   const started = useRef(false);
@@ -125,9 +134,13 @@ export default function WorldBackdrop() {
         </sprite>
       ))}
       {cfg.stars.map((col, i) => (
-        <sprite key={`s${i}`} position={[(i - 1) * 22 + 4, 14 - i * 10, -6 - i * 4]} scale={[3.2, 3.2, 1]} userData={{ op: 0.7, drift: 23 + i * 7, phase: i * 2.1 }}>
-          <spriteMaterial map={spike} color={col} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
-        </sprite>
+        <sprite
+          key={`s${i}`}
+          position={[(i - 1) * 22 + 4, 14 - i * 10, -6 - i * 4]}
+          scale={[3.2, 3.2, 1]}
+          userData={{ op: 0.7, drift: 23 + i * 7, phase: i * 2.1 }}
+          material={starMats[i]}
+        />
       ))}
     </group>
   );

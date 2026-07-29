@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { AdaptiveDpr, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
+import { sparkleClock } from '@/lib/spaceMaterials';
 import GalaxyAct from './acts/GalaxyAct';
 import SolarAct from './acts/SolarAct';
 import CameraRig from './CameraRig';
@@ -49,7 +50,10 @@ function Warmup() {
     if (!HUD_AVAILABLE) return;
     (window as unknown as Record<string, unknown>).__three = { scene, camera, gl, THREE };
   }, [scene, camera, gl]);
-  useFrame(() => {
+  useFrame((state) => {
+    // One clock for every sparkle in the scene (see spaceMaterials.sparkleClock) — a sky
+    // full of scintillating stars costs this single assignment.
+    sparkleClock.value = state.clock.elapsedTime;
     if (!compiled.current) {
       gl.compile(scene, camera);
       compiled.current = true;

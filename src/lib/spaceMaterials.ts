@@ -168,25 +168,111 @@ function smoothstep(a: number, b: number, x: number) {
   return t * t * (3 - 2 * t);
 }
 
-let _spike: THREE.CanvasTexture | null = null;
-/** Diffraction-spike sprite for hero stars (4-point cross + soft core). */
-export function spikeSprite(): THREE.CanvasTexture {
-  if (_spike) return _spike;
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const ctx = c.getContext('2d')!;
-  const core = ctx.createRadialGradient(64, 64, 0, 64, 64, 30);
-  core.addColorStop(0, 'rgba(255,255,255,1)');
-  core.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = core;
-  ctx.fillRect(0, 0, 128, 128);
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(64, 4); ctx.lineTo(64, 124);
-  ctx.moveTo(4, 64); ctx.lineTo(124, 64);
-  ctx.stroke();
-  _spike = new THREE.CanvasTexture(c);
-  _spike.colorSpace = THREE.SRGBColorSpace;
-  return _spike;
+/**
+ * B13+ — the hero-star sparkle, drawn procedurally per fragment.
+ *
+ * The old one was a 128px canvas with a `lineWidth = 1.4` cross stroked across it: two
+ * bars of constant width and constant brightness meeting at a soft blob. That is a plus
+ * SIGN, and it is why the stars read as clip-art. A real diffraction spike is widest and
+ * brightest where it leaves the core and tapers to nothing — both its intensity AND its
+ * width decay along the ray — and it never holds still, because the atmosphere and the
+ * optics keep moving.
+ *
+ * So: a dominant gaussian core, four rays whose half-width decays with the same
+ * exponential as their brightness, optional 45° secondaries for the brightest few, and
+ * scintillation on the star's own phase driving both ray length and intensity. All in
+ * uniforms, so eleven stars share one program and each one still lives its own life.
+ */
+const SPARKLE_GLSL = /* glsl */ `
+{
+  vec2 p = vSpark;                       // -0.5 .. 0.5 across the quad
+  float r2 = dot( p, p );
+
+  // Scintillation: a sparkle lives, a plus sign does not. Two incommensurate rates so
+  // the breathing never settles into a visible beat.
+  float sc = 0.86 + 0.14 * sin( uTime * uRate + uPhase )
+                  + 0.06 * sin( uTime * uRate * 2.37 + uPhase * 1.7 );
+  float L = uRay * sc;
+
+  float core = exp( -r2 / ( 0.0022 + 0.0016 * sc ) );
+
+  // Tapered rays: the half-width decays along the ray, so the spike thins as it fades.
+  float wx = 0.016 * exp( -abs( p.x ) / ( L * 0.9 ) ) + 0.0018;
+  float wy = 0.016 * exp( -abs( p.y ) / ( L * 0.9 ) ) + 0.0018;
+  float rayH = exp( -abs( p.x ) / L ) * exp( -0.5 * ( p.y * p.y ) / ( wx * wx ) );
+  float rayV = exp( -abs( p.y ) / L ) * exp( -0.5 * ( p.x * p.x ) / ( wy * wy ) );
+
+  // Secondary 45° pair, for the brightest one or two only.
+  vec2 q = vec2( p.x + p.y, p.x - p.y ) * 0.70710678;
+  float wd = 0.011 * exp( -abs( q.x ) / ( L * 0.6 ) ) + 0.0016;
+  float we = 0.011 * exp( -abs( q.y ) / ( L * 0.6 ) ) + 0.0016;
+  float diag = exp( -abs( q.x ) / ( L * 0.65 ) ) * exp( -0.5 * ( q.y * q.y ) / ( wd * wd ) )
+             + exp( -abs( q.y ) / ( L * 0.65 ) ) * exp( -0.5 * ( q.x * q.x ) / ( we * we ) );
+
+  float v = core + ( rayH + rayV ) * 0.45 * sc + diag * uSecondary * 0.18;
+  v *= 1.0 - smoothstep( 0.40, 0.5, max( abs( p.x ), abs( p.y ) ) ); // never reach the quad edge
+  diffuseColor.a *= clamp( v, 0.0, 1.0 );
+}
+`;
+
+export interface SparkleOptions {
+  color: THREE.ColorRepresentation;
+  /** Ray decay length in quad units. Scale it with the star's brightness. */
+  rayLen?: number;
+  /** 0..1 — how much of the faint 45° pair to show. Brightest 1-2% only. */
+  secondary?: number;
+  phase?: number;
+  /** Scintillation rate, rad/s. */
+  rate?: number;
+  opacity?: number;
+}
+
+export interface SparkleMaterial extends THREE.SpriteMaterial {
+  userData: { uTime: { value: number } };
+}
+
+/**
+ * One clock for every sparkle in the scene, driven once per frame from SceneRoot. Sharing
+ * the uniform object means a scene full of stars costs one assignment, not one frame
+ * callback per star.
+ */
+export const sparkleClock = { value: 0 };
+
+/** A sprite material that draws {@link SPARKLE_GLSL}. Drive `userData.uTime` per frame. */
+export function makeSparkleMaterial(o: SparkleOptions): SparkleMaterial {
+  const u = {
+    uTime: sparkleClock,
+    uRay: { value: o.rayLen ?? 0.16 },
+    uSecondary: { value: o.secondary ?? 0 },
+    uPhase: { value: o.phase ?? 0 },
+    uRate: { value: o.rate ?? 0.8 },
+  };
+  const m = new THREE.SpriteMaterial({
+    color: o.color,
+    transparent: true,
+    opacity: o.opacity ?? 1,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }) as SparkleMaterial;
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, u);
+    // The sprite quad's own corners, carried through as a varying — with no map bound
+    // there is no UV varying at all, and borrowing one by attaching a dummy texture would
+    // be a texture fetch per fragment for nothing.
+    shader.vertexShader = shader.vertexShader
+      .replace('void main() {', 'varying vec2 vSpark;\nvoid main() {')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n\tvSpark = position.xy;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        'void main() {',
+        'uniform float uTime, uRay, uSecondary, uPhase, uRate;\nvarying vec2 vSpark;\nvoid main() {'
+      )
+      .replace('#include <map_fragment>', SPARKLE_GLSL);
+  };
+  // Without this every sprite material with matching parameters shares one program and
+  // the injection above silently never runs — see featherSpriteProps.
+  m.customProgramCacheKey = () => 'space-sparkle';
+  m.userData = { uTime: sparkleClock };
+  return m;
 }

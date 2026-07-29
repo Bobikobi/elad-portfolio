@@ -1,28 +1,32 @@
 'use client';
-import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { spikeSprite, starColor } from '@/lib/spaceMaterials';
+import { makeSparkleMaterial, starColor } from '@/lib/spaceMaterials';
 
 /**
- * A handful of bright hero stars with 4-point diffraction spikes, scattered across the
- * far sky at large radius. Pure additive sprites (localized, no broad wash) — they add
- * sparkle + depth to the background and twinkle slowly on their own phases. Shared sky:
- * lives in SceneRoot so both acts show the SAME stars (one universe, no flicker at the
- * swap). Colour comes from the shared stellar palette so they match the field stars.
+ * A handful of bright hero stars with diffraction spikes, scattered across the far sky at
+ * large radius. Pure additive sprites (localized, no broad wash) — they add sparkle and
+ * depth to the background. Shared sky: lives in SceneRoot so both acts show the SAME stars
+ * (one universe, no flicker at the swap). Colour comes from the shared stellar palette so
+ * they match the field stars.
+ *
+ * B13+: the spike is drawn per fragment now (see makeSparkleMaterial) rather than stamped
+ * from a canvas that stroked a constant-width cross — that was a plus sign, not a glint.
+ * Ray LENGTH scales with the star's brightness, the brightest few get faint 45°
+ * secondaries, and every star scintillates on its own phase.
  */
 interface Hero {
   pos: [number, number, number];
   scale: number;
+  bright: number; // 0..1
   color: THREE.Color;
   phase: number;
-  speed: number;
+  rate: number;
 }
 
 const COUNT = 11;
 
 export default function HeroStars() {
-  const tex = useMemo(spikeSprite, []);
   const group = useRef<THREE.Group>(null);
   const stars = useMemo<Hero[]>(() => {
     return Array.from({ length: COUNT }, () => {
@@ -31,38 +35,45 @@ export default function HeroStars() {
       const u = Math.random() * Math.PI * 2;
       const v = Math.acos(2 * Math.random() - 1);
       const R = 70 + Math.random() * 14;
+      // Power law: mostly modest glints, a couple of genuinely bright ones.
+      const bright = Math.pow(Math.random(), 2.2);
       return {
         pos: [
           R * Math.sin(v) * Math.cos(u),
           R * Math.cos(v) * 0.7 + 6, // lift a touch so more sit above the ecliptic
           -Math.abs(R * Math.sin(v) * Math.sin(u)) - 8, // keep them in the far -z sky
         ],
-        scale: 2.4 + Math.random() * 2.6,
+        scale: 2.4 + bright * 3.4,
+        bright,
         color: starColor(new THREE.Color()),
         phase: Math.random() * 6.28,
-        speed: 0.4 + Math.random() * 0.8,
+        rate: 0.35 + Math.random() * 0.75,
       };
     });
   }, []);
 
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    const g = group.current;
-    if (!g) return;
-    for (let i = 0; i < stars.length; i++) {
-      const s = stars[i];
-      const spr = g.children[i] as THREE.Sprite;
-      // Slow, per-star twinkle (opacity) — the sky is alive, never a frozen backdrop.
-      (spr.material as THREE.SpriteMaterial).opacity = 0.5 + 0.4 * Math.sin(t * s.speed + s.phase);
-    }
-  });
+  const materials = useMemo(
+    () =>
+      stars.map((s) =>
+        makeSparkleMaterial({
+          color: s.color,
+          // Ray length follows brightness — the whole point of a hero star is that the
+          // bright ones throw the longer spikes.
+          rayLen: 0.1 + s.bright * 0.13,
+          secondary: s.bright > 0.82 ? 1 : 0,
+          phase: s.phase,
+          rate: s.rate,
+          opacity: 0.55 + s.bright * 0.45,
+        })
+      ),
+    [stars]
+  );
+  useEffect(() => () => materials.forEach((m) => m.dispose()), [materials]);
 
   return (
     <group ref={group} name="heroStars">
       {stars.map((s, i) => (
-        <sprite key={i} position={s.pos} scale={[s.scale, s.scale, 1]}>
-          <spriteMaterial map={tex} color={s.color} transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
-        </sprite>
+        <sprite key={i} position={s.pos} scale={[s.scale, s.scale, 1]} material={materials[i]} />
       ))}
     </group>
   );
