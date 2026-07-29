@@ -6,6 +6,9 @@ import { useMotionDisabled } from '@/hooks/useMotionDisabled';
 import { useWebGLAvailable } from '@/hooks/useWebGLAvailable';
 import { useScene } from '@/lib/sceneStore';
 import { sectionForPath } from '@/lib/sections';
+// Imported for its module side effect as much as its value: it must evaluate during the
+// initial hydration, and CosmicStage is the one client component every route mounts.
+import '@/lib/entryRoute';
 import SceneBoundary from '@/components/scene/SceneBoundary';
 import SceneLoader from '@/components/scene/SceneLoader';
 

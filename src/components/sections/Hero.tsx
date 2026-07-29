@@ -9,6 +9,7 @@ import { useMotionDisabled } from '@/hooks/useMotionDisabled';
 import { useWebGLAvailable } from '@/hooks/useWebGLAvailable';
 import { useScene } from '@/lib/sceneStore';
 import { SWAP_V, COVER_PLATEAU, COVER_FALLOFF, coverageFor } from '@/lib/diveEnvelope';
+import { ENTERED_ON_A_WORLD } from '@/lib/entryRoute';
 import About from '@/components/sections/About';
 import Services from '@/components/sections/Services';
 import Projects from '@/components/sections/Projects';
@@ -90,8 +91,15 @@ function GalaxyHome() {
 
   useEffect(() => {
     // Fresh load / refresh (module flag reset) → always the galaxy dive. Only an
-    // in-session return (flag already set) may skip to the overview.
-    const fresh = !sessionEntered;
+    // in-session return may skip to the overview.
+    //
+    // B11: the module flag alone got this wrong for a deep link. Arriving straight at
+    // /projects and pressing Escape mounts this component for the FIRST time in the
+    // document, so `!sessionEntered` reported a fresh visit and replayed the whole dive —
+    // ignoring the `seen-intro` that useWorldExit had just written for precisely the
+    // opposite reason. A document that ENTERED on a world is never a fresh home arrival,
+    // whatever this component has or has not mounted before.
+    const fresh = !sessionEntered && !ENTERED_ON_A_WORLD;
     sessionEntered = true;
     const seen = !fresh && sessionStorage.getItem('seen-intro') === '1';
     setSeenIntro(seen);
