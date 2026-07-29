@@ -34,7 +34,13 @@ const DEV = process.env.NODE_ENV !== 'production';
 // jupiter 140 / clip 0%, saturn 93 / 0%, mars 95 / 0.9%, earth 211 / 19.5% — Earth is the
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
-const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
+//
+// RULING follow-up: mars came down from 0.72. Solving the vantage for a lit target moved
+// its disc from roughly half-lit to 74% lit, and an aperture calibrated against the darker
+// phase then blew the rust out — measured 4.19% of the frame clipping where it had been
+// 0.32%. This is the tier-law lesson in miniature: change the composition and every value
+// calibrated against the old one needs re-measuring, not assuming.
+const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.62, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
 // Ringed worlds open against their OWN ring plane; every other world against the ecliptic.
 const RINGED = new Set(['saturn']);
 
