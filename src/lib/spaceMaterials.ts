@@ -124,6 +124,45 @@ export function flameSprite(): THREE.CanvasTexture {
   return _flame;
 }
 
+let _streak: THREE.CanvasTexture | null = null;
+/**
+ * The anamorphic streak — the horizontal flare a real lens throws across a bright source.
+ *
+ * It used to be the shared round sprite stretched 8 × 0.28, i.e. a very thin ellipse, and
+ * an ellipse has a hard-ish waist: it read as a bar laid across the sun rather than light
+ * bleeding sideways out of it. This is drawn as the thing it is — brightest and thickest
+ * at the centre, thinning and fading to nothing at both tips, with the vertical falloff
+ * tightening as it goes out.
+ */
+export function streakSprite(): THREE.CanvasTexture {
+  if (_streak) return _streak;
+  const W = 512;
+  const H = 64;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(W, H);
+  for (let x = 0; x < W; x++) {
+    const u = Math.abs(x / (W - 1) - 0.5) * 2; // 0 centre .. 1 tip
+    const along = Math.exp(-u * 3.4) * (1 - smoothstep(0.85, 1, u));
+    const halfWidth = 0.34 * Math.exp(-u * 2.2) + 0.012;
+    for (let y = 0; y < H; y++) {
+      const v = (y / (H - 1) - 0.5) * 2;
+      const a = along * Math.exp(-Math.pow(v / halfWidth, 2) * 1.9);
+      const i = (y * W + x) * 4;
+      img.data[i] = 255;
+      img.data[i + 1] = 255;
+      img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(Math.max(0, Math.min(1, a)) * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  _streak = new THREE.CanvasTexture(c);
+  _streak.colorSpace = THREE.SRGBColorSpace;
+  return _streak;
+}
+
 function smoothstep(a: number, b: number, x: number) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);

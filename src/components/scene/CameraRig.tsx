@@ -371,7 +371,11 @@ export default function CameraRig() {
           // ~72° off the lit direction: sits further behind the lit side so the sun (and
           // its off-frame bloom) is pushed fully out of frame — it was still bleeding a
           // warm glow into the top corner at 60° (F3). Terminator still crosses the disc.
-          const A = 1.25;
+          // B5 "eclipse beat": the vantage angle breathes ±6° on a slow irregular cycle,
+          // so the terminator WANDERS across the disc instead of sitting where it was
+          // placed. The sun stays 103-115° off-view throughout, i.e. still fully outside
+          // the frustum — this buys a living light without touching the framing.
+          const A = 1.25 + Math.sin(t * 0.055) * 0.075 + Math.sin(t * 0.021 + 1.7) * 0.035;
           _camDir.copy(_sunDir).multiplyScalar(-Math.cos(A));
           _camDir.addScaledVector(_side, Math.sin(A) * sideSign);
           // Elevation: ringed worlds get a high vantage so the rings open up (edge-on

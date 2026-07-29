@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
-import { softSprite, flameSprite, CORE_GOLD } from '@/lib/spaceMaterials';
+import { softSprite, flameSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 
 // Shared compact value-noise (used by both the surface colour and the edge wobble).
 const NOISE_GLSL = /* glsl */ `
@@ -143,21 +143,37 @@ function Prominences() {
  *  as the God Rays source. Its gold = the galaxy core's gold (one continuity). */
 export default function Sun() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const streakRef = useRef<THREE.Sprite>(null);
   const setSunMesh = useScene((s) => s.setSunMesh);
   const tex = useMemo(softSprite, []);
+  const streakTex = useMemo(streakSprite, []);
   const uniforms = useMemo(() => ({ uTime: { value: 0 }, uPulse: { value: 0 } }), []);
+  const prevCam = useRef(new THREE.Vector3());
+  const speed = useRef(0);
 
   useEffect(() => {
     setSunMesh(meshRef.current);
     return () => setSunMesh(null);
   }, [setSunMesh]);
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     uniforms.uTime.value += dt;
     // Breathe on irregular slow noise + rare flare pulse (spec: sun is alive).
     const t = uniforms.uTime.value;
     uniforms.uPulse.value = 0.15 * Math.sin(t * 0.6) + 0.1 * Math.sin(t * 0.23 + 1.3) + Math.max(0, Math.sin(t * 0.11) - 0.9) * 3.0;
     if (meshRef.current) meshRef.current.rotation.y += dt * 0.03;
+
+    // Camera speed in world units per second, damped. Drives the streak: light stretches
+    // when the frame moves and eases back on braking.
+    const v = dt > 1e-4 ? prevCam.current.distanceTo(state.camera.position) / dt : 0;
+    prevCam.current.copy(state.camera.position);
+    speed.current += (Math.min(v, 12) - speed.current) * Math.min(1, dt * 2.5);
+    const s = streakRef.current;
+    if (s) {
+      const stretch = 1 + speed.current * 0.22;
+      s.scale.set(7 * stretch, 0.6 + speed.current * 0.02, 1);
+      (s.material as THREE.SpriteMaterial).opacity = 0.10 + Math.min(0.16, speed.current * 0.035) + uniforms.uPulse.value * 0.05;
+    }
   });
 
   return (
@@ -190,11 +206,15 @@ export default function Sun() {
           <spriteMaterial map={tex} color={CORE_GOLD} transparent opacity={0.1} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </sprite>
       )}
-      {/* Subtle gold anamorphic streak — short, gold, fades to the tips (softSprite is
-          transparent at its edges), NOT the old cheap white cross-screen band. */}
+      {/* B5: the anamorphic streak. Was the round sprite stretched 8 x 0.28 — an ellipse,
+          which has a waist, so it read as a bar laid across the sun instead of light
+          bleeding sideways out of it. Now a purpose-drawn streak (thickest and brightest
+          at the centre, thinning to nothing at both tips) whose length and brightness are
+          driven by how fast the camera is moving: a lens flares harder when the frame is
+          moving, and a constant streak is a decal. */}
       {SHOW_ANAMORPHIC && (
-        <sprite scale={[8, 0.28, 1]}>
-          <spriteMaterial map={tex} color={'#ffd9a0'} transparent opacity={0.1} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+        <sprite ref={streakRef} scale={[7, 0.6, 1]}>
+          <spriteMaterial map={streakTex} color={'#ffd9a0'} transparent opacity={0.13} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </sprite>
       )}
     </group>

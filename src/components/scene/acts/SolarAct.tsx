@@ -10,6 +10,7 @@ import { PLANET_SECTION, sectionPath } from '@/lib/sections';
 import { BODY_FACTS } from '@/lib/bodyFacts';
 import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from '../DebugHud';
+import { eclipseFor } from '@/lib/eclipse';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
@@ -17,6 +18,23 @@ import ZodiacalDust from '../solar/ZodiacalDust';
 
 const _wp = new THREE.Vector3();
 const DEG2RAD = Math.PI / 180;
+
+/** Live per-body eclipse strengths, published for verification (HUD gate only). */
+const eclipseReport: Record<string, number> = {};
+/**
+ * Orbital-phase setters, one per body (HUD gate only). Eclipses are a real geometric
+ * consequence of where the planets happen to be, and the orbits take five to ten minutes
+ * a revolution — so waiting for an alignment is not a test, it is a vigil. This lets the
+ * harness PUT two bodies in line and then measure whether the shadow is actually cast,
+ * which is the part worth verifying.
+ */
+const phaseSetters: Record<string, (a: number) => void> = {};
+if (HUD_AVAILABLE && typeof window !== 'undefined') {
+  const w = window as unknown as Record<string, unknown>;
+  w.__eclipse = eclipseReport;
+  w.__orbitPhase = (key: string, angle: number) => phaseSetters[key]?.(angle);
+  w.__orbitKeys = () => Object.keys(phaseSetters);
+}
 
 // --- A1: focused-planet texture tiering ------------------------------------------------
 // The overview keeps its 2K base map (small on screen); once a page-planet is FOCUSED
@@ -428,6 +446,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   const hiTex = useRef<THREE.Texture | null>(null);
   const hiTarget = useRef(0); // 0 = show base, 1 = show hi
   const [hovered, setHovered] = useState(false);
+  const eclipse = useRef(0); // damped 0..1 — how much of the sun this body is losing
   const page = PLANET_PAGES[spec.key];
   // R5.6 — the four bodies that are NOT section routes still answer the pointer: they
   // raise a glass tooltip (name + a real astronomy fact + the wink). The tooltip's DOM
@@ -463,6 +482,41 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       shader.uniforms.uFlow = { value: spec.flow ?? 0 };   // A2 gas-giant band turbulence
       shader.uniforms.uShear = { value: spec.shear ?? 0 }; // A2 latitudinal band shear
       shader.uniforms.uHaze = { value: spec.haze ?? 0 };   // A2 Mars dust haze
+      // B5 inter-planet eclipse: the occluder's world position + radius, and how much of
+      // this frame's shadow to apply. The cone is recomputed PER FRAGMENT so the penumbra
+      // is a real curved sweep across the sphere, not a global dim.
+      shader.uniforms.uOccPos = { value: new THREE.Vector3(9999, 0, 0) };
+      shader.uniforms.uOccR = { value: 0 };
+      shader.uniforms.uEclipse = { value: 0 };
+      shader.vertexShader = shader.vertexShader.replace(
+        'void main() {',
+        'varying vec3 vWPosP;\nvoid main() {'
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+         vWPosP = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;`
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'void main() {',
+        'uniform vec3 uOccPos; uniform float uOccR, uEclipse;\nvarying vec3 vWPosP;\nvoid main() {'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `{
+           if ( uEclipse > 0.001 ) {
+             vec3 rayDir = normalize( vWPosP );          // the sun sits at the origin
+             float along = dot( uOccPos, rayDir );
+             if ( along > 0.0 ) {
+               float perp = length( uOccPos - rayDir * along );
+               float sr = uOccR * ( length( vWPosP ) / max( along, 0.001 ) );
+               float lit = smoothstep( sr * 0.55, sr * 1.20, perp );
+               outgoingLight *= mix( 1.0, mix( 0.07, 1.0, lit ), uEclipse );
+             }
+           }
+         }
+         #include <opaque_fragment>`
+      );
       shader.fragmentShader =
         `uniform sampler2D uHiMap; uniform float uHiMix, uTime, uFlow, uShear, uHaze;
          float _h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
@@ -539,7 +593,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   useEffect(() => {
     planetPositions.set(spec.key, new THREE.Vector3());
     planetRadii.set(spec.key, spec.size);
+    if (HUD_AVAILABLE) phaseSetters[spec.key] = (a: number) => { angle.current = a; };
     return () => {
+      delete phaseSetters[spec.key];
       texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose();
       planetPositions.delete(spec.key); planetRadii.delete(spec.key);
       if (useScene.getState().hoveredBody === spec.key) useScene.getState().setHoveredBody(null);
@@ -592,6 +648,24 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       // this same frame, so pills are never a frame behind the body they name (R5.4).
       group.current.getWorldPosition(_wp);
       planetPositions.get(spec.key)?.copy(_wp);
+
+      // B5: is anything standing between this body and the star? Occluder positions come
+      // from the shared map, so they can be one frame old — for a shadow that takes tens
+      // of seconds to cross a disc, that is not a lag anyone can see.
+      const hit = eclipseFor(spec.key, _wp, spec.size);
+      const target = hit ? hit.strength : 0;
+      eclipse.current += (target - eclipse.current) * Math.min(1, dt * 2.2);
+      if (hiShader.current) {
+        hiShader.current.uniforms.uEclipse.value = eclipse.current;
+        if (hit) {
+          hiShader.current.uniforms.uOccPos.value.copy(hit.occ);
+          hiShader.current.uniforms.uOccR.value = hit.occR;
+        }
+      }
+      // The atmosphere must go out with the light — a lit limb over an eclipsed disc is
+      // the giveaway that a shadow is painted on rather than cast.
+      rimUniforms.uIntensity.value *= 1 - 0.8 * eclipse.current;
+      if (HUD_AVAILABLE) eclipseReport[spec.key] = +eclipse.current.toFixed(4);
     }
     if (mesh.current) mesh.current.rotation.y += dt * 0.3;
   });

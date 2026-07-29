@@ -52,7 +52,12 @@ export default function Effects() {
   // God Rays belong to the OVERVIEW where the sun is the hero. In a focused world
   // (ORBIT) the sun is framed off-screen; leaving God Rays on would streak its glare
   // back in from the edge and re-dominate the frame (F1). So: overview only.
-  const godRays = solar && !focused && sunMesh && high;
+  // B5 / the tier LAW: God Rays used to be `high`-only, which is a COMPOSITION difference
+  // between tiers, not a cost one — a weak machine saw a different sky. Both tiers get the
+  // rays now; only the sample count drops. (They stay overview-only: in ORBIT the sun is
+  // deliberately framed ~110° off-view, so the effect would have nothing to radiate from
+  // but the frame edge.)
+  const godRays = solar && !focused && !!sunMesh;
 
   // Ease the vignette across the swap (T3) so the corners don't flip between solar's
   // deep vignette and the galaxy's mild one at the crossover — that flip (galaxy
@@ -88,7 +93,7 @@ export default function Effects() {
   return (
     <EffectComposer multisampling={0}>
       {godRays ? (
-        <GodRays sun={sunMesh} samples={high ? 60 : 30} density={0.82} decay={0.92} weight={0.085} exposure={0.16} clampMax={0.72} blur />
+        <GodRays sun={sunMesh} samples={high ? 60 : 26} density={0.86} decay={0.93} weight={0.16} exposure={0.2} clampMax={0.78} blur />
       ) : (
         <></>
       )}
