@@ -1,8 +1,10 @@
 'use client';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation, SMAA } from '@react-three/postprocessing';
+import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
+import { HUD_AVAILABLE } from './DebugHud';
 import ExposureToneMap from './ExposureToneMap';
 
 
@@ -10,8 +12,15 @@ import ExposureToneMap from './ExposureToneMap';
 // package isn't hoisted for a direct type import (pnpm), so we type the ref structurally.
 type VignetteLike = { darkness: number; offset: number };
 type HueSatLike = { hue: number; saturation: number };
+/** GodRaysEffect — `godRaysMaterial.weight` is a live setter, so the rays can be faded
+ *  in and out without ever rebuilding the effect chain. */
+type GodRaysLike = { godRaysMaterial: { weight: number } };
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const smoothstep = (e0: number, e1: number, x: number) => {
+  const t = clamp01((x - e0) / (e1 - e0));
+  return t * t * (3 - 2 * t);
+};
 
 // A5: per-world colour grade — a subtle hue shift + saturation lift on the EXISTING
 // HueSaturation pass (no new pass, no LUT) that gives each focused world its own
@@ -24,6 +33,28 @@ const GALAXY_SAT = 0.08; // A6: the same gentle grade enriches the galaxy arms (
 // Mars was the proof: at sat 0.19 its mean blue came out at 0.2 of 255 (saturation pulls
 // each channel away from luminance, and blue was already the low one), which is exactly
 // what "neon yellow" is. A mood is worth a few percent, never a channel.
+// RULING 2: God Rays follow the SUN, not the state machine.
+// The resting rule stands — in ORBIT the sun is deliberately framed ~110° off-view, so
+// there is nothing there for rays to radiate from but the frame edge. But the FLIGHT
+// between the overview and a world sweeps the camera through that whole 110°, and the sun
+// crossing the frame is the one moment in the whole piece where a shaft of light belongs.
+// Turning the effect off the instant a planet is clicked threw that away.
+//
+// So the gate is measured rather than declared: the angle between the camera's forward
+// axis and the direction to the sun, against the frustum's own corner half-angle. Weight
+// fades over [0.9, 1.7] × that half-angle (rays still reach into frame from a source just
+// outside it), and the effect is MOUNTED out to 2.2× — i.e. always well before the weight
+// leaves zero and well after it returns, so a chain rebuild can never be seen. The
+// overview keeps its unconditional mount so that a drag-rotate which swings the sun off
+// the edge fades the rays without recompiling the composer mid-gesture.
+const SUN_POS = new THREE.Vector3(0, 0, 0);
+const GODRAY_WEIGHT = 0.16;
+const RAY_FADE_IN = 0.9;   // × half-diagonal fov — full weight inside this
+const RAY_FADE_OUT = 1.7;  // × half-diagonal fov — zero weight beyond this
+const RAY_MOUNT = 2.2;     // × half-diagonal fov — mounted out to here (hysteresis below)
+const _fwd = new THREE.Vector3();
+const _toSun = new THREE.Vector3();
+
 const WORLD_GRADE: Record<string, { hue: number; sat: number }> = {
   earth: { hue: -0.02, sat: 0.08 }, // cool, clean
   jupiter: { hue: 0.02, sat: 0.08 }, // warm, rich
@@ -49,15 +80,14 @@ export default function Effects() {
   const high = useScene((s) => s.quality) === 'high';
   const focused = useScene((s) => s.focusedPlanet);
   const solar = act === 'solar';
-  // God Rays belong to the OVERVIEW where the sun is the hero. In a focused world
-  // (ORBIT) the sun is framed off-screen; leaving God Rays on would streak its glare
-  // back in from the edge and re-dominate the frame (F1). So: overview only.
   // B5 / the tier LAW: God Rays used to be `high`-only, which is a COMPOSITION difference
   // between tiers, not a cost one — a weak machine saw a different sky. Both tiers get the
-  // rays now; only the sample count drops. (They stay overview-only: in ORBIT the sun is
-  // deliberately framed ~110° off-view, so the effect would have nothing to radiate from
-  // but the frame edge.)
-  const godRays = solar && !focused && !!sunMesh;
+  // rays now; only the sample count drops.
+  // RULING 2: in the overview the sun is the hero and the rays are unconditional; inside a
+  // world they exist only while the sun is actually near the frame, which in practice means
+  // the flight in and the flight out. See the constants above.
+  const [sunNear, setSunNear] = useState(false);
+  const godRays = solar && !!sunMesh && (!focused || sunNear);
 
   // Ease the vignette across the swap (T3) so the corners don't flip between solar's
   // deep vignette and the galaxy's mild one at the crossover — that flip (galaxy
@@ -65,11 +95,50 @@ export default function Effects() {
   // Driven imperatively so `coverage` never re-renders the composer per frame.
   const vigRef = useRef<VignetteLike | null>(null);
   const hueSatRef = useRef<HueSatLike | null>(null);
+  const godRaysRef = useRef<GodRaysLike | null>(null);
   const curSat = useRef(OVERVIEW_SAT);
   const curHue = useRef(0);
-  useFrame((_, dt) => {
+  const curWeight = useRef(0);
+  useFrame((st, dt) => {
     const { act: a, coverage, focusedPlanet: fp, departure } = useScene.getState();
     const sol = a === 'solar';
+
+    // --- RULING 2: how much of the sun is in this frame? --------------------------------
+    const cam = st.camera as THREE.PerspectiveCamera;
+    cam.getWorldDirection(_fwd);
+    _toSun.copy(SUN_POS).sub(cam.position);
+    const dist = _toSun.length();
+    // Half the angle from the frame centre to a CORNER — the largest angle at which the
+    // sun is still inside the picture, and the honest threshold for "in frame".
+    const halfDiag = Math.atan(
+      Math.tan((cam.fov * Math.PI) / 360) * Math.hypot(1, cam.aspect)
+    );
+    const ang = dist < 1e-4 ? 0 : Math.acos(Math.max(-1, Math.min(1, _fwd.dot(_toSun) / dist)));
+    const inFrame = 1 - smoothstep(halfDiag * RAY_FADE_IN, halfDiag * RAY_FADE_OUT, ang);
+    // Mount hysteresis: a wide band either side of the fade so the chain is rebuilt only
+    // while the weight is already pinned at zero.
+    if (sol && fp) {
+      if (!sunNear && ang < halfDiag * RAY_MOUNT) setSunNear(true);
+      else if (sunNear && ang > halfDiag * (RAY_MOUNT + 0.5)) setSunNear(false);
+    } else if (sunNear) setSunNear(false);
+    const gr = godRaysRef.current;
+    if (gr) {
+      const target = sol ? GODRAY_WEIGHT * inFrame : 0;
+      curWeight.current += (target - curWeight.current) * Math.min(1, dt * 5);
+      gr.godRaysMaterial.weight = curWeight.current;
+    } else {
+      curWeight.current = 0;
+    }
+    if (HUD_AVAILABLE) {
+      (window as unknown as { __godrays?: unknown }).__godrays = {
+        mounted: !!gr,
+        weight: +curWeight.current.toFixed(4),
+        sunAngleDeg: +((ang * 180) / Math.PI).toFixed(1),
+        halfDiagDeg: +((halfDiag * 180) / Math.PI).toFixed(1),
+        inFrame: +inFrame.toFixed(3),
+      };
+    }
+
     const v = vigRef.current;
     if (v) {
       v.darkness = sol ? 0.87 - 0.25 * coverage : 0.62;
@@ -93,7 +162,19 @@ export default function Effects() {
   return (
     <EffectComposer multisampling={0}>
       {godRays ? (
-        <GodRays sun={sunMesh} samples={high ? 60 : 26} density={0.86} decay={0.93} weight={0.16} exposure={0.2} clampMax={0.78} blur />
+        /* weight starts at 0 and is driven per-frame (RULING 2) — so the frame in which the
+           effect mounts is identical to the frame before it, and the rebuild is invisible. */
+        <GodRays
+          ref={(e: GodRaysLike | null) => { godRaysRef.current = e ?? null; }}
+          sun={sunMesh}
+          samples={high ? 60 : 26}
+          density={0.86}
+          decay={0.93}
+          weight={0}
+          exposure={0.2}
+          clampMax={0.78}
+          blur
+        />
       ) : (
         <></>
       )}
