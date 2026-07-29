@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { makeSparkleMaterial, starColor } from '@/lib/spaceMaterials';
+import { makeRng, SEED } from '@/lib/rng';
 
 /**
  * A handful of bright hero stars with diffraction spikes, scattered across the far sky at
@@ -29,14 +30,15 @@ const COUNT = 11;
 export default function HeroStars() {
   const group = useRef<THREE.Group>(null);
   const stars = useMemo<Hero[]>(() => {
+    const rnd = makeRng(SEED.heroStars);
     return Array.from({ length: COUNT }, () => {
       // On a large sphere, biased away from dead-centre so they read as distant sky, not
       // objects among the planets.
-      const u = Math.random() * Math.PI * 2;
-      const v = Math.acos(2 * Math.random() - 1);
-      const R = 70 + Math.random() * 14;
+      const u = rnd() * Math.PI * 2;
+      const v = Math.acos(2 * rnd() - 1);
+      const R = 70 + rnd() * 14;
       // Power law: mostly modest glints, a couple of genuinely bright ones.
-      const bright = Math.pow(Math.random(), 2.2);
+      const bright = Math.pow(rnd(), 2.2);
       return {
         pos: [
           R * Math.sin(v) * Math.cos(u),
@@ -45,9 +47,9 @@ export default function HeroStars() {
         ],
         scale: 2.4 + bright * 3.4,
         bright,
-        color: starColor(new THREE.Color()),
-        phase: Math.random() * 6.28,
-        rate: 0.35 + Math.random() * 0.75,
+        color: starColor(new THREE.Color(), rnd),
+        phase: rnd() * 6.28,
+        rate: 0.35 + rnd() * 0.75,
       };
     });
   }, []);

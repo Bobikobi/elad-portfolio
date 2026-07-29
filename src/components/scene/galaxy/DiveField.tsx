@@ -5,6 +5,7 @@ import { damp3 } from 'maath/easing';
 import * as THREE from 'three';
 import { starColor, makeSparkleMaterial } from '@/lib/spaceMaterials';
 import { useScene } from '@/lib/sceneStore';
+import { makeRng, SEED } from '@/lib/rng';
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -119,27 +120,28 @@ export default function DiveField({ count = 4200 }: { count?: number }) {
     const ny = new THREE.Vector3().crossVectors(dir, nx).normalize();
     const col = new THREE.Color();
     const p = new THREE.Vector3();
+    const rnd = makeRng(SEED.diveField);
     for (let i = 0; i < count; i++) {
-      if (Math.random() < 0.6) {
+      if (rnd() < 0.6) {
         // Along the corridor, radius power-biased toward the axis → close passes.
-        const u = Math.random();
-        const ang = Math.random() * Math.PI * 2;
-        const rad = Math.pow(Math.random(), 1.8) * 11;
+        const u = rnd();
+        const ang = rnd() * Math.PI * 2;
+        const rad = Math.pow(rnd(), 1.8) * 11;
         p.copy(PATH_A).addScaledVector(dir, (u - 0.15) * (len + 14));
         p.addScaledVector(nx, Math.cos(ang) * rad);
         p.addScaledVector(ny, Math.sin(ang) * rad);
       } else {
         // Wide background volume so the field crosses every screen edge.
-        p.set((Math.random() - 0.5) * 36, (Math.random() - 0.5) * 24, (Math.random() - 0.5) * 36);
+        p.set((rnd() - 0.5) * 36, (rnd() - 0.5) * 24, (rnd() - 0.5) * 36);
       }
       center[i * 3] = p.x; center[i * 3 + 1] = p.y; center[i * 3 + 2] = p.z;
-      starColor(col);
+      starColor(col, rnd);
       color[i * 3] = col.r; color[i * 3 + 1] = col.g; color[i * 3 + 2] = col.b;
-      scale[i] = 5 + Math.pow(Math.random(), 6) * 55; // power-law: many small, few big
-      phase[i] = Math.random();
+      scale[i] = 5 + Math.pow(rnd(), 6) * 55; // power-law: many small, few big
+      phase[i] = rnd();
       // Stretch mix (spec): ~70% plain (depth), ~20% light, ~10% strong streaks.
-      const r = Math.random();
-      stretch[i] = r < 0.7 ? Math.random() * 0.12 : r < 0.9 ? 0.3 + Math.random() * 0.35 : 0.85 + Math.random() * 0.5;
+      const r = rnd();
+      stretch[i] = r < 0.7 ? rnd() * 0.12 : r < 0.9 ? 0.3 + rnd() * 0.35 : 0.85 + rnd() * 0.5;
     }
     g.setAttribute('aCenter', new THREE.InstancedBufferAttribute(center, 3));
     g.setAttribute('aColor', new THREE.InstancedBufferAttribute(color, 3));
@@ -152,8 +154,10 @@ export default function DiveField({ count = 4200 }: { count?: number }) {
 
   // Hero stars: a handful seeded ON the corridor axis so they sweep close by.
   const heroes = useMemo(() => {
-    let s = 7;
-    const rng = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    // Was a hand-rolled Lehmer generator with its seed in a closure variable, which the
+    // immutability rule flags for a real reason (the closure outlives the render). Same job,
+    // one shared implementation, and now listed in the seed register with everything else.
+    const rng = makeRng(SEED.diveHeroes);
     const dir = new THREE.Vector3().subVectors(PATH_B, PATH_A).normalize();
     const up = new THREE.Vector3(0, 1, 0);
     const nx = new THREE.Vector3().crossVectors(dir, up).normalize();

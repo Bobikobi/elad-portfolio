@@ -2,6 +2,7 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { softSprite, makeSparkleMaterial } from '@/lib/spaceMaterials';
+import { makeRng, SEED } from '@/lib/rng';
 
 const RADIUS = 6;
 const BRANCHES = 4;
@@ -22,11 +23,14 @@ function armPoint(rng: () => number): [number, number, number] {
  * of hero stars with diffraction spikes. All from the shared materials module.
  */
 export default function GalaxyDetail() {
-  const soft = useMemo(softSprite, []);
+  const soft = useMemo(() => softSprite(), []);
 
+  // Three fields, three seeds. These were already deterministic — via three copies of a
+  // hand-rolled Lehmer generator whose seed lived in a closure variable, which the
+  // immutability rule flags because that closure outlives the render. Same determinism, one
+  // implementation, and the seeds are now in the register instead of being magic numbers.
   const hii = useMemo(() => {
-    let s = 1;
-    const rng = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const rng = makeRng(SEED.galaxyDetail);
     return Array.from({ length: 22 }, () => ({
       pos: armPoint(rng),
       scale: 0.3 + rng() * 0.5,
@@ -35,8 +39,7 @@ export default function GalaxyDetail() {
   }, []);
 
   const heroStars = useMemo(() => {
-    let s = 99;
-    const rng = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const rng = makeRng(SEED.galaxyDetailHeroes);
     return Array.from({ length: 8 }, () => ({
       pos: armPoint(rng),
       scale: 0.5 + rng() * 0.5,
@@ -54,8 +57,7 @@ export default function GalaxyDetail() {
   // Dark dust clouds — normal-blended near-void sprites that darken the stars
   // behind them (the identifying mark of a real galaxy), drawn after the arms.
   const dust = useMemo(() => {
-    let s = 4242;
-    const rng = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const rng = makeRng(SEED.galaxyDetailDust);
     return Array.from({ length: 10 }, () => ({ pos: armPoint(rng), scale: 1.2 + rng() * 1.6 }));
   }, []);
 

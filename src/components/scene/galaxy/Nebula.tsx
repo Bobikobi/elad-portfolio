@@ -41,7 +41,7 @@ const GALAXIES: Patch[] = [
 ];
 
 export default function Nebula({ intensity = 1 }: { intensity?: number }) {
-  const tex = useMemo(softSprite, []);
+  const tex = useMemo(() => softSprite(), []);
   const group = useRef<THREE.Group>(null);
   // B4+: every patch drifts AND breathes on its own period, and the periods are chosen so
   // they do not share a short common multiple — the standing acceptance test is a 20s

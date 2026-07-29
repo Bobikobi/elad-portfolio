@@ -11,6 +11,7 @@ import { BODY_FACTS } from '@/lib/bodyFacts';
 import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
+import { makeRng, SEED } from '@/lib/rng';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
@@ -196,18 +197,18 @@ interface PlanetSpec {
 
 function Moons({ count, planetSize }: { count: number; planetSize: number }) {
   const group = useRef<THREE.Group>(null);
-  const moons = useMemo(
-    () => Array.from({ length: count }, (_, i) => ({
+  const moons = useMemo(() => {
+    const rnd = makeRng(SEED.moons);
+    return Array.from({ length: count }, (_, i) => ({
       // Hug the planet so at the close ORBIT vantage the moons stay a tight system
       // around it (not scattered across the frame / over the content column).
       r: planetSize * (1.4 + i * 0.12),
-      size: planetSize * (0.09 + Math.random() * 0.06),
+      size: planetSize * (0.09 + rnd() * 0.06),
       speed: 0.5 - i * 0.03,
-      phase: Math.random() * 6.28,
-      tilt: (Math.random() - 0.5) * 0.5,
-    })),
-    [count, planetSize]
-  );
+      phase: rnd() * 6.28,
+      tilt: (rnd() - 0.5) * 0.5,
+    }));
+  }, [count, planetSize]);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     group.current?.children.forEach((m, i) => {
@@ -670,6 +671,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   }, [spec.rings, spec.size]);
   const incl = (spec.incl ?? 0) * DEG2RAD;
   const atmoStrength = spec.atmoStrength ?? 0.4;
+  const rimMat = useRef<THREE.ShaderMaterial>(null);
   const rimUniforms = useMemo(
     () => ({
       uColor: { value: new THREE.Color(spec.atmo ?? spec.rim) },
@@ -720,8 +722,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     angle.current += dt * spec.speed;
     // Atmosphere strength eases toward its idle value, brightening on hover (a fade, not a switch).
     const rimTarget = hovered && page ? atmoStrength * 1.8 : atmoStrength;
-    const uI = rimUniforms.uIntensity;
-    uI.value += (rimTarget - uI.value) * Math.min(1, dt * 6);
+    // Through the live material, not the memoised literal — see ZodiacalDust for the reason.
+    const uI = rimMat.current?.uniforms.uIntensity;
+    if (uI) uI.value += (rimTarget - uI.value) * Math.min(1, dt * 6);
     // A2: drive the flow/haze animation (all planets that compiled the shader).
     if (hiShader.current) hiShader.current.uniforms.uTime.value = state.clock.elapsedTime;
     // A1: crossfade the hi-res map toward its target; once fully faded out, free the GPU
@@ -769,7 +772,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       }
       // The atmosphere must go out with the light — a lit limb over an eclipsed disc is
       // the giveaway that a shadow is painted on rather than cast.
-      rimUniforms.uIntensity.value *= 1 - 0.8 * eclipse.current;
+      if (rimMat.current) rimMat.current.uniforms.uIntensity.value *= 1 - 0.8 * eclipse.current;
       if (HUD_AVAILABLE) {
         eclipseReport[spec.key] = +eclipse.current.toFixed(4);
         eclipseRawReport[spec.key] = +target.toFixed(4);
@@ -816,7 +819,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         {/* Atmospheric rim light (heightened realism, tinted from the planet). */}
         <mesh scale={ATMO_SHELL} raycast={() => null}>
           <sphereGeometry args={[spec.size, 48, 48]} />
-          <shaderMaterial vertexShader={rimVert} fragmentShader={rimFrag} uniforms={rimUniforms} transparent side={THREE.BackSide} blending={THREE.AdditiveBlending} depthWrite={false} />
+          <shaderMaterial ref={rimMat} vertexShader={rimVert} fragmentShader={rimFrag} uniforms={rimUniforms} transparent side={THREE.BackSide} blending={THREE.AdditiveBlending} depthWrite={false} />
         </mesh>
         {spec.rings && ringTex && ringGeo && (
           <mesh ref={ringMesh} rotation={[Math.PI / 2.05, 0, 0]} geometry={ringGeo}>

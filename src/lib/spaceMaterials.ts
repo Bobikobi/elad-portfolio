@@ -4,9 +4,14 @@
 import * as THREE from 'three';
 
 /** Realistic stellar colour classes: ~55% warm-white, 15% orange giants, 20% hot
- *  blue-white, 10% deep blue. Returns linear RGB. */
-export function starColor(target = new THREE.Color()): THREE.Color {
-  const r = Math.random();
+ *  blue-white, 10% deep blue. Returns linear RGB.
+ *
+ *  `rnd` exists because this function is called from inside seeded `useMemo` bodies, and its
+ *  own `Math.random()` was a hole in that seeding that no lint rule could see: the positions
+ *  would have been reproducible while the COLOURS still rolled fresh on every load. Callers
+ *  that have a generator must pass it; the default keeps non-seeded callers working. */
+export function starColor(target = new THREE.Color(), rnd: () => number = Math.random): THREE.Color {
+  const r = rnd();
   if (r < 0.55) target.setHSL(0.11, 0.35, 0.9);
   else if (r < 0.7) target.setHSL(0.06, 0.75, 0.62);
   else if (r < 0.9) target.setHSL(0.6, 0.5, 0.86);

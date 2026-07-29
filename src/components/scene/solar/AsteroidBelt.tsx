@@ -3,6 +3,7 @@ import { useMemo, useRef, useLayoutEffect, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { HUD_AVAILABLE } from '../DebugHud';
+import { makeRng, SEED } from '@/lib/rng';
 import {
   chromeCount,
   chromeKeep,
@@ -103,8 +104,9 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
   const camera = useThree((s) => s.camera);
 
   const belt = useMemo(() => {
+    const rnd = makeRng(SEED.asteroidBelt);
     // Gaussian-ish radius via averaging two uniforms (triangular) → dense core, thin edges.
-    const gauss = () => Math.random() + Math.random() - 1; // ~[-1,1], peaked at 0
+    const gauss = () => rnd() + rnd() - 1; // ~[-1,1], peaked at 0
     const rocks: {
       angle: number; radius: number; y: number; size: number;
       lump: [number, number, number]; color: string; rx: number; ry: number; rz: number;
@@ -114,27 +116,27 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     for (let i = 0; i < count; i++) {
       // Clumped angle: pick a stream centre, spread within it; a fraction scatter freely
       // as inter-stream dust so the clumps don't look like hard spokes.
-      const stream = Math.floor(Math.random() * CLUSTERS) * ((Math.PI * 2) / CLUSTERS);
-      const clumped = Math.random() < 0.72;
-      const angle = clumped ? stream + gauss() * 0.55 : Math.random() * Math.PI * 2;
+      const stream = Math.floor(rnd() * CLUSTERS) * ((Math.PI * 2) / CLUSTERS);
+      const clumped = rnd() < 0.72;
+      const angle = clumped ? stream + gauss() * 0.55 : rnd() * Math.PI * 2;
       const raw = BELT_R + gauss() * BELT_HALF + (clumped ? 0 : gauss() * 0.18);
       const radius = Math.min(R_MAX, Math.max(R_MIN, raw)); // never inside a neighbour
       const y = gauss() * 0.16; // thin vertical spread → a disc, not a tube
-      const size = R0 + Math.pow(Math.random(), R_POW) * R_SPAN;
+      const size = R0 + Math.pow(rnd(), R_POW) * R_SPAN;
 
       if (size >= MESH_MIN) {
         rocks.push({
           angle, radius, y, size,
-          lump: [0.7 + Math.random() * 0.6, 0.7 + Math.random() * 0.6, 0.7 + Math.random() * 0.6],
-          color: ROCK_COLORS[(Math.random() * ROCK_COLORS.length) | 0],
-          rx: Math.random() * 6.28, ry: Math.random() * 6.28, rz: Math.random() * 6.28,
+          lump: [0.7 + rnd() * 0.6, 0.7 + rnd() * 0.6, 0.7 + rnd() * 0.6],
+          color: ROCK_COLORS[(rnd() * ROCK_COLORS.length) | 0],
+          rx: rnd() * 6.28, ry: rnd() * 6.28, rz: rnd() * 6.28,
         });
       } else {
         dust.push({
           angle, radius, y, size,
-          color: DUST_COLORS[(Math.random() * DUST_COLORS.length) | 0],
-          phase: Math.random() * 6.28,
-          rate: 0.5 + Math.random() * 1.6,
+          color: DUST_COLORS[(rnd() * DUST_COLORS.length) | 0],
+          phase: rnd() * 6.28,
+          rate: 0.5 + rnd() * 1.6,
         });
       }
     }
@@ -334,16 +336,25 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
   );
 
   const groupRef = useRef<THREE.Group>(null);
+  // Written through the live materials rather than through the memoised uniform literals —
+  // the same reason `rockShader.current.uniforms` below was already doing it that way. A
+  // `useMemo` result is frozen to the React Compiler, so mutating it is the `immutability`
+  // error; the mounted material is the thing that actually owns the uniform.
+  const dustMat = useRef<THREE.ShaderMaterial>(null);
+  const bandMat = useRef<THREE.ShaderMaterial>(null);
   useFrame((state, dt) => {
     if (groupRef.current) groupRef.current.rotation.y += dt * 0.025;
     updateChromeRects(state.gl);
-    dustUniforms.uTime.value = state.clock.elapsedTime;
-    bandUniforms.uTime.value = state.clock.elapsedTime;
+    const t = state.clock.elapsedTime;
     // px per world unit at one unit of depth — kept live so the clamp survives a DPR
     // change from AdaptiveDpr (cost may vary per tier; the reading must not).
     const projScale =
       state.camera.projectionMatrix.elements[5] * 0.5 * state.gl.getDrawingBufferSize(_dbs).y;
-    dustUniforms.uProjScale.value = projScale;
+    if (dustMat.current) {
+      dustMat.current.uniforms.uTime.value = t;
+      dustMat.current.uniforms.uProjScale.value = projScale;
+    }
+    if (bandMat.current) bandMat.current.uniforms.uTime.value = t;
     if (rockShader.current) rockShader.current.uniforms.uProjScale.value = projScale;
   });
 
@@ -370,6 +381,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
           the rocks that made them). Additive, never depth-written, and clamped low. */}
       <mesh geometry={bandGeo} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} raycast={() => null}>
         <shaderMaterial
+          ref={bandMat}
           uniforms={bandUniforms}
           vertexShader={bandVert}
           fragmentShader={bandFrag}
@@ -385,6 +397,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
           stretch of it glows the way a real dust band catches sunlight. */}
       <points geometry={dustGeo} frustumCulled={false}>
         <shaderMaterial
+          ref={dustMat}
           uniforms={dustUniforms}
           vertexShader={dustVert}
           fragmentShader={dustFrag}

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { chromeCount, chromeMaskGLSL, chromeRects, updateChromeRects } from '@/lib/chromeMask';
+import { makeRng, SEED } from '@/lib/rng';
 
 /**
  * The zodiacal light — sunlight scattered off the dust that fills the plane of the whole
@@ -38,23 +39,24 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
     const col = new Float32Array(count * 3);
     const wgt = new Float32Array(count);
     const twk = new Float32Array(count * 2);
+    const rnd = makeRng(SEED.zodiacalDust);
     for (let i = 0; i < count; i++) {
       // Radial density falls off outward (pow > 1 biases inward), and the disc FLARES:
       // its scale height grows with radius, which is what stops it reading as a wafer.
-      const r = R_IN + Math.pow(Math.random(), 1.8) * (R_OUT - R_IN);
-      const a = Math.random() * Math.PI * 2;
+      const r = R_IN + Math.pow(rnd(), 1.8) * (R_OUT - R_IN);
+      const a = rnd() * Math.PI * 2;
       const h = 0.16 + r * 0.055;
-      const y = (Math.random() + Math.random() + Math.random() - 1.5) * h; // ~gaussian
+      const y = (rnd() + rnd() + rnd() - 1.5) * h; // ~gaussian
       pos[i * 3] = Math.cos(a) * r;
       pos[i * 3 + 1] = y;
       pos[i * 3 + 2] = Math.sin(a) * r;
-      _c.set(DUST_COLORS[(Math.random() * DUST_COLORS.length) | 0]);
+      _c.set(DUST_COLORS[(rnd() * DUST_COLORS.length) | 0]);
       col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
       // Illumination falls with distance from the star, and grains near the plane are
       // where the light actually concentrates.
       wgt[i] = (1.0 / (0.6 + r * 0.22)) * Math.exp(-Math.pow(y / h, 2) * 0.7);
-      twk[i * 2] = Math.random() * 6.28;
-      twk[i * 2 + 1] = 0.3 + Math.random() * 1.1;
+      twk[i * 2] = rnd() * 6.28;
+      twk[i * 2 + 1] = 0.3 + rnd() * 1.1;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -72,17 +74,27 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
   );
 
   const ref = useRef<THREE.Points>(null);
+  // The per-frame uniform writes go through the LIVE material, not through the memoised
+  // object literal. Same three uniforms, same values — but a `useMemo` result is frozen as
+  // far as the React Compiler is concerned, and writing to it is the `immutability` error.
+  // Reading them off the mounted material is both compliant and more honest about what is
+  // actually being mutated: the material's uniform, not our description of it.
+  const matRef = useRef<THREE.ShaderMaterial>(null);
   useFrame((state, dt) => {
     updateChromeRects(state.gl);
-    uniforms.uTime.value = state.clock.elapsedTime;
-    uniforms.uProjScale.value =
-      state.camera.projectionMatrix.elements[5] * 0.5 * state.gl.getDrawingBufferSize(_dbs).y;
+    const u = matRef.current?.uniforms;
+    if (u) {
+      u.uTime.value = state.clock.elapsedTime;
+      u.uProjScale.value =
+        state.camera.projectionMatrix.elements[5] * 0.5 * state.gl.getDrawingBufferSize(_dbs).y;
+    }
     if (ref.current) ref.current.rotation.y += dt * 0.006;
   });
 
   return (
     <points ref={ref} geometry={geo} frustumCulled={false} name="zodiacalDust">
       <shaderMaterial
+        ref={matRef}
         uniforms={uniforms}
         vertexShader={vert}
         fragmentShader={frag}

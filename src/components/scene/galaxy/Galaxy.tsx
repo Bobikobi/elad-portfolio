@@ -3,6 +3,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { galaxyVertexShader, galaxyFragmentShader } from './shaders';
+import { makeRng, SEED } from '@/lib/rng';
 
 interface GalaxyProps {
   count?: number;
@@ -35,15 +36,16 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
     const mid = new THREE.Color(PARAMS.midColor);
     const edge = new THREE.Color(PARAMS.edgeColor);
     const tmp = new THREE.Color();
+    const rnd = makeRng(SEED.galaxy);
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      const radius = Math.pow(Math.random(), 1.1) * PARAMS.radius;
+      const radius = Math.pow(rnd(), 1.1) * PARAMS.radius;
       const branchAngle = ((i % PARAMS.branches) / PARAMS.branches) * Math.PI * 2;
       const spinAngle = radius * PARAMS.spin;
 
       const rand = () =>
-        Math.pow(Math.random(), PARAMS.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * PARAMS.randomness * radius;
+        Math.pow(rnd(), PARAMS.randomnessPower) * (rnd() < 0.5 ? 1 : -1) * PARAMS.randomness * radius;
 
       positions[i3] = Math.cos(branchAngle + spinAngle) * radius;
       positions[i3 + 1] = 0;
@@ -62,7 +64,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       colors[i3 + 1] = tmp.g;
       colors[i3 + 2] = tmp.b;
 
-      scales[i] = 0.5 + Math.random() * 0.8;
+      scales[i] = 0.5 + rnd() * 0.8;
     }
 
     const geo = new THREE.BufferGeometry();

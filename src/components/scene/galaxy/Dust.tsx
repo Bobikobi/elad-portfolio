@@ -2,6 +2,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { makeRng, SEED } from '@/lib/rng';
 
 function softDot() {
   const c = document.createElement('canvas');
@@ -21,14 +22,15 @@ function softDot() {
  * the lens. Additive, faint, slowly turning.
  */
 export default function Dust({ count = 70 }: { count?: number }) {
-  const tex = useMemo(softDot, []);
+  const tex = useMemo(() => softDot(), []);
   const ref = useRef<THREE.Points>(null);
   const geo = useMemo(() => {
     const pos = new Float32Array(count * 3);
+    const rnd = makeRng(SEED.foregroundDust);
     for (let i = 0; i < count; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * 26;
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 16;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 22;
+      pos[i * 3] = (rnd() - 0.5) * 26;
+      pos[i * 3 + 1] = (rnd() - 0.5) * 16;
+      pos[i * 3 + 2] = (rnd() - 0.5) * 22;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));

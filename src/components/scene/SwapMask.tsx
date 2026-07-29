@@ -45,7 +45,7 @@ const DEG2RAD = Math.PI / 180;
 const UP = new THREE.Vector3(0, 1, 0);
 
 export default function SwapMask() {
-  const soft = useMemo(softSprite, []);
+  const soft = useMemo(() => softSprite(), []);
   const starMat = useMemo(
     () => makeSparkleMaterial({ color: WAYPOINT.hue, rayLen: 0.22, secondary: 1, rate: 1.1, opacity: 0 }),
     []

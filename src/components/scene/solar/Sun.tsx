@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import { softSprite, flameSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
+import { makeRng, SEED } from '@/lib/rng';
 
 // Shared compact value-noise (used by both the surface colour and the edge wobble).
 const NOISE_GLSL = /* glsl */ `
@@ -85,22 +86,21 @@ const SHOW_ANAMORPHIC = true;    // short horizontal gold streak — kept (subtl
  */
 function Prominences() {
   const group = useRef<THREE.Group>(null);
-  const tex = useMemo(flameSprite, []);
-  const proms = useMemo(
-    () =>
-      Array.from({ length: PROM_COUNT }, (_, i) => {
-        const a = (i / PROM_COUNT) * Math.PI * 2 + Math.random() * 0.5;
-        return {
-          a,
-          x: Math.cos(a),
-          y: Math.sin(a),
-          len: 0.8 + Math.random() * 1.1,
-          speed: 0.06 + Math.random() * 0.09,
-          phase: Math.random() * 6.28,
-        };
-      }),
-    []
-  );
+  const tex = useMemo(() => flameSprite(), []);
+  const proms = useMemo(() => {
+    const rnd = makeRng(SEED.prominences);
+    return Array.from({ length: PROM_COUNT }, (_, i) => {
+      const a = (i / PROM_COUNT) * Math.PI * 2 + rnd() * 0.5;
+      return {
+        a,
+        x: Math.cos(a),
+        y: Math.sin(a),
+        len: 0.8 + rnd() * 1.1,
+        speed: 0.06 + rnd() * 0.09,
+        phase: rnd() * 6.28,
+      };
+    });
+  }, []);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     const g = group.current;
@@ -145,9 +145,11 @@ export default function Sun() {
   const meshRef = useRef<THREE.Mesh>(null);
   const streakRef = useRef<THREE.Sprite>(null);
   const setSunMesh = useScene((s) => s.setSunMesh);
-  const tex = useMemo(softSprite, []);
-  const streakTex = useMemo(streakSprite, []);
+  const tex = useMemo(() => softSprite(), []);
+  const streakTex = useMemo(() => streakSprite(), []);
   const uniforms = useMemo(() => ({ uTime: { value: 0 }, uPulse: { value: 0 } }), []);
+  // Driven through the live material — a memoised object is frozen to the React Compiler.
+  const sunMat = useRef<THREE.ShaderMaterial>(null);
   const prevCam = useRef(new THREE.Vector3());
   const speed = useRef(0);
 
@@ -157,10 +159,15 @@ export default function Sun() {
   }, [setSunMesh]);
 
   useFrame((state, dt) => {
-    uniforms.uTime.value += dt;
-    // Breathe on irregular slow noise + rare flare pulse (spec: sun is alive).
-    const t = uniforms.uTime.value;
-    uniforms.uPulse.value = 0.15 * Math.sin(t * 0.6) + 0.1 * Math.sin(t * 0.23 + 1.3) + Math.max(0, Math.sin(t * 0.11) - 0.9) * 3.0;
+    const u = sunMat.current?.uniforms;
+    let pulse = 0;
+    if (u) {
+      u.uTime.value += dt;
+      // Breathe on irregular slow noise + rare flare pulse (spec: sun is alive).
+      const t = u.uTime.value;
+      pulse = 0.15 * Math.sin(t * 0.6) + 0.1 * Math.sin(t * 0.23 + 1.3) + Math.max(0, Math.sin(t * 0.11) - 0.9) * 3.0;
+      u.uPulse.value = pulse;
+    }
     if (meshRef.current) meshRef.current.rotation.y += dt * 0.03;
 
     // Camera speed in world units per second, damped. Drives the streak: light stretches
@@ -172,7 +179,7 @@ export default function Sun() {
     if (s) {
       const stretch = 1 + speed.current * 0.22;
       s.scale.set(7 * stretch, 0.6 + speed.current * 0.02, 1);
-      (s.material as THREE.SpriteMaterial).opacity = 0.10 + Math.min(0.16, speed.current * 0.035) + uniforms.uPulse.value * 0.05;
+      (s.material as THREE.SpriteMaterial).opacity = 0.10 + Math.min(0.16, speed.current * 0.035) + pulse * 0.05;
     }
   });
 
@@ -188,7 +195,7 @@ export default function Sun() {
       {/* Plasma surface (the God Rays source) */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[SUN_R, 96, 96]} />
-        <shaderMaterial vertexShader={sunVert} fragmentShader={sunFrag} uniforms={uniforms} toneMapped={false} />
+        <shaderMaterial ref={sunMat} vertexShader={sunVert} fragmentShader={sunFrag} uniforms={uniforms} toneMapped={false} />
       </mesh>
       <Prominences />
       {/* Fresnel-ish corona shell */}
