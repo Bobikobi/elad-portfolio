@@ -240,6 +240,7 @@ const REVEAL_FRAMES = 8;
 const REVEAL_MIN_FRAMES = 2;   // readiness floor — drawn frames, never wall-clock
 const REVEAL_HOLD_CAP = 0.4;   // s — past this the floor alone governs
 const REVEAL_FADE = 0.35; // s
+const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
 // Immersive welcome: low + close, looking ACROSS the galaxy plane so it fills the
 // frame and spills off the left/right edges (you're inside space, not viewing a disc).
@@ -432,7 +433,9 @@ export default function CameraRig() {
   const revealHold = useRef(0);
   const revealDrawn = useRef(0); // G1: drawn frames since the latch — the readiness floor
   const revealAge = useRef(0);   // G1: wall-clock seconds since the latch — the slow-client exit
-  const dtNominal = useRef(1 / 60); // G1b: min-biased estimate of this client's own frame time
+  const dtNominal = useRef(1 / 60); // G1b: median estimate of this client's own frame time
+  const dtRing = useRef<number[]>(new Array(DT_WINDOW).fill(1 / 60));
+  const dtRingAt = useRef(0);
   const fadeAge = useRef(0);        // G1b: seconds the current fade has been running
   const covOut = useRef(0); // last published coverage — the rate limiter's state
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
@@ -506,9 +509,23 @@ export default function CameraRig() {
      * honest signal. A stall barely moves the estimate; a genuinely slow client moves it all
      * the way, and gets its curtain back immediately.
      */
+    // The client's own frame time, as the MEDIAN of the last DT_WINDOW frames.
+    //
+    // This was an asymmetric EMA — quick to fall, grudging to rise — chosen so a single stalled
+    // frame could not move it. It did resist stalls, and it also failed the case it existed to
+    // serve: rising at 0.015 per frame, an honestly-8fps client needs about 150 frames, roughly
+    // nineteen seconds, before the estimate reaches its real cadence. Measured, that client was
+    // still being judged "fast" at the moment of the teleport, so it got the fade meant for a
+    // fast machine and waited four frames instead of two.
+    //
+    // A median does both jobs at once and needs no tuning to balance them: one long frame in
+    // twelve barely moves it, twelve long frames move it completely, and it converges in six.
+    // The window is small enough to sort every frame without thinking about it.
+    dtRing.current[dtRingAt.current] = dt;
+    dtRingAt.current = (dtRingAt.current + 1) % DT_WINDOW;
+    const sorted = [...dtRing.current].sort((a, b) => a - b);
+    dtNominal.current = sorted[DT_WINDOW >> 1];
     const nominal = dtNominal.current;
-    // Fall toward a faster cadence quickly, rise toward a slower one grudgingly.
-    dtNominal.current = dt < nominal ? nominal + (dt - nominal) * 0.25 : nominal + (dt - nominal) * 0.015;
     // …and the clamp YIELDS once the fade has had its full wall-clock budget. Without this it
     // can do the very thing it was added to prevent from the other side: a clamp that keeps
     // shortening each step also keeps the curtain up longer, which is G1 again. So it shapes
