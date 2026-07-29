@@ -25,7 +25,7 @@ export default function TechStack() {
           transition={{ duration: 0.6, ease: [0.25, 0.4, 0, 1] }}
         >
           <GradientBar />
-          <h2 className="text-[clamp(2rem,3.5vw,3rem)] font-semibold text-[var(--color-text-primary)] mb-2">
+          <h2 className="text-[clamp(2rem,3.5vw,3rem)] text-[var(--color-text-primary)] mb-2">
             {t('tech.title')}
           </h2>
           <p className="text-[var(--color-text-tertiary)] mb-10">{t('tech.subtitle')}</p>

@@ -42,7 +42,7 @@ export default function PlanetWorld({
         {/* signature gold top line */}
         <div className="h-px shrink-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,201,120,0.7), transparent)' }} />
         <div className="flex shrink-0 items-center justify-between gap-4 px-6 pt-5">
-          <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl" style={{ fontFamily: 'var(--font-display)', fontWeight: 300, letterSpacing: '0.03em' }}>
+          <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl">
             {title}
           </h1>
           {/* A real link home (crawlable), driven through returnHome so the departure

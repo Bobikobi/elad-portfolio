@@ -26,8 +26,13 @@
   --color-tunnel-magenta: #D946EF;
   --color-tunnel-cyan: #22D3EE;
   --color-tunnel-violet: #8B5CF6;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* B9 — these pointed at Geist, which no longer exists. `--font-sans` feeds Tailwind's
+     own default-font declaration on <html>, so leaving it aimed at a deleted variable
+     would have made that declaration invalid at computed-value time rather than simply
+     unused. Mono is a system stack: the two places that ask for it (the debug HUD and one
+     decorative index number) want "a monospace", not a webfont download. */
+  --font-sans: var(--font-heebo), sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-hebrew: var(--font-heebo);
 
   /* ===== Cosmic design system (binding visual language) ===== */
@@ -55,10 +60,24 @@ html {
 :root {
   --font-display: var(--font-frank), 'Frank Ruhl Libre', serif;
   --font-body: var(--font-heebo), sans-serif;
+  /* Display weight. Frank Ruhl is loaded at 300 and 500 only; asking for anything else
+     gets a synthesised face, which on a serif at display size is immediately visible. */
+  --weight-display: 300;
+
+  /* ===== Text effects =====
+     Three levels, and the third one matters as much as the first two: the hero name
+     carries a real gold bloom because it is the one word on an empty frame; headings get
+     a whisper of the same so they belong to the same light; BODY GETS NOTHING. A glow
+     under running text is what turns "atmospheric" into "smeared", and at 13px over a
+     nebula it costs legibility for nothing. */
+  --text-glow-hero: 0 2px 40px rgba(5, 7, 20, 0.85), 0 0 28px rgba(255, 201, 120, 0.28);
+  --text-glow-heading: 0 1px 18px rgba(5, 7, 20, 0.7), 0 0 14px rgba(255, 201, 120, 0.12);
 }
 html[lang='ru'] {
   --font-display: var(--font-playfair), serif;
   --font-body: var(--font-inter), sans-serif;
+  /* Playfair ships at 400 here; 300 would be synthesised. */
+  --weight-display: 400;
 }
 
 body {
@@ -78,6 +97,23 @@ html[lang='en'] body,
 html[lang='ru'] body {
   line-height: 1.65;
 }
+
+/* ===== Headings =====
+   B9: the display face was applied one inline style at a time — seven call sites, five
+   of them in the immersive worlds — so every heading outside those five ran in the body
+   font. It is a role, so it belongs to the element, not to whoever remembers. */
+h1, h2, .type-display {
+  font-family: var(--font-display);
+  font-weight: var(--weight-display);
+  letter-spacing: 0.03em;
+  text-shadow: var(--text-glow-heading);
+}
+h1 { line-height: 1.12; }
+h2 { line-height: 1.2; }
+/* The hero name: the one place the bloom is the point. */
+.type-hero { text-shadow: var(--text-glow-hero); }
+/* …and body copy stays clean, whatever it sits over. */
+p, li, dd, dt, figcaption, .type-body { text-shadow: none; }
 
 img,
 video,
@@ -110,10 +146,15 @@ body::before {
   background-size: 256px 256px;
 }
 
-/* ===== Selection ===== */
+/* ===== Selection =====
+   B9: this was still the magenta of the old tunnel palette, on a site whose accent has
+   been core gold since the cosmic rebuild — the one piece of chrome that only appears
+   once a visitor interacts, which is exactly why it was missed. Gold on the void, with
+   enough alpha that the selected glyphs stay readable rather than being reversed out. */
 ::selection {
-  background: var(--color-accent);
-  color: white;
+  background: rgba(255, 201, 120, 0.34);
+  color: var(--color-star-white);
+  text-shadow: none;
 }
 
 /* ===== Skip to content ===== */
@@ -282,6 +323,47 @@ body::before {
   pointer-events: none;
 }
 .shimmer-hover:hover::after { animation: shimmer-sweep 0.85s ease forwards; }
+
+/* ===== World card type scale (B9) =====
+   Every world was setting its own sizes inline and they had drifted apart: a project
+   title at text-base beside a service title at text-base beside a tech chip at 11px,
+   with descriptions at text-xs and `leading-relaxed` — 1.625, which is a LATIN metric
+   applied to Hebrew, whose taller x-height and no-descender-relief needs 1.7 to breathe.
+   One scale, three roles, stated once. The steps are 17 / 13.5 / 11.5 px: a ratio close
+   to 1.25 at the top and a deliberate drop to the chips, so a card reads title → text →
+   metadata without any weight change doing the work. */
+.world-title {
+  font-family: var(--font-display);
+  font-weight: var(--weight-display);
+  font-size: 1.0625rem;
+  line-height: 1.32;
+  letter-spacing: 0.015em;
+}
+.world-body {
+  font-size: 0.84375rem;
+  line-height: 1.7;
+  letter-spacing: 0;
+}
+html[lang='en'] .world-body,
+html[lang='ru'] .world-body {
+  line-height: 1.6;
+}
+.world-chip {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.71875rem;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+}
+/* Section labels inside a world (a tech category, a services group). */
+.world-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
 
 /* ===== World window list (Projects "Jupiter frame") ===== */
 /* Own scroll container: thin styled scrollbar + soft fade masks top/bottom so windows

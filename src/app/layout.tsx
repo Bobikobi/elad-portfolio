@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Geist, Geist_Mono } from "next/font/google";
 import { Heebo, Frank_Ruhl_Libre, Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import ClientProviders from "@/components/layout/ClientProviders";
@@ -8,15 +7,9 @@ import type { Locale } from "@/lib/i18n";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// B9 — Geist and Geist Mono are gone. They were `create-next-app` debris: declared,
+// preloaded on every route, wired to --font-sans/--font-mono, and used by nothing. The
+// only cost of template leftovers is that they are invisible until someone measures.
 
 const heebo = Heebo({
   variable: "--font-heebo",
@@ -31,15 +24,23 @@ const frankRuhl = Frank_Ruhl_Libre({
   weight: ["300", "500"],
 });
 // Russian (Cyrillic) pair — matched roles: elegant serif display + clean body.
+//
+// `preload: false` on both, deliberately. The <html> element carrying the font variables
+// lives in this root layout, so the pair has to be DECLARED here for the /ru swap to
+// resolve — but declaring is not the same as shipping. Without this, every Hebrew and
+// English page preloaded two Cyrillic families it can never render a glyph from. With it,
+// only the pages whose computed font-family actually names them fetch the files.
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin", "cyrillic"],
   weight: ["400"],
+  preload: false,
 });
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin", "cyrillic"],
   weight: ["300", "400", "500"],
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -303,7 +304,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html
       lang={locale}
       dir={dir}
-      className={`${geistSans.variable} ${geistMono.variable} ${heebo.variable} ${frankRuhl.variable} ${playfair.variable} ${inter.variable} h-full antialiased`}
+      className={`${heebo.variable} ${frankRuhl.variable} ${playfair.variable} ${inter.variable} h-full antialiased`}
     >
       <head>
         {/* Preconnect to external origins for faster resource loading */}

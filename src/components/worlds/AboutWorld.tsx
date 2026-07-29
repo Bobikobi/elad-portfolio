@@ -15,12 +15,12 @@ export default function AboutWorld({ locale }: { locale: Locale }) {
   ];
   return (
     <div className="text-start">
-      <p className="text-sm leading-[1.9] text-[var(--color-star-white)]/85">{t('about.bio', locale)}</p>
+      <p className="world-body text-[0.9375rem] text-[var(--color-star-white)]/85">{t('about.bio', locale)}</p>
       <dl className="mt-6 grid grid-cols-2 gap-3">
         {metrics.map((m) => (
           <div key={m.k} className="rounded-xl border border-white/8 px-4 py-3">
             <dt className="text-2xl text-[var(--color-core-gold)]" style={{ fontFamily: 'var(--font-body)', fontWeight: 500 }}>{m.v}</dt>
-            <dd className="mt-0.5 text-xs text-[var(--color-star-white)]/60">{t(m.k, locale)}</dd>
+            <dd className="world-chip mt-1 text-[var(--color-star-white)]/60">{t(m.k, locale)}</dd>
           </div>
         ))}
       </dl>

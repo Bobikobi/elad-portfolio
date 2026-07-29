@@ -35,7 +35,7 @@ export default function ProjectsWorld({ locale }: { locale: Locale }) {
           )}
           <div className="p-4">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-base text-[var(--color-star-white)]" style={{ fontFamily: 'var(--font-display)', fontWeight: 300 }}>
+              <h2 className="world-title text-[var(--color-star-white)]">
                 {p.title[locale]}
               </h2>
               {p.liveUrl && (
@@ -49,10 +49,10 @@ export default function ProjectsWorld({ locale }: { locale: Locale }) {
                 </a>
               )}
             </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-star-white)]/65">{p.description[locale]}</p>
+            <p className="world-body mt-2 text-[var(--color-star-white)]/65">{p.description[locale]}</p>
             <ul className="mt-2.5 flex flex-wrap gap-x-2.5 gap-y-1">
               {p.techStack.slice(0, 5).map((tech) => (
-                <li key={tech} className="text-[11px] text-[var(--color-core-gold)]/70" style={{ fontFamily: 'var(--font-body)', fontWeight: 500 }}>
+                <li key={tech} className="world-chip text-[var(--color-core-gold)]/70">
                   {tech}
                 </li>
               ))}

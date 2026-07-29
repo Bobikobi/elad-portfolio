@@ -8,14 +8,14 @@ const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
 export default function TechWorld({ locale }: { locale: Locale }) {
   return (
     <div className="text-start">
-      <p className="mb-5 text-sm text-[var(--color-star-white)]/70">{t('tech.subtitle', locale)}</p>
+      <p className="world-body mb-5 text-[var(--color-star-white)]/70">{t('tech.subtitle', locale)}</p>
       <div className="space-y-5">
         {techCategories.map((cat) => (
           <div key={cat.key}>
-            <h2 className="mb-2 text-xs uppercase tracking-[0.14em] text-[var(--color-core-gold)]/80">{t(`tech.cat.${cat.key}`, locale)}</h2>
+            <h2 className="world-eyebrow mb-2 text-[var(--color-core-gold)]/80">{t(`tech.cat.${cat.key}`, locale)}</h2>
             <ul className="flex flex-wrap gap-2">
               {cat.items.map((item) => (
-                <li key={item} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-[var(--color-star-white)]/80">
+                <li key={item} className="world-chip rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[var(--color-star-white)]/80">
                   {item}
                 </li>
               ))}

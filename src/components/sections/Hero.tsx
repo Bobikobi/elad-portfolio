@@ -50,7 +50,7 @@ function StaticHero() {
         <Image src={GALAXY_POSTER} alt="" fill priority unoptimized className="object-cover -z-10" />
         <div className="absolute inset-0 -z-10" style={{ background: 'rgba(5,7,20,0.6)' }} />
         <div className="relative z-10 mx-auto w-full max-w-2xl text-center">
-          <h1 className="text-[clamp(2.5rem,6vw,5rem)] leading-[1.05] text-[var(--color-star-white)]" style={{ fontFamily: 'var(--font-display)', fontWeight: 300, letterSpacing: '0.04em' }}>
+          <h1 className="type-hero text-[clamp(2.5rem,6vw,5rem)] leading-[1.05] tracking-[0.04em] text-[var(--color-star-white)]">
             {t('hero.name')}
           </h1>
           <p className="mt-6 text-base text-[var(--color-star-white)]/70">{t('hero.subtitle')}</p>
@@ -211,8 +211,7 @@ function GalaxyHome() {
           transition={{ duration: 1.2, ease: [0.25, 0.4, 0, 1] }}
         >
           <h1
-            className="text-[clamp(3rem,8vw,6.5rem)] leading-[1.05] text-[var(--color-star-white)]"
-            style={{ fontFamily: 'var(--font-display)', fontWeight: 300, letterSpacing: '0.06em', textShadow: '0 2px 40px rgba(5,7,20,0.85), 0 0 28px rgba(255,201,120,0.28)' }}
+            className="type-hero text-[clamp(3rem,8vw,6.5rem)] leading-[1.05] tracking-[0.06em] text-[var(--color-star-white)]"
           >
             {t('hero.name')}
           </h1>

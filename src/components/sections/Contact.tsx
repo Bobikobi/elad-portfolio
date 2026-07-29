@@ -56,7 +56,7 @@ export default function Contact() {
             transition={{ duration: 0.55 }}
           >
             <GradientBar />
-            <h2 className="text-[clamp(2rem,3.5vw,3rem)] font-semibold text-[var(--color-text-primary)] mb-4">{t('contact.title')}</h2>
+            <h2 className="text-[clamp(2rem,3.5vw,3rem)] text-[var(--color-text-primary)] mb-4">{t('contact.title')}</h2>
             <p className="text-lg text-[var(--color-text-secondary)] mb-10">{t('contact.subtitle')}</p>
 
             <div className="flex flex-col gap-4">

@@ -176,11 +176,10 @@ export default function ProjectsStage({
           <div>
             <h1
               className="text-2xl text-[var(--color-star-white)] md:text-3xl"
-              style={{ fontFamily: 'var(--font-display)', fontWeight: 300, letterSpacing: '0.03em' }}
             >
               {title}
             </h1>
-            <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-star-white)]/55 md:text-[13px]">{tagline}</p>
+            <p className="world-body mt-2 text-[var(--color-star-white)]/55">{tagline}</p>
           </div>
           <Link
             href={homePath(locale)}
