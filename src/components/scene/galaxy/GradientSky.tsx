@@ -33,7 +33,7 @@ const frag = /* glsl */ `
     // system sits in dark space — the old bright violet dome, saturated by the grade and
     // cropped by the vignette, read as a "lavender oval" washing the whole frame (F1).
     // WAVE-END SWEEP. The dome's TOP was carrying the galaxy act's corner floor. The
-    // gradient runs from `bottomG` at the horizon to `topG` overhead, and the two differ
+    // gradient runs from bottomG at the horizon to topG overhead, and the two differ
     // by nearly 3×; the welcome pose looks ACROSS the disc so its corners sample the dim
     // bottom, while the dive pitches through the plane and its corners swing up into the
     // bright top. Measured: corners 15.6% at scroll 0.35 against 24.8% at 0.5, on the same
