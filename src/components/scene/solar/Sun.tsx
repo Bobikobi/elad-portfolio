@@ -42,13 +42,19 @@ const sunFrag = /* glsl */ `
     float slow = fbm(p + vec3(0.0, uTime*0.05, 0.0));               // big slow swirls
     float fast = fbm(p*2.6 - vec3(0.0, uTime*0.16, uTime*0.05));    // fast granules
     float n = slow*0.6 + fast*0.4;
-    vec3 dark = vec3(0.55, 0.14, 0.02);
-    vec3 mid  = vec3(1.0, 0.5, 0.11);
-    vec3 hot  = vec3(1.0, 0.93, 0.66);
+    // B3: these were mixed for a frame that had NO tone mapper, where anything over 1
+    // simply clamped and (1.0, 0.5, 0.11) stayed vividly gold. ACES desaturates its
+    // highlights toward white on the way up, so the same values came out pale butter.
+    // Pushing the source far more saturated keeps the star burning gold AFTER the curve —
+    // measured, the mid tone now lands at sRGB (254, 218, 124) instead of a washed cream —
+    // while the HDR magnitude stays high, which is what Bloom and God Rays read.
+    vec3 dark = vec3(0.60, 0.13, 0.015);
+    vec3 mid  = vec3(1.00, 0.30, 0.030);
+    vec3 hot  = vec3(1.00, 0.74, 0.300);
     vec3 col = mix(dark, mid, smoothstep(0.28, 0.6, n));
     col = mix(col, hot, smoothstep(0.62, 0.86, n));
     float limb = pow(max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0), 0.35); // subtle limb darkening
-    col *= (2.0 + uPulse) * mix(0.75, 1.0, limb);
+    col *= (2.2 + uPulse) * mix(0.75, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;

@@ -71,8 +71,8 @@ const NEAR_FULL = 3.4; // fully solid beyond this
 // object on screen. With the dust layer already hard-clamped to 2.6px, this bounds the
 // whole belt from above at any camera distance, while leaving the overview's rare
 // ~11px chunks alone.
-const BIG_PX_FADE = 12; // start dissolving at this projected diameter (drawing px)
-const BIG_PX_GONE = 22; // fully gone by this one
+const BIG_PX_FADE = 10; // start dissolving at this projected diameter (drawing px)
+const BIG_PX_GONE = 18; // fully gone by this one
 
 // Rocky palette — cool basalt greys through warm carbonaceous browns, and DARK. The old
 // palette sat around 42% sRGB; at the belt's distance the sun delivers an irradiance of
@@ -253,7 +253,11 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         const dist = world.distanceTo(camera.position);
         const near = Math.min(1, Math.max(0, (dist - NEAR_GONE) / (NEAR_FULL - NEAR_GONE)));
         const diameter = (2 * b.reach * projScale) / dist;
-        if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1 || near <= 0) continue;
+        // Model the apparent-size dissolve too, so the probe reports what is DRAWN rather
+        // than what was seeded — a body the shader has faded out is not on screen.
+        const t = Math.min(1, Math.max(0, (diameter - BIG_PX_FADE) / (BIG_PX_GONE - BIG_PX_FADE)));
+        const big = 1 - t * t * (3 - 2 * t);
+        if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1 || near <= 0 || big <= 0.02) continue;
         onScreen++;
         px.push(diameter);
         const fx = (v.x * 0.5 + 0.5) * size.x;
