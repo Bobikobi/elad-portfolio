@@ -78,10 +78,8 @@ const LIT_WOBBLE: Record<string, number> = { saturn: 0.03 };
 /** How far the sightline should sit off the reference plane, in radians. */
 const PLANE_TARGET: Record<string, number> = {
   // Saturn's own ring plane. Real Saturn opens to about 27°; this is the poster version of
-  // that — unmistakably a ring system, nowhere near the face-on "vinyl record".
-  // Real Saturn opens to about 27°; this is the poster version of that — unmistakably a
-  // ring system, nowhere near the face-on "vinyl record" a free solve drifts into. Backed
-  // off from 26° so the whole wobble stays inside the reachable set.
+  // that — unmistakably a ring system, nowhere near the face-on "vinyl record" a free solve
+  // drifts into. Backed off from 26° so the whole wobble stays inside the reachable set.
   saturn: 24 * DEG2RAD,
 };
 // Everything else measures against the ecliptic, and 19° is what the old fixed lift of
