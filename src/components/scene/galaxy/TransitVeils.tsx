@@ -42,20 +42,39 @@ interface VeilDef {
   phase: number;
 }
 
-// Photos chosen so each slot's native colour already leans the intended hue.
+// WAVE-END SWEEP — the opacities below were all cut to roughly a third of what they were.
+//
+// The mid-dive frame measured mean 134, median 137 and p99 189: half the picture sitting
+// above mid-grey with the whole histogram squeezed into a narrow bright band, saturation
+// down at 0.33. On screen that is a flat salmon fog with no black anywhere and no
+// structure — not a galaxy interior. Corners read 20-33% against a frame that should be
+// mostly space.
+//
+// The cause is the one the whole wave keeps finding. These are ADDITIVE layers, and their
+// values were chosen when nothing tone-mapped: a stack of veils that summed past 1.0 used
+// to clip to a bright coloured core with dark sky between, so pushing them was free at the
+// edges and only cost saturation in the middle. With ACES actually running, that same sum
+// no longer clips — it ROLLS OFF, so every part of the frame the veils touch lands in the
+// same compressed mid-tone and the contrast between core and gap disappears. More opacity
+// stopped buying brightness and started buying fog.
+//
+// Bisected on the alias, and the answer was not one sprite: hiding any single veil moved
+// the corners by under half a point, while hiding the GROUP took the frame from mean 140
+// to 63 and the corners from 33% to 8%. So it is the sum that is wrong, and the fix is a
+// level, not surgery.
 const VEILS: VeilDef[] = [
   // Three close passes on the flight line, distinct hues (spec acceptance: ≥2).
-  { slug: 'eagle',     u: 0.30, off: [1.3, 0.8],   scale: 16, tint: '#bfe6ea', op: 0.95, close: true,  phase: 0.0 },  // teal
-  { slug: 'lagoon',    u: 0.56, off: [-1.6, -1.0], scale: 15, tint: '#f0c39a', op: 0.90, close: true,  phase: 2.1 },  // warm/rose
-  { slug: 'orion',     u: 0.80, off: [-1.0, 1.4],  scale: 17, tint: '#e6b48c', op: 0.95, close: true,  phase: 4.0 },  // warm orange
+  { slug: 'eagle',     u: 0.30, off: [1.3, 0.8],   scale: 16, tint: '#bfe6ea', op: 0.33, close: true,  phase: 0.0 },  // teal
+  { slug: 'lagoon',    u: 0.56, off: [-1.6, -1.0], scale: 15, tint: '#f0c39a', op: 0.32, close: true,  phase: 2.1 },  // warm/rose
+  { slug: 'orion',     u: 0.80, off: [-1.0, 1.4],  scale: 17, tint: '#e6b48c', op: 0.33, close: true,  phase: 4.0 },  // warm orange
   // Depth layer — farther off the path, larger, fainter.
-  { slug: 'helix',     u: 0.04, off: [-7, -6],     scale: 30, tint: '#c4bcf2', op: 0.42, close: false, phase: 1.2 },  // violet
-  { slug: 'trifid',    u: 0.16, off: [10, 6],      scale: 30, tint: '#b9c4ff', op: 0.48, close: false, phase: 3.4 },  // indigo/blue
-  { slug: 'bubble',    u: 0.40, off: [-12, 4],     scale: 34, tint: '#aecbff', op: 0.44, close: false, phase: 0.7 },  // blue
-  { slug: 'ring',      u: 0.50, off: [13, 10],     scale: 34, tint: '#e6a8c8', op: 0.36, close: false, phase: 5.1 },  // pink
-  { slug: 'veil',      u: 0.66, off: [9, -8],      scale: 28, tint: '#a9e0d6', op: 0.42, close: false, phase: 2.7 },  // teal
-  { slug: 'crab',      u: 0.90, off: [-8, 7],      scale: 26, tint: '#dca6d0', op: 0.42, close: false, phase: 1.9 },  // magenta
-  { slug: 'tarantula', u: 1.06, off: [4, -3],      scale: 24, tint: '#f0cba0', op: 0.58, close: false, phase: 3.9 },  // warm (final approach glow)
+  { slug: 'helix',     u: 0.04, off: [-7, -6],     scale: 30, tint: '#c4bcf2', op: 0.15, close: false, phase: 1.2 },  // violet
+  { slug: 'trifid',    u: 0.16, off: [10, 6],      scale: 30, tint: '#b9c4ff', op: 0.17, close: false, phase: 3.4 },  // indigo/blue
+  { slug: 'bubble',    u: 0.40, off: [-12, 4],     scale: 34, tint: '#aecbff', op: 0.15, close: false, phase: 0.7 },  // blue
+  { slug: 'ring',      u: 0.50, off: [13, 10],     scale: 34, tint: '#e6a8c8', op: 0.13, close: false, phase: 5.1 },  // pink
+  { slug: 'veil',      u: 0.66, off: [9, -8],      scale: 28, tint: '#a9e0d6', op: 0.15, close: false, phase: 2.7 },  // teal
+  { slug: 'crab',      u: 0.90, off: [-8, 7],      scale: 26, tint: '#dca6d0', op: 0.15, close: false, phase: 1.9 },  // magenta
+  { slug: 'tarantula', u: 1.06, off: [4, -3],      scale: 24, tint: '#f0cba0', op: 0.20, close: false, phase: 3.9 },  // warm (final approach glow)
 ];
 
 function veilBase(v: VeilDef): THREE.Vector3 {
@@ -103,8 +122,14 @@ export default function TransitVeils() {
       // Close veils grow to wash the frame on approach, then clear as the camera
       // passes through (cut just before d→0 so no flat slab / near-plane clip).
       // Distant veils only read in the mid range, never wash.
+      //
+      // The far edge came in from 30→12 to 22→9. A "close pass" is meant to be a PASS: at
+      // the old envelope a close veil sat at full opacity across eighteen units of the
+      // corridor, which at scale 16 is most of the dive spent inside one sprite rather
+      // than crossing it. The near edge is unchanged — that one exists to avoid the
+      // near-plane slab and was never the problem.
       const env = v.close
-        ? smoothstep(0.7, 2.2, d) * smoothstep(30, 12, d)
+        ? smoothstep(0.7, 2.2, d) * smoothstep(22, 9, d)
         : smoothstep(3, 8, d) * smoothstep(72, 30, d);
       const mat = child.material as THREE.SpriteMaterial;
       mat.opacity = v.op * reveal * env;
