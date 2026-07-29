@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
-import { featherSprite } from '@/lib/spaceMaterials';
+import { featherSpriteProps } from '@/lib/spaceMaterials';
 
 /**
  * Photographic nebula veils threaded along the dive corridor (T2.5). Real
@@ -125,7 +125,7 @@ export default function TransitVeils() {
             depthTest={false}
             blending={THREE.AdditiveBlending}
             toneMapped={false}
-            onBeforeCompile={featherSprite}
+            {...featherSpriteProps}
           />
         </sprite>
       ))}

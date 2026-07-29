@@ -53,7 +53,7 @@ export function softSprite(): THREE.CanvasTexture {
  * measured in UV, so it behaves identically on a stretched billboard, and the quad's
  * corners (r = √2) are gone long before it.
  */
-export const featherSprite = (shader: { fragmentShader: string }) => {
+const featherSprite = (shader: { fragmentShader: string }) => {
   shader.fragmentShader = shader.fragmentShader.replace(
     '#include <alphatest_fragment>',
     `{
@@ -62,6 +62,22 @@ export const featherSprite = (shader: { fragmentShader: string }) => {
      }
      #include <alphatest_fragment>`
   );
+};
+
+/**
+ * Spread onto any `<spriteMaterial>` that must not show its own quad.
+ *
+ * `customProgramCacheKey` is not optional here. three keys the compiled program on the
+ * material's PARAMETERS, and `onBeforeCompile` is not one of them — so a plain sprite
+ * material with the same map/blending/depth settings hashes identically to a feathered
+ * one, and whichever compiled first is silently reused for both. That is exactly what
+ * happened on the first attempt: the un-feathered diffraction-star sprites in the same
+ * group won the cache, the nebula layers were handed their program, and the rectangles
+ * stayed on screen with the injected code never running.
+ */
+export const featherSpriteProps = {
+  onBeforeCompile: featherSprite,
+  customProgramCacheKey: () => 'space-feathered-sprite',
 };
 
 let _flame: THREE.CanvasTexture | null = null;

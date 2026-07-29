@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions } from '@/lib/planetPositions';
-import { featherSprite, spikeSprite } from '@/lib/spaceMaterials';
+import { featherSpriteProps, spikeSprite } from '@/lib/spaceMaterials';
 
 /**
  * A4 — reference-grade per-world backdrop. When a world is FOCUSED, real Hubble nebula
@@ -121,7 +121,7 @@ export default function WorldBackdrop() {
     <group ref={group} name="worldBackdrop">
       {LAYERS.map((L, i) => (
         <sprite key={i} position={L.off} scale={[L.scale, L.scale * 0.7, 1]} userData={{ op: L.op, drift: L.drift, phase: L.phase, off: L.off }}>
-          <spriteMaterial map={texes[i]} color={cfg.tint} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} onBeforeCompile={featherSprite} />
+          <spriteMaterial map={texes[i]} color={cfg.tint} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} {...featherSpriteProps} />
         </sprite>
       ))}
       {cfg.stars.map((col, i) => (
