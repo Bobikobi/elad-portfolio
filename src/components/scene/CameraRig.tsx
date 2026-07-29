@@ -434,6 +434,7 @@ export default function CameraRig() {
   const revealHold = useRef(0);
   const revealDrawn = useRef(0); // G1: drawn frames since the latch — the readiness floor
   const revealAge = useRef(0);   // G1: wall-clock seconds since the latch — the slow-client exit
+  const dtNominal = useRef(1 / 60); // G1b: min-biased estimate of this client's own frame time
   const covOut = useRef(0); // last published coverage — the rate limiter's state
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
   // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
@@ -487,16 +488,39 @@ export default function CameraRig() {
      * damped gate happens to catch up — which after a stalled frame is "instantly", and
      * measured at a 0.29 step, i.e. the gold fill going from 40% opaque to nothing between
      * two frames 10ms apart.
+     *
+     * G1b — the fade's dt is not the frame's dt, and the difference is a defect I introduced
+     * and then measured: releasing the hold on the wall clock can hand the FIRST fade frame
+     * a 400ms delta, and 0.4/0.35 > 1, so the entire fade happens in one step. B7's own test
+     * caught it — worst drop 1.000, the full curtain gone between two samples.
+     *
+     * A flat clamp is not the fix either: `min(dt, 1/30)` is exactly the frame-count-bound
+     * mistake this file already documents twice, and on a 0.6fps client it would stretch the
+     * fade across 21 of its 2.3-second frames — 48 seconds of gold.
+     *
+     * What separates the two cases is not the frame in front of us but the client behind it:
+     * one long frame on a 60fps machine is a stall (clamp it — a fade is a fade), while
+     * every frame being long is a slow client (do not clamp — there is no such thing as a
+     * smooth fade at 0.6fps, and holding the curtain there is the G1 bug). So the clamp is
+     * relative to the client's own established cadence, tracked min-biased for the reason
+     * the QualityGovernor gives: load only ever makes frames LONGER, so the fast tail is the
+     * honest signal. A stall barely moves the estimate; a genuinely slow client moves it all
+     * the way, and gets its curtain back immediately.
      */
+    const nominal = dtNominal.current;
+    // Fall toward a faster cadence quickly, rise toward a slower one grudgingly.
+    dtNominal.current = dt < nominal ? nominal + (dt - nominal) * 0.25 : nominal + (dt - nominal) * 0.015;
+    const fadeDt = Math.min(dt, Math.max(nominal * 3, 1 / 45));
     const setCoverage = (v: number) => {
       const wanted = Math.max(v, held);
-      const out = wanted >= covOut.current ? wanted : Math.max(wanted, covOut.current - dt / REVEAL_FADE);
+      const out = wanted >= covOut.current ? wanted : Math.max(wanted, covOut.current - fadeDt / REVEAL_FADE);
       covOut.current = out;
       if (HUD_AVAILABLE) {
         (window as unknown as { __reveal?: unknown }).__reveal = {
           hold: revealHold.current, envelope: +v.toFixed(3),
           published: +out.toFixed(3), gate: +pGate.current.toFixed(4),
           drawn: revealDrawn.current, age: +revealAge.current.toFixed(3),
+          dt: +dt.toFixed(3), nominal: +dtNominal.current.toFixed(4), fadeDt: +fadeDt.toFixed(3),
         };
       }
       store.setCoverage(out);
