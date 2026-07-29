@@ -51,13 +51,17 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 // and what it uncovered was the camera part-way through its arrival dolly. That is the
 // "arrival": a freeze, then a lurch.
 //
-// The fix has to be counted in FRAMES, not seconds, because the thing being waited on is
-// "has the new act actually drawn yet" — a question no wall clock can answer. So: hold the
-// curtain fully shut for REVEAL_FRAMES drawn frames after a swap, then ease it open over
-// REVEAL_FADE seconds (wall-clock, so the fade itself looks identical on every machine —
-// the tier law is about what is drawn, and this is a readiness gate, not a look). The
-// ease also guarantees the handover back to the envelope is a fade rather than a step,
-// however far the gate ran on during the stall.
+// The fix is in two parts, and neither of them is a timer.
+//
+// First, the thing being waited on is "has the new act actually DRAWN yet", which no wall
+// clock can answer — so the curtain is held fully shut for REVEAL_FRAMES drawn frames
+// after a swap. Second, the reveal itself is rate-limited: coverage may rise as fast as
+// it likes (covering quickly is never wrong) but may only fall at 1/REVEAL_FADE per
+// second. Without that limiter the reveal runs at whatever speed the damped gate happens
+// to catch up, which after a stalled frame is "instantly" — measured at a 0.29 step in
+// 10ms, the gold fill going from 40% opaque to nothing between two frames. The limit is
+// wall-clock, so the fade looks identical on every machine; the frame count is the
+// readiness gate, and only that part is frame-bound, by necessity.
 //
 // A gl.compile() on the first frame after the swap was tried here and removed: it did
 // concentrate every new material's program build in one place, but it MOVED the cost
@@ -252,7 +256,7 @@ export default function CameraRig() {
   // number of DRAWN frames and then eased open, instead of being handed straight back to a
   // schedule that assumes the swap was free.
   const revealHold = useRef(0);
-  const revealFloor = useRef(0);
+  const covOut = useRef(0); // last published coverage — the rate limiter's state
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
   // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
   // replaced it (`parent === null` once three has detached the old one).
@@ -285,29 +289,31 @@ export default function CameraRig() {
     // B7 — advance the reveal latch once per DRAWN frame, before anything reads it. While
     // it is held the curtain is pinned shut; afterwards it eases open on a wall clock and
     // becomes a FLOOR under whatever the envelope says, so the handover is never a step.
-    if (revealHold.current > 0) {
-      revealHold.current -= 1;
-      revealFloor.current = 1;
-    } else if (revealFloor.current > 0) {
-      revealFloor.current = Math.max(0, revealFloor.current - dt / REVEAL_FADE);
-    }
-    const holdCoverage = revealHold.current > 0 ? 1 : revealFloor.current;
-    /** Publish coverage, never letting it fall below the post-swap reveal floor. */
+    if (revealHold.current > 0) revealHold.current -= 1;
+    const held = revealHold.current > 0 ? 1 : 0;
+    /**
+     * Publish coverage. Two rules, and both exist because a long frame breaks the naive
+     * version: while the hold is up the curtain is pinned shut, and at all times coverage
+     * may RISE freely but may only FALL at a bounded rate. Covering fast is never wrong;
+     * uncovering fast is the defect. Without the limiter the reveal is however fast the
+     * damped gate happens to catch up — which after a stalled frame is "instantly", and
+     * measured at a 0.29 step, i.e. the gold fill going from 40% opaque to nothing between
+     * two frames 10ms apart.
+     */
     const setCoverage = (v: number) => {
-      const out = Math.max(v, holdCoverage);
+      const wanted = Math.max(v, held);
+      const out = wanted >= covOut.current ? wanted : Math.max(wanted, covOut.current - dt / REVEAL_FADE);
+      covOut.current = out;
       if (HUD_AVAILABLE) {
         (window as unknown as { __reveal?: unknown }).__reveal = {
-          hold: revealHold.current, floor: +revealFloor.current.toFixed(3),
-          envelope: +v.toFixed(3), published: +out.toFixed(3), gate: +pGate.current.toFixed(4),
+          hold: revealHold.current, envelope: +v.toFixed(3),
+          published: +out.toFixed(3), gate: +pGate.current.toFixed(4),
         };
       }
       store.setCoverage(out);
     };
     /** Called at every swap site: shut the curtain and keep it shut until the act draws. */
-    const latchReveal = () => {
-      revealHold.current = REVEAL_FRAMES;
-      revealFloor.current = 1;
-    };
+    const latchReveal = () => { revealHold.current = REVEAL_FRAMES; };
 
     // --- T1: coverage-gated, bidirectional, ATOMIC galaxy↔solar swap --------------
     // Only the home dive owns this machine (never on a focused world route). The swap
