@@ -221,7 +221,26 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 // rather than removing it — the stall frame went from 984ms to 1926ms — and the hold
 // already covers those first draws, so the lazy compiles happen behind the curtain
 // regardless. Paying twice to be told the same thing is not an optimisation.
+//
+// G1 — "by necessity" was doing a lot of work in that sentence, and it was wrong. A pure
+// frame count is 133ms at 60fps and NINETEEN SECONDS on a software renderer: measured on
+// the alias under SwiftShader at 0.6fps, an instant scrollTo(max) swapped correctly, the
+// envelope fell to 0 on the very next frame — and the curtain stayed fully opaque, gold
+// wash over the whole viewport, `hold` ticking 7·6·5·4·3 one per 2.4s frame. Same shape as
+// the CameraRig delta clamp: a quantity that reads as "a moment" at 60Hz and as "forever"
+// at 1Hz. The reveal limiter below was NOT the culprit — it has always used the real dt.
+//
+// So the hold gets two exits, and the readiness floor stays frame-bound because only a
+// drawn frame can prove the act drew:
+//   · the fast path is unchanged — REVEAL_FRAMES drawn frames, which at 60fps elapses long
+//     before the wall-clock cap and therefore still decides;
+//   · on a slow client the cap takes over once REVEAL_MIN_FRAMES have actually drawn (the
+//     stall frame the curtain exists to hide is one of them, so the act IS on screen).
+// The floor cannot be waived: releasing on a clock alone would uncover a frame that has
+// not been drawn, which is the B7 defect with the sign flipped.
 const REVEAL_FRAMES = 8;
+const REVEAL_MIN_FRAMES = 2;   // readiness floor — drawn frames, never wall-clock
+const REVEAL_HOLD_CAP = 0.4;   // s — past this the floor alone governs
 const REVEAL_FADE = 0.35; // s
 
 // Immersive welcome: low + close, looking ACROSS the galaxy plane so it fills the
@@ -413,6 +432,8 @@ export default function CameraRig() {
   const vantagePhi = useRef<number | null>(null);
   const vantageFor = useRef<string | null>(null);
   const revealHold = useRef(0);
+  const revealDrawn = useRef(0); // G1: drawn frames since the latch — the readiness floor
+  const revealAge = useRef(0);   // G1: wall-clock seconds since the latch — the slow-client exit
   const covOut = useRef(0); // last published coverage — the rate limiter's state
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
   // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
@@ -446,7 +467,17 @@ export default function CameraRig() {
     // B7 — advance the reveal latch once per DRAWN frame, before anything reads it. While
     // it is held the curtain is pinned shut; afterwards it eases open on a wall clock and
     // becomes a FLOOR under whatever the envelope says, so the handover is never a step.
-    if (revealHold.current > 0) revealHold.current -= 1;
+    if (revealHold.current > 0) {
+      revealHold.current -= 1;
+      revealDrawn.current += 1;
+      revealAge.current += dt;
+      // G1: the two exits. Frames alone at 60fps (133ms), the clock once enough frames have
+      // genuinely drawn — so a 5fps client waits ~0.4s instead of ~1.6s, and a 0.6fps client
+      // waits for its two frames instead of all eight.
+      if (revealDrawn.current >= REVEAL_MIN_FRAMES && revealAge.current >= REVEAL_HOLD_CAP) {
+        revealHold.current = 0;
+      }
+    }
     const held = revealHold.current > 0 ? 1 : 0;
     /**
      * Publish coverage. Two rules, and both exist because a long frame breaks the naive
@@ -465,12 +496,17 @@ export default function CameraRig() {
         (window as unknown as { __reveal?: unknown }).__reveal = {
           hold: revealHold.current, envelope: +v.toFixed(3),
           published: +out.toFixed(3), gate: +pGate.current.toFixed(4),
+          drawn: revealDrawn.current, age: +revealAge.current.toFixed(3),
         };
       }
       store.setCoverage(out);
     };
     /** Called at every swap site: shut the curtain and keep it shut until the act draws. */
-    const latchReveal = () => { revealHold.current = REVEAL_FRAMES; };
+    const latchReveal = () => {
+      revealHold.current = REVEAL_FRAMES;
+      revealDrawn.current = 0;
+      revealAge.current = 0;
+    };
 
     // --- T1: coverage-gated, bidirectional, ATOMIC galaxy↔solar swap --------------
     // Only the home dive owns this machine (never on a focused world route). The swap
