@@ -29,7 +29,7 @@ const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 // circle, so the geometry holds at any viewport; the ratio cap only guards silly aspects.
 const ARC_GAP = 26; // px gap between a window's inner edge and the limb
 const ARC_TUCK = 84; // px — the most a window may tuck past the equator line
-const ARC_MAX_COL = 0.46; // fraction of the viewport width the column may occupy
+const ARC_MAX_COL = 0.56; // fraction of the viewport width the column may occupy
 const ARC_ROT = 3.6; // deg max tangential tilt
 
 /**
@@ -98,7 +98,10 @@ export default function ProjectsStage({
       // The column runs from the inline-start screen edge to the MOST tucked position any
       // window can take; every window then gives back the difference as an inline-end
       // margin, so nothing ever needs a negative margin or overflows.
-      const geometric = vw - (rect.cx + rect.r + ARC_GAP - ARC_TUCK);
+      // The column's own inline padding sits between its box edge and the windows, so it
+      // has to be part of the width or every gap comes out one padding too wide.
+      const padEnd = column ? parseFloat(getComputedStyle(column).paddingInlineEnd) || 0 : 0;
+      const geometric = vw - (rect.cx + rect.r + ARC_GAP - ARC_TUCK) + padEnd;
       const colWidth = clamp(geometric, 300, vw * ARC_MAX_COL);
       // Through a custom property, not `style.width`: the departure meter is React state
       // that ticks every frame, so any width React owns would be re-asserted mid-gesture
