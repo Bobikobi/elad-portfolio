@@ -90,10 +90,18 @@ export default function Effects() {
       ) : (
         <></>
       )}
+      {/* B3: bloom runs AFTER tone mapping, so in a focused world — where a planet fills
+          two thirds of the frame and its whole lit face sits above the overview's 0.72
+          threshold — it was adding a broad glow on top of an image already near the top
+          of the range, and that addition is what clipped. The overview keeps its numbers
+          (the sun is the hero there and must burn); a world raises the bar so only the
+          genuinely burning limb blooms. This is a per-STATE change, not per-tier: every
+          tier sees the identical values. */}
       <Bloom
+        key={solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}
         mipmapBlur
-        intensity={solar ? 0.6 : 0.5}
-        luminanceThreshold={solar ? 0.72 : 0}
+        intensity={solar ? (focused ? 0.26 : 0.6) : 0.5}
+        luminanceThreshold={solar ? (focused ? 0.93 : 0.72) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
         radius={solar ? 0.45 : 0.5}
       />

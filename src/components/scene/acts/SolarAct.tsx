@@ -260,6 +260,8 @@ const rimFrag = /* glsl */ `
     vec3 col = uColor + vec3(0.5) * edge;
     float a = (haze * 0.55 + edge * 0.8) * cut * lit * uIntensity;
     gl_FragColor = vec4(col, a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -284,7 +286,12 @@ const earthNightFrag = /* glsl */ `
     float lit = dot(normalize(vWN), normalize(-vWPos));
     float night = smoothstep(0.08, -0.2, lit);          // 1 on the dark hemisphere
     vec3 lights = texture2D(uMap, vUv).rgb;
-    gl_FragColor = vec4(lights * 2.0, night);           // additive; alpha gates to night (survives the low ORBIT exposure)
+    gl_FragColor = vec4(lights * 1.2, night);           // additive; alpha gates to night
+    // B3: these shells used to skip tone mapping entirely, so they wrote raw values
+    // straight over an already-bright disc and clipped it. They go through the same
+    // aperture as every other material now.
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 const earthCloudFrag = /* glsl */ `
@@ -295,6 +302,8 @@ const earthCloudFrag = /* glsl */ `
     float shade = 0.12 + 0.9 * lit;                      // clouds go dark past the terminator
     float a = smoothstep(0.16, 0.7, c) * 0.9;
     gl_FragColor = vec4(vec3(shade), a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 

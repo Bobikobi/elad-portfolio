@@ -25,7 +25,7 @@ const DEV = process.env.NODE_ENV !== 'production';
 // 250+ (p99 luminance 250.6, i.e. a white field, not a planet) and Mars 10.4% clipped in
 // the RED channel alone with mean blue at 0.2/255 — the "neon yellow". Values below put
 // each world's peak just under the roll-off instead of through it.
-const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.30, mars: 0.26, jupiter: 0.45, saturn: 0.5, belt: 0.75 };
+const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.26, mars: 0.22, jupiter: 0.40, saturn: 0.5, belt: 0.75 };
 // Ringed worlds need a much higher vantage so the rings open up instead of reading
 // edge-on (invisible). Others keep a low, "look up at a world" angle.
 const RINGED = new Set(['saturn']);

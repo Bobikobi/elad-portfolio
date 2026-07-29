@@ -156,7 +156,13 @@ export default function Sun() {
 
   return (
     <group name="sun">
-      <pointLight position={[0, 0, 0]} intensity={650} distance={90} decay={2} color="#ffd9a0" />
+      {/* B3: the starlight was #ffd9a0 — linear (1.00, 0.69, 0.35), i.e. it delivers
+          three times as much red as blue. On a body that is already red, Mars, the red
+          channel saturated while blue never got off the floor: that is what "neon
+          yellow" was made of. A G star is close to white; the gold identity of this
+          system comes from the sun's own emissive surface and its bloom, both of which
+          are toneMapped:false and untouched by this. */}
+      <pointLight position={[0, 0, 0]} intensity={650} distance={90} decay={2} color="#fff0dc" />
       {/* Plasma surface (the God Rays source) */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[SUN_R, 96, 96]} />
