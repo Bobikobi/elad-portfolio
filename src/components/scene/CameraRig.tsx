@@ -435,6 +435,7 @@ export default function CameraRig() {
   const revealDrawn = useRef(0); // G1: drawn frames since the latch — the readiness floor
   const revealAge = useRef(0);   // G1: wall-clock seconds since the latch — the slow-client exit
   const dtNominal = useRef(1 / 60); // G1b: min-biased estimate of this client's own frame time
+  const fadeAge = useRef(0);        // G1b: seconds the current fade has been running
   const covOut = useRef(0); // last published coverage — the rate limiter's state
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
   // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
@@ -510,10 +511,20 @@ export default function CameraRig() {
     const nominal = dtNominal.current;
     // Fall toward a faster cadence quickly, rise toward a slower one grudgingly.
     dtNominal.current = dt < nominal ? nominal + (dt - nominal) * 0.25 : nominal + (dt - nominal) * 0.015;
-    const fadeDt = Math.min(dt, Math.max(nominal * 3, 1 / 45));
+    // …and the clamp YIELDS once the fade has had its full wall-clock budget. Without this it
+    // can do the very thing it was added to prevent from the other side: a clamp that keeps
+    // shortening each step also keeps the curtain up longer, which is G1 again. So it shapes
+    // the fade for REVEAL_FADE seconds and then gets out of the way — total fade time is
+    // bounded at REVEAL_FADE plus one frame on every client, fast or slow.
+    const shaping = fadeAge.current < REVEAL_FADE;
+    const fadeDt = shaping ? Math.min(dt, Math.max(nominal * 3, 1 / 45)) : dt;
     const setCoverage = (v: number) => {
       const wanted = Math.max(v, held);
       const out = wanted >= covOut.current ? wanted : Math.max(wanted, covOut.current - fadeDt / REVEAL_FADE);
+      // The fade's own clock: it runs only while the curtain is actually coming down, and any
+      // rise (a new crossing, a reconcile covering up again) starts it over.
+      if (out >= covOut.current) fadeAge.current = 0;
+      else fadeAge.current += dt;
       covOut.current = out;
       if (HUD_AVAILABLE) {
         (window as unknown as { __reveal?: unknown }).__reveal = {

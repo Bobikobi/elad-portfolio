@@ -274,6 +274,36 @@ const PLANETS: PlanetSpec[] = [
 // ray. It is exactly the height of the sightline's closest approach. An exponential in
 // (b − planetR) gives a real scale-height falloff, and a smoothstep to zero before the
 // shell's silhouette guarantees the geometry's own edge can never be visible.
+// --- G2: the terminator, and why it was a knife edge -----------------------------------
+//
+// The bodies are MeshStandardMaterial lit by the sun's point light, so their diffuse term is
+// three's own `saturate( dot( geometryNormal, directLight.direction ) )` — clamped Lambert.
+// Clamped Lambert has a first-derivative discontinuity exactly at N·L = 0, and on a sphere
+// that lands as a hard line across the disc. On Earth it was unmissable: the surface cut to
+// black on one pixel while the night-lights shell (which fades from N·L = 0.08 with a soft
+// ramp) and the cloud shell (hard-clamped, so it cut at a THIRD place) disagreed about where
+// the terminator even was. Three definitions of one line, none of them matching.
+//
+// One definition now, shared by the surface and both shells: wrapped Lambert with an eased
+// toe. The wrap lets light reach W past the geometric terminator, renormalised so the fully
+// lit pole still returns exactly 1 — the lit hemisphere's gradient is therefore untouched,
+// which is the whole point, since only the crease is the defect. The toe then eases the last
+// stretch to zero so the shadow edge has no crease either.
+//
+// Note the shape of the ruling this implements: the same softening applies to every body,
+// not just Earth. A hard terminator is a property of the shading model, so scoping the fix
+// to one planet would leave Earth lit by different physics than Mars — Earth is only where
+// it read worst, because Earth is the one body carrying shells keyed to that same line.
+const TERM_WRAP = 0.18; // how far past N·L = 0 the light reaches
+const TERM_TOE = 0.35;  // the eased stretch, in units of the wrapped ramp
+/** The one soft-terminator definition. Shared as a string so the shells cannot drift. */
+const SOFT_NL = /* glsl */ `
+  float softNL( float x ) {
+    float t = clamp( ( x + ${TERM_WRAP.toFixed(2)} ) / ${(1 + TERM_WRAP).toFixed(2)}, 0.0, 1.0 );
+    return t * smoothstep( 0.0, ${TERM_TOE.toFixed(2)}, t );
+  }
+`;
+
 const ATMO_SHELL = 1.12; // shell radius as a multiple of the planet radius
 const rimVert = /* glsl */ `
   varying vec3 vWPos; varying vec3 vWN; varying vec3 vCenter; varying float vScale;
@@ -333,7 +363,10 @@ const earthNightFrag = /* glsl */ `
   uniform sampler2D uMap; varying vec2 vUv; varying vec3 vWN; varying vec3 vWPos;
   void main() {
     float lit = dot(normalize(vWN), normalize(-vWPos));
-    float night = smoothstep(0.08, -0.2, lit);          // 1 on the dark hemisphere
+    // G2: the crossover is now DERIVED from the terminator's wrap rather than hand-tuned to
+    // roughly agree with it — the lights come up exactly as the surface light dies out, and
+    // the two can no longer drift apart when the wrap is retuned.
+    float night = smoothstep(${(TERM_WRAP * 0.5).toFixed(3)}, ${(-TERM_WRAP).toFixed(3)}, lit); // 1 on the dark hemisphere
     vec3 lights = texture2D(uMap, vUv).rgb;
     gl_FragColor = vec4(lights * 1.2, night);           // additive; alpha gates to night
     // B3: the lights were multiplied by 2.0 and laid additively over an already-bright
@@ -346,9 +379,12 @@ const earthNightFrag = /* glsl */ `
 `;
 const earthCloudFrag = /* glsl */ `
   uniform sampler2D uMap; varying vec2 vUv; varying vec3 vWN; varying vec3 vWPos;
+  ${SOFT_NL}
   void main() {
     float c = texture2D(uMap, vUv).r;                    // cloud density (grayscale)
-    float lit = clamp(dot(normalize(vWN), normalize(-vWPos)), 0.0, 1.0);
+    // G2: was a hard clamp, so the clouds' terminator sat at N·L = 0 while the surface's and
+    // the night-lights' sat elsewhere. Same softNL as the surface now.
+    float lit = softNL(dot(normalize(vWN), normalize(-vWPos)));
     float shade = 0.12 + 0.9 * lit;                      // clouds go dark past the terminator
     float a = smoothstep(0.16, 0.7, c) * 0.9;
     gl_FragColor = vec4(vec3(shade), a);
@@ -533,6 +569,28 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         'void main() {',
         'uniform vec3 uOccPos; uniform float uOccR, uEclipse;\nvarying vec3 vWPosP;\nvoid main() {'
       );
+      // G2 — soften the diffuse terminator. `dotNL` is declared inside three's own
+      // `lights_physical_pars_fragment`, and onBeforeCompile runs BEFORE includes are
+      // resolved, so the chunk is inlined here (from the installed source, not from memory)
+      // with that one line rewritten. Scoped to this material: patching ShaderChunk would
+      // silently re-light every standard material in the app, including ones nobody looked at.
+      {
+        const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
+        const HARD = 'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );';
+        // Both markers are load-bearing and both are three-version-dependent, so neither may
+        // fail quietly: a missed replace here would leave the terminator hard and look exactly
+        // like a tuning disagreement rather than a broken patch.
+        if (!CHUNK || !CHUNK.includes(HARD)) {
+          throw new Error('G2: three\'s RE_Direct_Physical dotNL line has moved — the soft terminator patch is not applied');
+        }
+        if (!shader.fragmentShader.includes('#include <lights_physical_pars_fragment>')) {
+          throw new Error('G2: meshphysical no longer includes lights_physical_pars_fragment');
+        }
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <lights_physical_pars_fragment>',
+          SOFT_NL + CHUNK.replace(HARD, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );')
+        );
+      }
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <opaque_fragment>',
         `{
