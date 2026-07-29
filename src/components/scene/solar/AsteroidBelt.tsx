@@ -63,6 +63,17 @@ const MESH_MIN = 0.007;
 const NEAR_GONE = 1.1; // fully dissolved closer than this (world units)
 const NEAR_FULL = 3.4; // fully solid beyond this
 
+// APPARENT-SIZE CAP. Distance alone is the wrong guard: a world's ORBIT camera can sit
+// three units from the belt, so rocks four units away are outside the near fade and yet
+// render 30-60px across — the necklace of boulders, back again, in a frame nobody had
+// measured. The belt's character is "fine dense ring" at EVERY vantage, so state the rule
+// in the units the complaint was made in: a body dissolves once it would be a legible
+// object on screen. With the dust layer already hard-clamped to 2.6px, this bounds the
+// whole belt from above at any camera distance, while leaving the overview's rare
+// ~11px chunks alone.
+const BIG_PX_FADE = 12; // start dissolving at this projected diameter (drawing px)
+const BIG_PX_GONE = 22; // fully gone by this one
+
 // Rocky palette — cool basalt greys through warm carbonaceous browns, and DARK. The old
 // palette sat around 42% sRGB; at the belt's distance the sun delivers an irradiance of
 // ~25, so a 42% rock leaves the shader at a radiance over 1.0, clips through the tone
@@ -277,13 +288,28 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
   // keep real lighting, real depth-writes and the single draw call. `vViewPosition` is
   // already a varying on MeshStandardMaterial, so this costs one length() and a hash per
   // fragment.
+  const rockShader = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
   const onBeforeCompile = useMemo(
     () => (shader: THREE.WebGLProgramParametersWithUniforms) => {
       shader.uniforms.uChrome = chromeRects;
       shader.uniforms.uChromeN = chromeCount;
+      shader.uniforms.uProjScale = { value: 600 };
+      rockShader.current = shader;
+      // Projected diameter of this instance, in drawing px, carried to the fragment stage.
+      // `instanceMatrix` column 0 is the instance's x axis, so its length is the x scale —
+      // the rock's radius times its lump factor.
+      shader.vertexShader = shader.vertexShader.replace(
+        'void main() {',
+        'uniform float uProjScale;\nvarying float vRockPx;\nvoid main() {'
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+         vRockPx = 2.0 * length( instanceMatrix[0].xyz ) * uProjScale / max( -mvPosition.z, 0.001 );`
+      );
       shader.fragmentShader = shader.fragmentShader.replace(
         'void main() {',
-        `${chromeMaskGLSL}\nvoid main() {`
+        `${chromeMaskGLSL}\nvarying float vRockPx;\nvoid main() {`
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <clipping_planes_fragment>',
@@ -291,6 +317,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
          {
            float _camD = length( vViewPosition );
            float _keep = smoothstep( ${NEAR_GONE.toFixed(2)}, ${NEAR_FULL.toFixed(2)}, _camD )
+                       * ( 1.0 - smoothstep( ${BIG_PX_FADE.toFixed(1)}, ${BIG_PX_GONE.toFixed(1)}, vRockPx ) )
                        * chromeKeep( gl_FragCoord.xy );
            if ( _keep < 0.999 ) {
              float _h = fract( sin( dot( gl_FragCoord.xy, vec2(12.9898, 78.233) ) ) * 43758.5453 );
@@ -310,8 +337,10 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     bandUniforms.uTime.value = state.clock.elapsedTime;
     // px per world unit at one unit of depth — kept live so the clamp survives a DPR
     // change from AdaptiveDpr (cost may vary per tier; the reading must not).
-    dustUniforms.uProjScale.value =
+    const projScale =
       state.camera.projectionMatrix.elements[5] * 0.5 * state.gl.getDrawingBufferSize(_dbs).y;
+    dustUniforms.uProjScale.value = projScale;
+    if (rockShader.current) rockShader.current.uniforms.uProjScale.value = projScale;
   });
 
   return (

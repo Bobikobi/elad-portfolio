@@ -31,7 +31,7 @@ const DEV = process.env.NODE_ENV !== 'production';
 // jupiter 140 / clip 0%, saturn 93 / 0%, mars 95 / 0.9%, earth 211 / 19.5% — Earth is the
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
-const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.9, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
+const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
 // Ringed worlds need a much higher vantage so the rings open up instead of reading
 // edge-on (invisible). Others keep a low, "look up at a world" angle.
 const RINGED = new Set(['saturn']);

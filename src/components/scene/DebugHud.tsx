@@ -95,6 +95,9 @@ function heightFraction(R: number, dist: number, fovYrad: number): number {
   return (2 * Math.atan(R / dist)) / fovYrad;
 }
 
+/** Side of the square block sampled at each corner, in device px. */
+const CORNER_BLOCK = 10;
+
 const _sun = new THREE.Vector3();
 const _p = new THREE.Vector3();
 
@@ -106,8 +109,11 @@ export function HudProbe() {
   const ctx2 = useRef<CanvasRenderingContext2D | null>(null);
   if (!c2.current) {
     c2.current = document.createElement('canvas');
-    c2.current.width = 4;
-    c2.current.height = 4;
+    // Must match the sample block below. It was 4x4 while `sample` draws and reads a
+    // 10x10 block, so 84 of every 100 pixels came back as out-of-canvas transparent
+    // black and every corner reading was fiction.
+    c2.current.width = CORNER_BLOCK;
+    c2.current.height = CORNER_BLOCK;
     ctx2.current = c2.current.getContext('2d', { willReadFrequently: true });
   }
 
@@ -164,7 +170,7 @@ export function HudProbe() {
         const W = src.width, H = src.height; // device px, top-left origin for drawImage
         // Sample the corner REGION (a small block inset ~3% from the edge), not the single
         // outermost pixel which the strong vignette crushes to pure black.
-        const s = 10, m = Math.round(Math.min(W, H) * 0.03);
+        const s = CORNER_BLOCK, m = Math.round(Math.min(W, H) * 0.03);
         const sample = (x: number, y: number) => {
           ctx2.current!.clearRect(0, 0, s, s);
           ctx2.current!.drawImage(src, x, y, s, s, 0, 0, s, s);
