@@ -100,7 +100,9 @@ export default function SceneRoot() {
             In the solar act the veils drop to a faint backdrop so they read as distant
             nebulosity, not the milky haze that used to wash the poster frame — corners
             stay <10% brightness but never empty (stars + a nebula touch everywhere). */}
-        <Nebula intensity={act === 'solar' ? 0.28 : 1} />
+        {/* B4: 0.28 left the solar sky effectively empty, which is most of why the worlds
+            read as faded. The veils are a BACKDROP, not a rumour of one. */}
+        <Nebula intensity={act === 'solar' ? 0.5 : 1} />
         {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
         {/* In-world swap curtain — persists across the act swap, covers the seam. */}
         <SwapMask />

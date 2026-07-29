@@ -43,16 +43,24 @@ const GALAXIES: Patch[] = [
 export default function Nebula({ intensity = 1 }: { intensity?: number }) {
   const tex = useMemo(softSprite, []);
   const group = useRef<THREE.Group>(null);
-  // Slow absolute drift from base position (time-based, not per-frame accumulation).
+  // B4+: every patch drifts AND breathes on its own period, and the periods are chosen so
+  // they do not share a short common multiple — the standing acceptance test is a 20s
+  // recording with no input where no frame repeats one 5s earlier, and a single shared
+  // clock would fail it however slow it was. Time-based, never per-frame accumulation.
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     const g = group.current;
     if (!g) return;
     for (let i = 0; i < NEBULAE.length; i++) {
-      const child = g.children[i];
+      const child = g.children[i] as THREE.Sprite;
       const base = NEBULAE[i].pos;
-      child.position.x = base[0] + Math.sin(t * 0.02 + i) * 1.4;
-      child.position.y = base[1] + Math.cos(t * 0.017 + i * 1.3) * 1.1;
+      const per = 47 + i * 13; // 47, 60, 73, … seconds — no two in lockstep
+      child.position.x = base[0] + Math.sin((t / per) * Math.PI * 2 + i) * 2.2;
+      child.position.y = base[1] + Math.cos((t / (per * 1.27)) * Math.PI * 2 + i * 1.3) * 1.7;
+      const breathe =
+        1 + 0.16 * Math.sin((t / (per * 0.61)) * Math.PI * 2 + i * 2.4)
+          + 0.07 * Math.sin((t / (per * 0.23)) * Math.PI * 2 + i);
+      (child.material as THREE.SpriteMaterial).opacity = NEBULAE[i].op * intensity * breathe;
     }
   });
   return (

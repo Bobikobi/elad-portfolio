@@ -38,6 +38,32 @@ export function softSprite(): THREE.CanvasTexture {
   return _soft;
 }
 
+/**
+ * B4 — make a sprite's own QUAD EDGE unreachable.
+ *
+ * A billboard is a square, and a square that ends while it is still emitting light is a
+ * visible straight seam. The nebula stills are feathered, but "feathered" in an 8-bit
+ * alpha channel means the border can still sit at 2 or 3 of 255 — invisible in an image
+ * viewer, and a flat lit rectangle when the same quad is scaled to 60 world units,
+ * blended additively over a near-black sky and then lifted by a grade. That is the
+ * straight-edged panel that was cutting the Jupiter and Technologies frames.
+ *
+ * So the fade is enforced in the shader instead of trusted to the asset: alpha reaches
+ * exactly zero before the boundary no matter what the texture does there. Radius is
+ * measured in UV, so it behaves identically on a stretched billboard, and the quad's
+ * corners (r = √2) are gone long before it.
+ */
+export const featherSprite = (shader: { fragmentShader: string }) => {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <alphatest_fragment>',
+    `{
+       float _r = length( vMapUv - 0.5 ) * 2.0;   // 0 centre .. 1 at the edge midpoints
+       diffuseColor.a *= 1.0 - smoothstep( 0.74, 1.0, _r );
+     }
+     #include <alphatest_fragment>`
+  );
+};
+
 let _flame: THREE.CanvasTexture | null = null;
 /**
  * One solar prominence — a tapered plasma wisp, not a blob.
