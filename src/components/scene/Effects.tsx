@@ -1,8 +1,37 @@
 'use client';
 import { useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation } from '@react-three/postprocessing';
 import { useScene } from '@/lib/sceneStore';
+
+/**
+ * B3 — the tone mapper was switched off, and had been for as long as this composer has
+ * existed.
+ *
+ * `@react-three/postprocessing`'s EffectComposer runs
+ * `useEffect(() => { const prev = gl.toneMapping; gl.toneMapping = NoToneMapping; ... })`
+ * on mount, on the assumption that the chain will end in a ToneMappingEffect. This chain
+ * does not have one. So every material shipped raw linear radiance to a buffer that
+ * clamps at 1.0, and `gl.toneMappingExposure` — the per-world aperture the whole ORBIT
+ * lighting design is built on — was a value nothing read. Measured on the alias: sweeping
+ * exposure from 1.0 down to 0.12 moved Jupiter's mean disc luminance by less than 6%, in
+ * the WRONG direction, which is noise.
+ *
+ * That is why the discs clipped: not a grade, not an albedo, no tone mapper. Restoring it
+ * on the renderer (rather than adding a ToneMappingEffect) is what the rest of the scene
+ * already assumes — the sun's surface and corona are `toneMapped: false` precisely so
+ * they stay HDR and keep burning through Bloom and God Rays while everything else is
+ * mapped in-material. Assigning the same enum every frame is free; three only rebuilds a
+ * program when the cache key actually changes.
+ */
+function ToneMappingGuard() {
+  const gl = useThree((s) => s.gl);
+  useFrame(() => {
+    if (gl.toneMapping !== THREE.ACESFilmicToneMapping) gl.toneMapping = THREE.ACESFilmicToneMapping;
+  }, -1);
+  return null;
+}
 
 // The postprocessing VignetteEffect exposes `darkness`/`offset` as live setters; the
 // package isn't hoisted for a direct type import (pnpm), so we type the ref structurally.
@@ -84,6 +113,8 @@ export default function Effects() {
   });
 
   return (
+    <>
+    <ToneMappingGuard />
     <EffectComposer multisampling={0}>
       {godRays ? (
         <GodRays sun={sunMesh} samples={high ? 60 : 30} density={0.82} decay={0.92} weight={0.085} exposure={0.16} clampMax={0.72} blur />
@@ -100,8 +131,8 @@ export default function Effects() {
       <Bloom
         key={solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}
         mipmapBlur
-        intensity={solar ? (focused ? 0.26 : 0.6) : 0.5}
-        luminanceThreshold={solar ? (focused ? 0.93 : 0.72) : 0}
+        intensity={solar ? (focused ? 0.34 : 0.6) : 0.5}
+        luminanceThreshold={solar ? (focused ? 0.86 : 0.72) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
         radius={solar ? 0.45 : 0.5}
       />
@@ -117,5 +148,6 @@ export default function Effects() {
           are driven per-frame (vigRef) to ease across the swap — see above. */}
       <Vignette ref={(e: VignetteLike | null) => { vigRef.current = e ?? null; }} offset={0.28} darkness={0.62} />
     </EffectComposer>
+    </>
   );
 }
