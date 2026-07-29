@@ -103,7 +103,15 @@ function makeRingTexture(): THREE.Texture {
   };
   for (let x = 0; x < w; x++) {
     const u = x / (w - 1); // 0 inner .. 1 outer
-    const edges = smooth(0, 0.05, u) * (1 - smooth(0.93, 1, u));
+    // The outer taper runs from 0.52 rather than 0.93 (RULING: "ease ring brightness
+    // toward the tips as they exit frame"). At the /projects vantage the ring rim spans
+    // about 1.5 frame widths, so the outer half of it is always the part being cropped —
+    // and a hard-edged band cropping at the frame edge is precisely what reads as a beige
+    // swoosh rather than as a ring system. Fading it instead keeps the cropping (poster
+    // language, and it stays) while making what crops already faint. The taper starts
+    // just past the Cassini gap at u = 0.5, so the structure that identifies the rings —
+    // the gap, the banding, the bright inner B ring — is all before it and untouched.
+    const edges = smooth(0, 0.05, u) * (1 - smooth(0.52, 1.0, u));
     const cassini = 1 - 0.9 * Math.exp(-Math.pow((u - 0.5) / 0.025, 2)); // dark gap
     const encke = 1 - 0.5 * Math.exp(-Math.pow((u - 0.78) / 0.012, 2));
     const bands = 0.78 + 0.22 * Math.sin(u * 90) * Math.sin(u * 23);
