@@ -176,16 +176,14 @@ export default function Navbar() {
 
           {/* Language + mobile toggle */}
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-1 bg-[var(--color-bg-tertiary)] rounded-lg p-0.5">
+            <div className="chrome-surface hidden md:flex items-center gap-1 rounded-lg p-0.5">
               {locales.map((l) => (
                 <button
                   key={l.code}
                   onClick={() => changeLocale(l.code)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                    locale === l.code
-                      ? 'bg-[var(--color-accent)] text-white'
-                      : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
-                  }`}
+                  data-active={locale === l.code ? 'true' : 'false'}
+                  aria-current={locale === l.code ? 'true' : undefined}
+                  className="chrome-btn px-2.5 py-1 rounded-md text-xs font-medium"
                 >
                   {l.label}
                 </button>
@@ -257,7 +255,7 @@ export default function Navbar() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-auto flex items-center gap-1 bg-[var(--color-bg-tertiary)] rounded-lg p-0.5">
+              <div className="chrome-surface mt-auto flex items-center gap-1 rounded-lg p-0.5">
                 {locales.map((l) => (
                   <button
                     key={l.code}
@@ -265,11 +263,9 @@ export default function Navbar() {
                       changeLocale(l.code);
                       setMobileOpen(false);
                     }}
-                    className={`flex-1 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
-                      locale === l.code
-                        ? 'bg-[var(--color-accent)] text-white'
-                        : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
-                    }`}
+                    data-active={locale === l.code ? 'true' : 'false'}
+                    aria-current={locale === l.code ? 'true' : undefined}
+                    className="chrome-btn flex-1 px-2.5 py-2 rounded-md text-xs font-medium"
                   >
                     {l.label}
                   </button>

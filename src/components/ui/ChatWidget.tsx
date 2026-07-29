@@ -189,19 +189,19 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
       {/* Panel */}
       {open && (
         <div
-          className={`absolute bottom-full mb-3 ${panelAlignClass} w-80 max-w-[90vw] flex flex-col rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] shadow-2xl overflow-hidden`}
+          className={`chrome-surface absolute bottom-full mb-3 ${panelAlignClass} w-80 max-w-[90vw] flex flex-col rounded-2xl overflow-hidden`}
           style={{ height: 'min(420px, calc(100vh - 5rem))' }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-[var(--color-accent)] shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 shrink-0 border-b border-[rgba(255,201,120,0.28)]">
             <div className="flex items-center gap-2">
-              <MessageCircle size={16} className="text-white" aria-hidden="true" />
-              <span className="text-sm font-semibold text-white">{t('title')}</span>
+              <MessageCircle size={16} className="text-[var(--color-core-gold)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[var(--color-star-white)]">{t('title')}</span>
             </div>
             <button
               onClick={() => setOpen(false)}
               aria-label="Close chat"
-              className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              className="chrome-btn p-1 rounded-lg"
             >
               <X size={16} />
             </button>
@@ -217,8 +217,8 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
                 <div
                   className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                     msg.role === 'user'
-                      ? 'bg-[var(--color-accent)] text-white rounded-br-sm'
-                      : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] border border-[var(--color-border-default)] rounded-bl-sm'
+                      ? 'bg-[rgba(255,201,120,0.16)] border border-[rgba(255,201,120,0.4)] text-[var(--color-star-white)] rounded-br-sm'
+                      : 'bg-[rgba(238,241,255,0.05)] text-[var(--color-star-white)]/80 border border-white/10 rounded-bl-sm'
                   }`}
                 >
                   {msg.text}
@@ -227,11 +227,11 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
             ))}
             {loading && (
               <div className={`flex ${isRTL ? 'justify-end' : 'justify-start'}`}>
-                <div className="bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] px-3 py-2 rounded-2xl rounded-bl-sm">
+                <div className="bg-[rgba(238,241,255,0.05)] border border-white/10 px-3 py-2 rounded-2xl rounded-bl-sm">
                   <span className="flex gap-1 items-center h-4">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-core-gold)]/70 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-core-gold)]/70 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-core-gold)]/70 animate-bounce" style={{ animationDelay: '300ms' }} />
                   </span>
                 </div>
               </div>
@@ -240,7 +240,7 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
           </div>
 
           {/* Input */}
-          <div className="shrink-0 flex gap-2 p-3 border-t border-[var(--color-border-default)]">
+          <div className="shrink-0 flex gap-2 p-3 border-t border-white/10">
             <input
               ref={inputRef}
               type="text"
@@ -249,13 +249,13 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
               onKeyDown={handleKey}
               placeholder={t('placeholder')}
               disabled={loading}
-              className="flex-1 bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50"
+              className="flex-1 bg-[rgba(238,241,255,0.05)] border border-white/12 rounded-xl px-3 py-2 text-sm text-[var(--color-star-white)] placeholder:text-[var(--color-star-white)]/40 focus:outline-none focus:border-[var(--color-core-gold)]/60 transition-colors disabled:opacity-50"
             />
             <button
               onClick={sendMessage}
               disabled={loading || !input.trim() || !turnstileToken}
               aria-label="Send"
-              className="p-2 rounded-xl bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              className="chrome-btn p-2 rounded-xl border-[rgba(255,201,120,0.4)] bg-[rgba(255,201,120,0.14)] text-[var(--color-core-gold)] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               <Send size={16} />
             </button>
@@ -265,7 +265,7 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
             {turnstileSiteKey ? (
               <div ref={turnstileRef} className="min-h-[65px]" />
             ) : (
-              <p className="text-xs text-[var(--color-text-tertiary)]">{t('errOffline')}</p>
+              <p className="text-xs text-[var(--color-star-white)]/50">{t('errOffline')}</p>
             )}
           </div>
         </div>
@@ -275,12 +275,13 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
       <button
         onClick={() => setOpen((prev) => !prev)}
         aria-label={open ? 'Close chat' : t('title')}
-        className={`relative flex items-center gap-2 rounded-full shadow-lg px-4 py-3 text-white font-bold text-sm transition-all duration-300 hover:scale-105 focus-visible:ring-4 focus-visible:ring-blue-300 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] ${open ? 'opacity-90' : ''}`}
+        data-active={open ? 'true' : 'false'}
+        className="chrome-launcher relative flex items-center gap-2 rounded-full px-4 py-3 font-medium text-sm hover:scale-[1.04]"
       >
         {open ? <X size={20} aria-hidden="true" /> : <MessageCircle size={20} aria-hidden="true" />}
         <span className="hidden sm:inline">{open ? '' : t('title')}</span>
         {!open && messages.length <= 1 && (
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-bg-primary)]" />
+          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[var(--color-core-gold)] border-2 border-[var(--color-space-void)]" />
         )}
       </button>
     </div>

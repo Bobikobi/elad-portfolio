@@ -324,6 +324,70 @@ body::before {
 }
 .shimmer-hover:hover::after { animation: shimmer-sweep 0.85s ease forwards; }
 
+/* ===== Floating scene chrome =====
+   The three widgets that float over the canvas — the language pills, the chat launcher
+   and the accessibility button — were the last survivors of the retired tunnel palette:
+   magenta accent on two of them and a white panel with blue chrome on the third. They
+   are the most-seen elements on the site (every route, every frame, every screenshot)
+   and the only things on screen not speaking the cosmic language.
+   One surface, stated once: dark glass over the void, a single hairline border, and
+   core gold reserved for STATE — hover, active, focus. Nothing else is gold, so gold
+   always means "this one".
+   Contrast improves rather than degrades: star-white on the void measures ~17:1 and
+   gold ~12:1, against the ~10:1 of the grey-on-white panel this replaces. */
+.chrome-surface {
+  background: rgba(5, 7, 20, 0.86);
+  border: 1px solid rgba(238, 241, 255, 0.14);
+  box-shadow: 0 18px 50px rgba(8, 10, 34, 0.5);
+  color: var(--color-star-white);
+}
+/* A control on that surface. Transitions are named rather than `all`, so a hover can
+   never animate layout. */
+.chrome-btn {
+  border: 1px solid transparent;
+  color: rgba(238, 241, 255, 0.72);
+  transition: color 0.22s ease, border-color 0.22s ease, background-color 0.22s ease;
+}
+.chrome-btn:hover {
+  color: var(--color-core-gold);
+  border-color: rgba(255, 201, 120, 0.45);
+  background: rgba(255, 201, 120, 0.08);
+}
+.chrome-btn[aria-pressed='true'],
+.chrome-btn[data-active='true'] {
+  color: var(--color-core-gold);
+  border-color: rgba(255, 201, 120, 0.55);
+  background: rgba(255, 201, 120, 0.14);
+}
+.chrome-btn:focus-visible {
+  outline: 2px solid var(--color-core-gold);
+  outline-offset: 2px;
+}
+/* The launchers themselves (chat, accessibility) — always on screen, so they carry the
+   border at rest rather than only on hover. */
+.chrome-launcher {
+  background: rgba(5, 7, 20, 0.86);
+  border: 1px solid rgba(238, 241, 255, 0.18);
+  color: var(--color-star-white);
+  box-shadow: 0 10px 34px rgba(8, 10, 34, 0.55);
+  transition: color 0.22s ease, border-color 0.22s ease, background-color 0.22s ease, transform 0.22s ease;
+}
+.chrome-launcher:hover {
+  color: var(--color-core-gold);
+  border-color: rgba(255, 201, 120, 0.6);
+  background: rgba(16, 12, 8, 0.9);
+}
+.chrome-launcher:focus-visible {
+  outline: 2px solid var(--color-core-gold);
+  outline-offset: 3px;
+}
+/* Active = the visitor has switched something on. Gold, unmistakably. */
+.chrome-launcher[data-active='true'] {
+  color: var(--color-core-gold);
+  border-color: rgba(255, 201, 120, 0.7);
+  background: rgba(255, 201, 120, 0.16);
+}
+
 /* ===== World card type scale (B9) =====
    Every world was setting its own sizes inline and they had drifted apart: a project
    title at text-base beside a service title at text-base beside a tech chip at 11px,
