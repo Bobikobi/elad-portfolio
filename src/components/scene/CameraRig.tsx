@@ -25,9 +25,13 @@ const DEV = process.env.NODE_ENV !== 'production';
 // 250+ (p99 luminance 250.6, i.e. a white field, not a planet) and Mars 10.4% clipped in
 // the RED channel alone with mean blue at 0.2/255 — the "neon yellow". Values below put
 // each world's peak just under the roll-off instead of through it.
-// (Values re-derived once the tone mapper was actually switched on — see Effects.tsx.
-// Before that, none of these numbers reached a pixel.)
-const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.55, mars: 0.5, jupiter: 0.6, saturn: 0.85, belt: 1.0 };
+// Calibrated by sweeping the aperture on the alias and measuring each disc, once the tone
+// mapper was actually switched on (see ExposureToneMap — before that none of these numbers
+// reached a pixel). At exposure 1.0 the measured discs came out at mean luminance
+// jupiter 140 / clip 0%, saturn 93 / 0%, mars 95 / 0.9%, earth 211 / 19.5% — Earth is the
+// outlier because its cloud and night-lights shells stack on top of an already close-lit
+// body. These values land every world in the 90-135 band with clipping at zero.
+const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.9, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
 // Ringed worlds need a much higher vantage so the rings open up instead of reading
 // edge-on (invisible). Others keep a low, "look up at a world" angle.
 const RINGED = new Set(['saturn']);
