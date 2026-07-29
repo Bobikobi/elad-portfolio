@@ -63,9 +63,11 @@ gitleaks-workingtree.json
 gitleaks-history.json
 security-reports/
 
-# Local visual-verification harness (not for commit) — all root _*.mjs are temp harness
+# Local visual-verification harness (not for commit) — everything at the root starting
+# with an underscore is temp harness: scripts, shell helpers and the frames they capture.
 /_*.mjs
-/_shot-*.png
+/_*.sh
+/_*.png
 
 # local visual-verification chrome profile (never commit)
 .automation-profile/
