@@ -241,8 +241,8 @@ const rimFrag = /* glsl */ `
   uniform vec3 uColor; uniform float uIntensity; uniform float uBaseR;
   varying vec3 vWPos; varying vec3 vWN; varying vec3 vCenter; varying float vScale;
   void main() {
-    float shellR  = uBaseR * vScale;
-    float planetR = shellR / ${ATMO_SHELL.toFixed(2)};
+    float shellR  = uBaseR * vScale;                     // vScale already holds ATMO_SHELL
+    float planetR = shellR / ${ATMO_SHELL.toFixed(2)};   // …so the surface is one factor in
 
     // Height of this sightline's closest approach to the planet centre.
     vec3 D = normalize(vWPos - cameraPosition);
@@ -516,7 +516,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     () => ({
       uColor: { value: new THREE.Color(spec.atmo ?? spec.rim) },
       uIntensity: { value: atmoStrength },
-      uBaseR: { value: spec.size * ATMO_SHELL },
+      // The geometry radius, NOT the shell radius: the mesh's own `scale={ATMO_SHELL}` is
+      // already inside modelMatrix, so vScale carries it (and the hover scale-up too).
+      uBaseR: { value: spec.size },
     }),
     [spec.atmo, spec.rim, atmoStrength, spec.size]
   );
