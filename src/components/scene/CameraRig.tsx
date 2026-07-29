@@ -34,13 +34,7 @@ const DEV = process.env.NODE_ENV !== 'production';
 // jupiter 140 / clip 0%, saturn 93 / 0%, mars 95 / 0.9%, earth 211 / 19.5% — Earth is the
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
-//
-// RULING follow-up: mars came down from 0.72. Solving the vantage for a lit target moved
-// its disc from roughly half-lit to 74% lit, and an aperture calibrated against the darker
-// phase then blew the rust out — measured 4.19% of the frame clipping where it had been
-// 0.32%. This is the tier-law lesson in miniature: change the composition and every value
-// calibrated against the old one needs re-measuring, not assuming.
-const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.62, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
+const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
 // Ringed worlds open against their OWN ring plane; every other world against the ecliptic.
 const RINGED = new Set(['saturn']);
 
@@ -72,7 +66,21 @@ const LIT_TARGET: Record<string, number> = {
   // 73-79% lit — a clearly lit hero throughout, never a half-dark one.
   saturn: 0.76,
 };
-const LIT_DEFAULT = 0.74; // ≥0.70 after the wobble — never darker than these worlds are now
+// The other four worlds keep the phase they were APPROVED at, and this is why.
+//
+// My first pass gave every world the same raised target on the reasoning that "favour the
+// lit side" is a general preference and none of them would get darker. Sweeping caught what
+// that actually did: Mars went from 0.32% of the frame clipping to 3.62%, and lowering its
+// aperture barely moved it, because the cause was not exposure. Raising the lit fraction
+// pulls the SUB-SOLAR POINT — the brightest spot on the body, where the sun is directly
+// overhead — from near the limb, where it is foreshortened over few pixels, into open view.
+// On Mars's bright dust that spot blows out and takes the polar terrain with it.
+//
+// The ruling was scoped to /projects Saturn. So Saturn gets the lit hero and the rest keep
+// 0.66, the middle of the 58-71% range the old construction wandered over — which is the
+// look that was reviewed and called reference-grade. They still gain the real fix: the phase
+// no longer depends on where the body happens to be in its orbit.
+const LIT_DEFAULT = 0.66;
 const LIT_WOBBLE_DEFAULT = 0.04;
 const LIT_WOBBLE: Record<string, number> = { saturn: 0.03 };
 /** How far the sightline should sit off the reference plane, in radians. */
