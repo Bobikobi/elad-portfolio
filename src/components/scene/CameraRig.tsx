@@ -8,6 +8,7 @@ import { planetPositions, planetRadii, beltTourAnchor } from '@/lib/planetPositi
 import { SECTIONS } from '@/lib/sections';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
+import { HUD_AVAILABLE } from './DebugHud';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
@@ -297,7 +298,16 @@ export default function CameraRig() {
     }
     const holdCoverage = revealHold.current > 0 ? 1 : revealFloor.current;
     /** Publish coverage, never letting it fall below the post-swap reveal floor. */
-    const setCoverage = (v: number) => store.setCoverage(Math.max(v, holdCoverage));
+    const setCoverage = (v: number) => {
+      const out = Math.max(v, holdCoverage);
+      if (HUD_AVAILABLE) {
+        (window as unknown as { __reveal?: unknown }).__reveal = {
+          hold: revealHold.current, floor: +revealFloor.current.toFixed(3),
+          envelope: +v.toFixed(3), published: +out.toFixed(3), gate: +pGate.current.toFixed(4),
+        };
+      }
+      store.setCoverage(out);
+    };
     /** Called at every swap site: shut the curtain and keep it shut until the act draws. */
     const latchReveal = () => {
       revealHold.current = REVEAL_FRAMES;
@@ -336,7 +346,18 @@ export default function CameraRig() {
       if (reconcile.current === 0) {
         // Damp a GATE toward raw scroll (wall-clock, frame-rate independent per the tier
         // law) so a fast fling can't jump past the covered window between two frames.
+        const prevGate = pGate.current;
         damp(pGate, 'current', scrollProgress, 0.08, dt);
+        // …except a damp cannot promise that, because it is wall-clock: across the 984ms
+        // frame the act mount costs, it converges completely and the gate lands on the far
+        // side of the swap window having never been inside it. The swap then never fires
+        // (it needs cov>0.95), the reconcile has to clean up afterwards, and the visitor
+        // sees the seam. So state the rule directly instead of hoping the damp implies it:
+        // a frame that WOULD cross the swap point stops exactly on it. One frame at full
+        // coverage is guaranteed, whatever the frame took.
+        if (prevGate !== pGate.current && (prevGate < SWAP_V) !== (pGate.current < SWAP_V)) {
+          pGate.current = SWAP_V;
+        }
         const g = pGate.current;
         // Symmetric cover envelope: a full plateau centred on the swap point — identical
         // whether diving down or surfacing up, so the reverse is the dive played backwards.
