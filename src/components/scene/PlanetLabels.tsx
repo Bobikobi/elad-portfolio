@@ -299,6 +299,17 @@ export function PlanetLabelDriver() {
         hoverMiss.current = 0;
         if (ptr.onScene && bestHit && bestKey) st.setHoveredBody(bestKey);
       }
+      // Verification handle. "The tooltip did not appear" has at least five causes here —
+      // the pointer flags, the nearest-target search, the hysteresis, the acquisition gate
+      // — and a screenshot distinguishes none of them.
+      if (HUD_AVAILABLE) {
+        (window as unknown as { __hover?: unknown }).__hover = {
+          hovered: st.hoveredBody,
+          bestKey, bestGap: +bestGap.toFixed(1), bestHit,
+          onScene: ptr.onScene, onTip: ptr.onTip, onRim: ptr.onRim,
+          ptr: [Math.round(ptr.x), Math.round(ptr.y)],
+        };
+      }
     }
 
     // --- B10: rim markers for the decorative bodies that are off-frame -----------------
