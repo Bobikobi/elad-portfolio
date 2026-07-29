@@ -287,9 +287,10 @@ const earthNightFrag = /* glsl */ `
     float night = smoothstep(0.08, -0.2, lit);          // 1 on the dark hemisphere
     vec3 lights = texture2D(uMap, vUv).rgb;
     gl_FragColor = vec4(lights * 1.2, night);           // additive; alpha gates to night
-    // B3: these shells used to skip tone mapping entirely, so they wrote raw values
-    // straight over an already-bright disc and clipped it. They go through the same
-    // aperture as every other material now.
+    // B3: the lights were multiplied by 2.0 and laid additively over an already-bright
+    // disc. Tone mapping is applied for the whole frame in the composer now
+    // (ExposureToneMap), so the chunk below is inert while a composer owns the render —
+    // it is kept only so this shader stays correct if it is ever drawn direct-to-canvas.
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }

@@ -35,6 +35,9 @@ importers:
       next:
         specifier: 16.2.2
         version: 16.2.2(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      postprocessing:
+        specifier: 6.39.3
+        version: 6.39.3(three@0.185.1)
       react:
         specifier: 19.2.4
         version: 19.2.4
