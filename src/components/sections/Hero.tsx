@@ -9,7 +9,7 @@ import { useMotionDisabled } from '@/hooks/useMotionDisabled';
 import { useWebGLAvailable } from '@/hooks/useWebGLAvailable';
 import { useScene } from '@/lib/sceneStore';
 import { SWAP_V, COVER_PLATEAU, COVER_FALLOFF, coverageFor } from '@/lib/diveEnvelope';
-import { ENTERED_ON_A_WORLD } from '@/lib/entryRoute';
+import { enteredOnAWorld } from '@/lib/entryRoute';
 import About from '@/components/sections/About';
 import Services from '@/components/sections/Services';
 import Projects from '@/components/sections/Projects';
@@ -99,7 +99,7 @@ function GalaxyHome() {
     // ignoring the `seen-intro` that useWorldExit had just written for precisely the
     // opposite reason. A document that ENTERED on a world is never a fresh home arrival,
     // whatever this component has or has not mounted before.
-    const fresh = !sessionEntered && !ENTERED_ON_A_WORLD;
+    const fresh = !sessionEntered && !enteredOnAWorld();
     sessionEntered = true;
     const seen = !fresh && sessionStorage.getItem('seen-intro') === '1';
     setSeenIntro(seen);
