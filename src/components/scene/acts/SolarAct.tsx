@@ -719,7 +719,24 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   }, [focused, page, spec.key, gl]);
 
   useFrame((state, dt) => {
-    angle.current += dt * spec.speed;
+    // SPARKLE-2: the heliocentric revolution stops while ANY world is focused — not this
+    // planet's, any. It is the one motion that has to stop, and it is the only one that does.
+    //
+    // The ORBIT vantage is solved from the sun direction, so while a planet revolves the
+    // vantage revolves with it and the camera swings around the world at 1.4-2.4 degrees per
+    // 1.2s, forever. That lens rotation sweeps the entire sky across the frame, which is what
+    // read as specks drifting around the planet. Measured: 21.2px predicted from the rotation
+    // alone against 17.6px of actual star drift, on stars whose parallax cannot exceed 0.37px.
+    // Freezing the revolution is what stops the lens; nothing done to the particles could.
+    //
+    // A revolution is imperceptible from two planet-radii away anyway — Earth moves through
+    // roughly a tenth of a degree of its orbit in the time anyone reads a panel.
+    //
+    // `angle` is an ACCUMULATOR, so not adding to it is the whole implementation: departure
+    // resumes from the angle reached, never re-derived from the clock, and there is no jump
+    // back to the overview. Everything local keeps running — self-rotation below, moons,
+    // clouds, night lights, haze flow, twinkle, and the B5 vantage breath in CameraRig.
+    if (!useScene.getState().focusedPlanet) angle.current += dt * spec.speed;
     // Atmosphere strength eases toward its idle value, brightening on hover (a fade, not a switch).
     const rimTarget = hovered && page ? atmoStrength * 1.8 : atmoStrength;
     // Through the live material, not the memoised literal — see ZodiacalDust for the reason.
@@ -843,7 +860,11 @@ export default function SolarAct() {
   const root = useRef<THREE.Group>(null);
   const high = useScene((s) => s.quality) === 'high';
   useFrame((_, dt) => {
-    if (root.current) root.current.rotation.y += dt * 0.004;
+    // The system's own slow yaw is the second half of the heliocentric revolution and freezes
+    // with it — see the note on `angle` in Planet. Leaving this running would have left 0.004
+    // rad/s still turning the vantage, which is the same "the parent is still moving" mistake
+    // useSkyLock exists to catch. Accumulator, so departure continues rather than re-syncs.
+    if (root.current && !useScene.getState().focusedPlanet) root.current.rotation.y += dt * 0.004;
   });
   return (
     <>
