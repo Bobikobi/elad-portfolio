@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { useScene, type Act } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, planetRingNormal, beltTourAnchor } from '@/lib/planetPositions';
 import { SECTIONS } from '@/lib/sections';
-import { ORBIT_FRAME, orbitDistance, DEG2RAD } from '@/lib/orbitFraming';
+import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 import { HUD_AVAILABLE } from './DebugHud';
 
@@ -281,6 +281,72 @@ const _ovPos = new THREE.Vector3();
 const _ovLook = new THREE.Vector3();
 const _entry = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+// Silhouette fit (B8b) — see publishLimb below.
+const _limbC = new THREE.Vector3();
+const _limbU = new THREE.Vector3();
+const _limbW = new THREE.Vector3();
+const _limbP = new THREE.Vector3();
+const _limbAny = new THREE.Vector3();
+
+/**
+ * Fit a circle to the focused planet's projected LIMB and publish it for the DOM ring
+ * (B8b). A sphere's silhouette is the circle where the tangent cone touches it — centre
+ * pulled toward the camera by R^2/d, radius R*sqrt(1-(R/d)^2) — and in perspective it
+ * projects to an ellipse, not a circle. Eight projected samples averaged give the
+ * best-fit circle to that ellipse, which is what the window arcs are concentric with:
+ * cheaper and more honest than re-deriving a radius from the design constants, which
+ * describe a tangent plane rather than a silhouette.
+ */
+function publishLimb(
+  cam: THREE.PerspectiveCamera,
+  centre: THREE.Vector3,
+  radius: number,
+  vw: number,
+  vh: number
+) {
+  _limbC.copy(centre).sub(cam.position);
+  const dist = _limbC.length();
+  if (!(dist > radius) || radius <= 0) return;
+  _limbC.divideScalar(dist); // unit direction camera → planet
+  const rs = radius * Math.sqrt(Math.max(0, 1 - (radius * radius) / (dist * dist)));
+  _limbAny.set(0, 1, 0);
+  if (Math.abs(_limbC.y) > 0.9) _limbAny.set(1, 0, 0);
+  _limbU.crossVectors(_limbC, _limbAny).normalize();
+  _limbW.crossVectors(_limbC, _limbU).normalize();
+  // silhouette-circle centre in world space
+  _limbC.multiplyScalar(dist - (radius * radius) / dist).add(cam.position);
+
+  cam.updateMatrixWorld();
+  cam.updateProjectionMatrix();
+  let sx = 0;
+  let sy = 0;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    _limbP
+      .copy(_limbC)
+      .addScaledVector(_limbU, rs * Math.cos(a))
+      .addScaledVector(_limbW, rs * Math.sin(a))
+      .project(cam);
+    const x = (_limbP.x * 0.5 + 0.5) * vw;
+    const y = (0.5 - _limbP.y * 0.5) * vh;
+    xs.push(x);
+    ys.push(y);
+    sx += x;
+    sy += y;
+  }
+  const cx = sx / 8;
+  const cy = sy / 8;
+  let r = 0;
+  for (let i = 0; i < 8; i++) r += Math.hypot(xs[i] - cx, ys[i] - cy);
+  livePlanetRect.cx = cx;
+  livePlanetRect.cy = cy;
+  livePlanetRect.r = r / 8;
+  livePlanetRect.vw = vw;
+  livePlanetRect.vh = vh;
+  livePlanetRect.stamp = performance.now();
+}
 const _orbOff = new THREE.Vector3();
 const _orbAxis = new THREE.Vector3();
 
@@ -870,6 +936,9 @@ export default function CameraRig() {
           damp3(cam.position, _tgt, 0.5, dt);
           damp(cam, 'fov', fov, 0.5, dt);
           cam.lookAt(_look.x, _look.y, _look.z);
+          // Hand the DOM the limb it is actually looking at, from the pose we just landed
+          // on — the projects ring reads it in its own rAF and rebuilds its arcs from it.
+          publishLimb(cam, pp, r, state.size.width, state.size.height);
         } else if (store.tourMode) {
           // --- T7b: MOBILE TOUR ---------------------------------------------------
           // Portrait crops the wide overview to mostly-sun, so we guide instead: a brief

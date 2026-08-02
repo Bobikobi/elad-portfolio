@@ -7,10 +7,16 @@ import ProjectsStage from './ProjectsStage';
 
 const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
 
-/** Projects = ringed Saturn, each project a "moon". NO outer container: each project
- *  is its OWN floating glass window, stacked vertically, its inner edge curving against
- *  Saturn's limb (the arc + scroll steering live in ProjectsStage). Content is
- *  server-rendered here (crawlable) and passed in as the stage's children. */
+/** Projects = ringed Saturn, each project a "moon". NO outer container: each project is
+ *  its OWN window, and since B8b each window is an annular sector fanned around Saturn —
+ *  the shape, the fan and the scroll-along-the-ring live in ProjectsStage, which owns
+ *  every window's size and transform from a per-frame layer.
+ *
+ *  What this file owns is only what goes INSIDE the sector's inscribed content box. That
+ *  box is small and its height is set by the ring (the sector is narrowest at its inner
+ *  edge), so the preview is a full-bleed backdrop under a scrim rather than a banner
+ *  stacked above the text: it keeps the image and still gives the text the whole box.
+ *  Content is server-rendered here (crawlable) and passed in as the stage's children. */
 export default function ProjectsWorld({ locale }: { locale: Locale }) {
   const ordered = [...projects].sort((a, b) => Number(b.featured) - Number(a.featured));
   return (
@@ -19,23 +25,22 @@ export default function ProjectsWorld({ locale }: { locale: Locale }) {
         <article
           key={p.id}
           data-window
-          className="world-window window-enter overflow-hidden rounded-2xl border border-white/10 transition-[border-color,box-shadow] duration-300 hover:border-[var(--color-core-gold)]/45 hover:shadow-[0_10px_44px_rgba(8,10,34,0.6)]"
-          style={{
-            background: 'rgba(5,7,20,0.8)',
-            boxShadow: '0 14px 50px rgba(8,10,34,0.42)',
-            willChange: 'transform',
-          }}
+          className="ring-card group absolute left-0 top-0 flex flex-col justify-end overflow-hidden rounded-[12px]"
         >
-          {/* signature gold top line (saturn-ring echo) */}
-          <div className="h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,201,120,0.7), transparent)' }} />
           {p.previewImage && (
-            <div className="relative aspect-[16/10] w-full overflow-hidden">
-              <Image src={p.previewImage} alt={p.title[locale]} fill sizes="31rem" className="object-cover" />
-            </div>
+            <Image
+              src={p.previewImage}
+              alt=""
+              fill
+              sizes="320px"
+              aria-hidden
+              className="pointer-events-none object-cover opacity-30 transition-opacity duration-300 group-hover:opacity-45"
+            />
           )}
-          <div className="p-4">
+          <div className="ring-card-scrim pointer-events-none absolute inset-0" />
+          <div className="relative flex flex-col gap-1.5 p-3.5">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="world-title text-[var(--color-star-white)]">
+              <h2 className="world-title line-clamp-2 text-[var(--color-star-white)]">
                 {p.title[locale]}
               </h2>
               {p.liveUrl && (
@@ -49,10 +54,10 @@ export default function ProjectsWorld({ locale }: { locale: Locale }) {
                 </a>
               )}
             </div>
-            <p className="world-body mt-2 text-[var(--color-star-white)]/65">{p.description[locale]}</p>
-            <ul className="mt-2.5 flex flex-wrap gap-x-2.5 gap-y-1">
-              {p.techStack.slice(0, 5).map((tech) => (
-                <li key={tech} className="world-chip text-[var(--color-core-gold)]/70">
+            <p className="world-body line-clamp-2 text-[var(--color-star-white)]/70">{p.description[locale]}</p>
+            <ul className="flex flex-nowrap gap-x-2.5 overflow-hidden">
+              {p.techStack.slice(0, 3).map((tech) => (
+                <li key={tech} className="world-chip whitespace-nowrap text-[var(--color-core-gold)]/70">
                   {tech}
                 </li>
               ))}

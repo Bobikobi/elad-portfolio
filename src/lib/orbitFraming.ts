@@ -33,6 +33,34 @@ export const ORBIT_FRAME = {
 
 export const DEG2RAD = Math.PI / 180;
 
+/**
+ * The focused planet's ACTUAL projected limb, published by CameraRig every frame.
+ *
+ * B8b — `projectedPlanetRect` below is the DESIGN framing, and it is not the limb the
+ * camera draws. Two reasons: `fill` is defined through tan(fov/2), which is the
+ * tangent-plane size of the sphere rather than its silhouette (the real disc is larger by
+ * 1/sqrt(1-(R/d)^2) — about 10px here), and the orbit pose carries a deliberate micro-
+ * drift plus critical damping, so the disc breathes by a few px around the design value.
+ * A window whose inner arc is meant to sit a CONSTANT gap off that limb cannot be built
+ * from the design number; it has to follow the real one.
+ *
+ * So the rig fits a circle to the projected silhouette and leaves it here — a plain
+ * mutable value object, the same pattern as the chrome mask in the other direction, so
+ * scene→DOM costs nothing per frame and never goes through React.
+ *
+ * `vw`/`vh` are the viewport it was measured in. They are the real staleness test: the
+ * rig does not run a frame it has nothing to change (a focused world settles, and since
+ * SPARKLE-2 it deliberately stops sweeping), so a last-published value can be hundreds of
+ * ms old and still be exactly right — but it is worthless the moment the viewport is a
+ * different size, which is also the one case the rig is guaranteed to republish for.
+ */
+export const livePlanetRect = { cx: 0, cy: 0, r: 0, vw: 0, vh: 0, stamp: -1e9 };
+
+/** True when the published limb still describes THIS viewport. */
+export function livePlanetRectFresh(vw: number, vh: number): boolean {
+  return livePlanetRect.r > 0 && livePlanetRect.vw === vw && livePlanetRect.vh === vh;
+}
+
 /** Camera distance from a planet of the given radius for a frame preset. */
 export function orbitDistance(radius: number, f: OrbitFrame): number {
   return radius / (Math.tan((f.fovDeg * DEG2RAD) / 2) * f.fill);

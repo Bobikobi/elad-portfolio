@@ -433,7 +433,64 @@ html[lang='ru'] .world-body {
   text-transform: uppercase;
 }
 
-/* ===== World window list (Projects "Jupiter frame") ===== */
+/* ===== Projects ring (B8b) ===== */
+/* The windows are SVG <path> annular sectors; this is only their skin. The hairline has
+   to survive on all four curved edges, which is the whole reason the shape is a path and
+   not a clip-path on a div — a clip-path would cut the border off with everything else. */
+.ring-layer {
+  /* One shadow pass for the whole ring rather than a filter per path — the `d` of every
+     visible path is rewritten whenever the limb drifts, and a per-path filter would
+     re-rasterize each of them separately every time. */
+  filter: drop-shadow(0 12px 26px rgba(8, 10, 34, 0.55));
+}
+.ring-window {
+  fill: rgba(5, 7, 20, 0.78);
+  stroke: rgba(238, 241, 255, 0.14);
+  stroke-width: 1;
+  transition: fill 0.3s ease, stroke 0.3s ease;
+}
+.ring-window.is-hot {
+  fill: rgba(9, 12, 30, 0.85);
+  stroke: rgba(255, 201, 120, 0.5);
+}
+/* The gold signature, stroked along the INNER arc only, so it reads as light caught on
+   the edge that faces the planet. */
+.ring-accent { transition: stroke-width 0.3s ease; }
+.ring-accent.is-hot { stroke-width: 2.6; }
+
+/* The fan's scroll container. Invisible: it exists so the wheel, touch, keyboard and the
+   departure gesture's inContent test all keep working on a layout that is otherwise pure
+   transform. scrollTop becomes arc length in the layout rAF. */
+.ring-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  visibility: hidden;
+}
+.ring-scroll[data-ready='1'] { visibility: visible; }
+.ring-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+/* A window's CONTENT box — the rectangle inscribed in the sector. Size and transform are
+   owned by the ring layer; everything here is skin only. transform-origin must be the
+   top-left corner: the layer places the box with translate → rotate → translate(-50%,-50%)
+   and that chain only lands on the right radius from a corner origin. */
+.ring-card {
+  position: absolute;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: auto;
+}
+.ring-card-scrim {
+  background: linear-gradient(
+    to top,
+    rgba(5, 7, 20, 0.92) 0%,
+    rgba(5, 7, 20, 0.6) 55%,
+    rgba(5, 7, 20, 0.18) 100%
+  );
+}
+
+/* ===== World window list (other worlds) ===== */
 /* Own scroll container: thin styled scrollbar + soft fade masks top/bottom so windows
    dissolve into space instead of hitting a hard edge. overscroll-contain stops the
    list end from ever leaking into the page / the departure gesture. */
