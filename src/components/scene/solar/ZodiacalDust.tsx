@@ -76,7 +76,9 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
   );
 
   const ref = useRef<THREE.Points>(null);
-  const skyLock = useSkyLock(0.006);
+  // followCamera: this is diffuse scattered light, not a set of objects at known places, so it
+  // may ride with the lens in a close-up to kill the parallax that made it read as a cloud.
+  const skyLock = useSkyLock(0.006, { followCamera: true });
   // The per-frame uniform writes go through the LIVE material, not through the memoised
   // object literal. Same three uniforms, same values — but a `useMemo` result is frozen as
   // far as the React Compiler is concerned, and writing to it is the `immutability` error.
@@ -93,7 +95,7 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
     }
     // Turns gently in the overview, held still against the sky in a world close-up — see
     // useSkyLock for why stopping this field's own spin would not have been enough.
-    skyLock(ref.current, dt, !!useScene.getState().focusedPlanet);
+    skyLock(ref.current, dt, !!useScene.getState().focusedPlanet, state.camera);
   });
 
   return (
