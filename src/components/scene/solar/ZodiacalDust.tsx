@@ -4,6 +4,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { chromeCount, chromeMaskGLSL, chromeRects, updateChromeRects } from '@/lib/chromeMask';
 import { makeRng, SEED } from '@/lib/rng';
+import { useScene } from '@/lib/sceneStore';
+import { useSkyLock } from '@/lib/skyLock';
 
 /**
  * The zodiacal light — sunlight scattered off the dust that fills the plane of the whole
@@ -74,6 +76,7 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
   );
 
   const ref = useRef<THREE.Points>(null);
+  const skyLock = useSkyLock(0.006);
   // The per-frame uniform writes go through the LIVE material, not through the memoised
   // object literal. Same three uniforms, same values — but a `useMemo` result is frozen as
   // far as the React Compiler is concerned, and writing to it is the `immutability` error.
@@ -88,7 +91,9 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
       u.uProjScale.value =
         state.camera.projectionMatrix.elements[5] * 0.5 * state.gl.getDrawingBufferSize(_dbs).y;
     }
-    if (ref.current) ref.current.rotation.y += dt * 0.006;
+    // Turns gently in the overview, held still against the sky in a world close-up — see
+    // useSkyLock for why stopping this field's own spin would not have been enough.
+    skyLock(ref.current, dt, !!useScene.getState().focusedPlanet);
   });
 
   return (

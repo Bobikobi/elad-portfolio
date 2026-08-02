@@ -4,6 +4,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { makeRng, SEED } from '@/lib/rng';
+import { useScene } from '@/lib/sceneStore';
+import { useSkyLock } from '@/lib/skyLock';
 import {
   chromeCount,
   chromeKeep,
@@ -336,6 +338,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
   );
 
   const groupRef = useRef<THREE.Group>(null);
+  const skyLock = useSkyLock(0.025);
   // Written through the live materials rather than through the memoised uniform literals —
   // the same reason `rockShader.current.uniforms` below was already doing it that way. A
   // `useMemo` result is frozen to the React Compiler, so mutating it is the `immutability`
@@ -343,7 +346,9 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
   const dustMat = useRef<THREE.ShaderMaterial>(null);
   const bandMat = useRef<THREE.ShaderMaterial>(null);
   useFrame((state, dt) => {
-    if (groupRef.current) groupRef.current.rotation.y += dt * 0.025;
+    // Same treatment as the dust, and the belt needed it more: at 0.025 rad/s it was the
+    // fastest-drifting speck field in a world close-up.
+    skyLock(groupRef.current, dt, !!useScene.getState().focusedPlanet);
     updateChromeRects(state.gl);
     const t = state.clock.elapsedTime;
     // px per world unit at one unit of depth — kept live so the clamp survives a DPR
