@@ -71,31 +71,34 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
   useEffect(() => () => geo.dispose(), [geo]);
 
   const uniforms = useMemo(
-    () => ({ uTime: { value: 0 }, uProjScale: { value: 600 }, uChrome: chromeRects, uChromeN: chromeCount }),
+    () => ({ uTime: { value: 0 }, uProjScale: { value: 600 }, uNear: { value: 0 }, uChrome: chromeRects, uChromeN: chromeCount }),
     []
   );
 
   const ref = useRef<THREE.Points>(null);
-  // followCamera: this is diffuse scattered light, not a set of objects at known places, so it
-  // may ride with the lens in a close-up to kill the parallax that made it read as a cloud.
-  const skyLock = useSkyLock(0.006, { followCamera: true });
+  const skyLock = useSkyLock(0.006);
   // The per-frame uniform writes go through the LIVE material, not through the memoised
   // object literal. Same three uniforms, same values — but a `useMemo` result is frozen as
   // far as the React Compiler is concerned, and writing to it is the `immutability` error.
   // Reading them off the mounted material is both compliant and more honest about what is
   // actually being mutated: the material's uniform, not our description of it.
   const matRef = useRef<THREE.ShaderMaterial>(null);
+  const nearFade = useRef(0);
   useFrame((state, dt) => {
     updateChromeRects(state.gl);
+    const focused = !!useScene.getState().focusedPlanet;
+    // Eased, never switched: the band must not blink out the instant a world is entered.
+    nearFade.current += ((focused ? 1 : 0) - nearFade.current) * Math.min(1, dt * 1.8);
     const u = matRef.current?.uniforms;
     if (u) {
       u.uTime.value = state.clock.elapsedTime;
+      u.uNear.value = nearFade.current;
       u.uProjScale.value =
         state.camera.projectionMatrix.elements[5] * 0.5 * state.gl.getDrawingBufferSize(_dbs).y;
     }
     // Turns gently in the overview, held still against the sky in a world close-up — see
     // useSkyLock for why stopping this field's own spin would not have been enough.
-    skyLock(ref.current, dt, !!useScene.getState().focusedPlanet, state.camera);
+    skyLock(ref.current, dt, focused);
   });
 
   return (
@@ -116,6 +119,7 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
 const vert = /* glsl */ `
   uniform float uTime;
   uniform float uProjScale;
+  uniform float uNear;
   attribute vec3 aColor;
   attribute float aWeight;
   attribute vec2 aTwinkle;
@@ -138,8 +142,23 @@ const vert = /* glsl */ `
     float near = smoothstep( ${NEAR_GONE.toFixed(2)}, ${NEAR_FULL.toFixed(2)}, dist );
     float twinkle = 0.82 + 0.18 * sin( uTime * aTwinkle.y + aTwinkle.x );
 
+    // uNear: 0 in the overview, 1 in a world close-up.
+    //
+    // The zodiacal band belongs to the SYSTEM. Seen whole it is the plane made visible, and it
+    // should be there. Metres from a planet it is a foreground object a few units from the lens,
+    // and as the camera tracks the orbiting world it swings 14px per 1.2s across the frame -
+    // measured - which reads as a cloud of specks orbiting the planet rather than as sky.
+    //
+    // There is no distance band that fixes this. The visible grains span 2.5 to 15 units, so a
+    // near-fade far enough out to make the parallax imperceptible removes the field anyway, and
+    // one near enough to keep the field keeps the drift. That is why this fades the whole thing
+    // rather than pushing a threshold: in a close-up the specks that should read as distant
+    // stars are the actual distant stars, on the background sphere 84 units out, where the same
+    // camera motion moves them well under a pixel.
+    float closeUp = 1.0 - uNear * smoothstep( 30.0, 6.0, dist );
+
     vColor = aColor;
-    vAlpha = 0.16 * aWeight * scatter * near * twinkle;
+    vAlpha = 0.16 * aWeight * scatter * near * twinkle * closeUp;
   }
 `;
 
