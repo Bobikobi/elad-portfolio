@@ -21,9 +21,11 @@ export default function About() {
           Elad Saadon (אלעד סעדון) is a full-stack developer and AI systems architect based in Israel.
           He holds a B.A. in Social Work and specializes in building production-grade web applications
           using Next.js, React, TypeScript, and Tailwind CSS, with backend infrastructure on Supabase
-          and Node.js. He integrates AI capabilities using Google Gemini (including Vision AI and
-          Function Calling) and deploys across Vercel, GCP, and Oracle Cloud. His portfolio includes
-          10+ production projects spanning autonomous AI systems, municipal emergency management,
+          and Node.js. He also builds real-time 3D on WebGL with Three.js and React Three Fiber,
+          including custom GLSL shaders and post-processing pipelines. He integrates AI capabilities
+          using Google Gemini (including Vision AI and Function Calling) and deploys across Vercel,
+          GCP, and Oracle Cloud. His portfolio includes
+          12+ production projects spanning autonomous AI systems, municipal emergency management,
           civic-tech tools, and community marketing platforms. He is fluent in Hebrew, English, and Russian.
         </p>
         <link itemProp="url" href="https://www.eladsaadon.dev" />

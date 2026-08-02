@@ -93,9 +93,10 @@ export const translations: Record<string, Record<Locale, string>> = {
 
   // Tech
   'tech.title': { he: 'טכנולוגיות', en: 'Tech Stack', ru: 'Технологии' },
-  'tech.subtitle': { he: 'שפות, ממשקים וכלים שאני עובד איתם', en: 'Languages, interfaces & tools I work with', ru: 'Языки, интерфейсы и инструменты' },
+  'tech.subtitle': { he: 'שפות, ממשקים וכלים שאני עובד איתם - מקוד שרת ועד ה-GPU', en: 'Languages, interfaces and tools I work with - from server code to the GPU', ru: 'Языки, интерфейсы и инструменты - от серверного кода до GPU' },
   'tech.cat.languages': { he: 'שפות תכנות', en: 'Languages', ru: 'Языки' },
   'tech.cat.frontend': { he: 'Frontend', en: 'Frontend', ru: 'Frontend' },
+  'tech.cat.realtime': { he: 'גרפיקה ותלת-ממד בזמן אמת', en: 'Real-Time 3D & Graphics', ru: '3D-графика в реальном времени' },
   'tech.cat.backend': { he: 'Backend', en: 'Backend', ru: 'Backend' },
   'tech.cat.ai': { he: 'AI & ML', en: 'AI & ML', ru: 'AI & ML' },
   'tech.cat.automation': { he: 'Desktop & אוטומציה', en: 'Desktop & Automation', ru: 'Desktop и Автоматизация' },
