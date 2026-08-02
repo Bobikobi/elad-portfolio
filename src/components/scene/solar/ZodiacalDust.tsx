@@ -87,8 +87,11 @@ export default function ZodiacalDust({ count = 5200 }: { count?: number }) {
   useFrame((state, dt) => {
     updateChromeRects(state.gl);
     const focused = !!useScene.getState().focusedPlanet;
-    // Eased, never switched: the band must not blink out the instant a world is entered.
-    nearFade.current += ((focused ? 1 : 0) - nearFade.current) * Math.min(1, dt * 1.8);
+    // Held at 0: the band is drawn in full everywhere. See the shader note on `uNear` — the
+    // close-up drift it was added to cure turned out to be the camera turning, not the grains
+    // moving. Eased rather than switched so that raising the target stays a one-line change.
+    const nearTarget = 0;
+    nearFade.current += (nearTarget - nearFade.current) * Math.min(1, dt * 1.8);
     const u = matRef.current?.uniforms;
     if (u) {
       u.uTime.value = state.clock.elapsedTime;
@@ -142,19 +145,21 @@ const vert = /* glsl */ `
     float near = smoothstep( ${NEAR_GONE.toFixed(2)}, ${NEAR_FULL.toFixed(2)}, dist );
     float twinkle = 0.82 + 0.18 * sin( uTime * aTwinkle.y + aTwinkle.x );
 
-    // uNear: 0 in the overview, 1 in a world close-up.
+    // uNear: 0 in the overview, 1 in a world close-up. Currently a no-op multiplier of 1, and
+    // the reason it is left wired up rather than deleted is written below.
     //
-    // The zodiacal band belongs to the SYSTEM. Seen whole it is the plane made visible, and it
-    // should be there. Metres from a planet it is a foreground object a few units from the lens,
-    // and as the camera tracks the orbiting world it swings 14px per 1.2s across the frame -
-    // measured - which reads as a cloud of specks orbiting the planet rather than as sky.
+    // This briefly faded the band out of close-ups, on a measurement of 14px of grain drift per
+    // 1.2s that was read as parallax. It was not parallax. The camera goes on swinging around
+    // the focused planet at 1.4-2.4 degrees per 1.2s indefinitely, because the ORBIT vantage is
+    // solved from the sun direction and the planet keeps orbiting - and a lens rotation of A
+    // sweeps EVERYTHING at distance by A. Measured: predicted 21.2px from rotation alone,
+    // measured 17.6px on background stars 84 units out, where parallax can contribute 0.37px.
+    // The grains were not drifting through the frame; the frame was turning past them.
     //
-    // There is no distance band that fixes this. The visible grains span 2.5 to 15 units, so a
-    // near-fade far enough out to make the parallax imperceptible removes the field anyway, and
-    // one near enough to keep the field keeps the drift. That is why this fades the whole thing
-    // rather than pushing a threshold: in a close-up the specks that should read as distant
-    // stars are the actual distant stars, on the background sphere 84 units out, where the same
-    // camera motion moves them well under a pixel.
+    // So the band stays. Removing a designed element to fix motion it was not causing would
+    // have left the motion exactly where it was and the sky poorer. The knob stays plumbed
+    // because it is the tool to reach for IF the owner ever wants the close-up sky thinned -
+    // set uNear's target above 0 and the near grains go first.
     float closeUp = 1.0 - uNear * smoothstep( 30.0, 6.0, dist );
 
     vColor = aColor;
