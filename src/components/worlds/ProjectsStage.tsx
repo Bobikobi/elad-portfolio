@@ -15,6 +15,7 @@ import {
   arcUp,
   arcDown,
   fanOpacity,
+  fanRise,
   screenAt,
   type RingMetrics,
 } from '@/lib/ringGeometry';
@@ -93,6 +94,11 @@ export default function ProjectsStage({
     // re-deriving them. Off by default — nothing extra reaches a normal render.
     const probe = new URLSearchParams(window.location.search).has('ringprobe');
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // The owner wants the words only while the pointer is on a window. A phone has no
+    // pointer, so there the panel falls back to naming whichever window is at the centre
+    // of the fan - otherwise a touch device would show twelve pictures and no way to
+    // learn what any of them is.
+    const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     const cards = Array.from(deck.querySelectorAll<HTMLElement>('[data-window]'));
     const n = cards.length;
 
@@ -119,6 +125,7 @@ export default function ProjectsStage({
     const photos: Array<SVGImageElement | null> = [];
     const hits: SVGGElement[] = [];
     const clips: Array<SVGPathElement | null> = [];
+    const marks: Array<SVGTextElement | null> = [];
     const unbind: Array<() => void> = [];
     cards.forEach((card, i) => {
       const grad = document.createElementNS(SVG_NS, 'linearGradient');
@@ -157,6 +164,20 @@ export default function ProjectsStage({
       photos.push(photo);
       clips.push(clipPath);
 
+      // No screenshot to show: four of the twelve are tools and private work with no
+      // site to photograph. A drawn monogram beats an empty pane, and it needs no asset.
+      let mark: SVGTextElement | null = null;
+      if (!src && card.dataset.mark) {
+        mark = document.createElementNS(SVG_NS, 'text');
+        mark.setAttribute('class', 'ring-mark');
+        mark.setAttribute('text-anchor', 'middle');
+        mark.setAttribute('dominant-baseline', 'central');
+        mark.setAttribute('fill', 'rgba(255,201,120,0.30)');
+        mark.setAttribute('style', 'font-family: var(--font-display); font-weight: 300; letter-spacing: 0.08em');
+        mark.textContent = card.dataset.mark;
+      }
+      marks.push(mark);
+
       // B8d - the SHAPE is the control. The accessible copy of this project is a real
       // link in the DOM (off-screen, see ProjectsWorld); this group is its painted face,
       // so it is aria-hidden and the pointer is what it answers to. Hit-testing then
@@ -189,6 +210,7 @@ export default function ProjectsStage({
       accent.setAttribute('vector-effect', 'non-scaling-stroke');
       hitG.appendChild(accent);
       accents.push(accent);
+      if (mark) hitG.appendChild(mark);
 
       // Hover and focus light the window's own path — the shape is not an ancestor of the
       // content, so the usual CSS hover has nothing to hang off.
@@ -252,6 +274,58 @@ export default function ProjectsStage({
         }
       }
       return { x: x0 - 12, y: y0 - 12, w: x1 - x0 + 24, h: y1 - y0 + 24 };
+    };
+
+    // The ruling: the canonical paths do not change as the ring turns, so they must not be
+    // rebuilt as it turns. A window at angle th is the window at angle 0 rotated by th, so
+    // the sector path, its clip, the photo's box and the accent's gradient are all built
+    // ONCE at angle 0, and the only per-frame writes are a rotation and an opacity. They
+    // are rebuilt only when the ring's SHAPE changes - r0, r1 or the half-angle - which
+    // happens on a resize, not on a scroll.
+    let shapeSig = '';
+    const rebuildShape = (m: RingMetrics) => {
+      const next = `${m.r0.toFixed(1)}|${m.r1.toFixed(1)}|${m.dHalf.toFixed(4)}|${m.corner}`;
+      if (next === shapeSig) return;
+      shapeSig = next;
+      const d = sectorPath(m, m.r0, m.r1, -m.dHalf, m.dHalf);
+      const acc = innerArcPath(m, m.r0, -m.dHalf, m.dHalf);
+      // The photo's box: the sector's bounding box at angle 0, in canonical space.
+      let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+      for (let k = 0; k <= 8; k++) {
+        const a2 = -m.dHalf + (2 * m.dHalf * k) / 8;
+        for (const r of [m.r0, m.r1]) {
+          const [px, py] = pointAt(m, r, a2);
+          if (px < bx0) bx0 = px;
+          if (py < by0) by0 = py;
+          if (px > bx1) bx1 = px;
+          if (py > by1) by1 = py;
+        }
+      }
+      const [gx0, gy0] = pointAt(m, m.r0, -m.dHalf);
+      const [gx1, gy1] = pointAt(m, m.r0, m.dHalf);
+      for (let i = 0; i < n; i++) {
+        bodies[i].setAttribute('d', d);
+        accents[i].setAttribute('d', acc);
+        clips[i]?.setAttribute('d', d);
+        const photo = photos[i];
+        if (photo) {
+          photo.setAttribute('x', bx0.toFixed(1));
+          photo.setAttribute('y', by0.toFixed(1));
+          photo.setAttribute('width', (bx1 - bx0).toFixed(1));
+          photo.setAttribute('height', (by1 - by0).toFixed(1));
+        }
+        const mark = marks[i];
+        if (mark) {
+          mark.setAttribute('x', m.rContent.toFixed(1));
+          mark.setAttribute('y', '0');
+          mark.setAttribute('font-size', Math.max(22, Math.min(64, m.contentHalf * 1.5)).toFixed(0));
+        }
+        const g = grads[i];
+        g.setAttribute('x1', gx0.toFixed(1));
+        g.setAttribute('y1', gy0.toFixed(1));
+        g.setAttribute('x2', gx1.toFixed(1));
+        g.setAttribute('y2', gy1.toFixed(1));
+      }
     };
 
     let raf = 0;
@@ -326,60 +400,28 @@ export default function ProjectsStage({
         const a = windowArc(i, n, scroll, m);
         if (Math.abs(a) < Math.abs(bestA)) { bestA = a; centred = i; }
       }
+      rebuildShape(m);
       for (let i = 0; i < n; i++) {
         const a = windowArc(i, n, scroll, m);
         const th = m.th0 + (m.sweep * a) / m.rMid;
         const opacity = i === centred ? Math.max(fanOpacity(a, m), 1) : fanOpacity(a, m);
-        const body = bodies[i];
-        const accent = accents[i];
-
-        if (opacity <= 0.012) {
-          hits[i].style.display = 'none';
-          body.setAttribute('d', '');
-          accent.setAttribute('d', '');
-          photos[i]?.setAttribute('width', '0');
+        const g = hits[i];
+        if (opacity <= 0.004) {
+          if (g.style.display !== 'none') g.style.display = 'none';
           continue;
         }
-        hits[i].style.display = '';
-        body.setAttribute('d', sectorPath(m, m.r0, m.r1, th - m.dHalf, th + m.dHalf));
-        body.setAttribute('opacity', opacity.toFixed(3));
-        accent.setAttribute('d', innerArcPath(m, m.r0, th - m.dHalf, th + m.dHalf));
-        accent.setAttribute('opacity', opacity.toFixed(3));
-
-        // The photo is a plain rect covering the sector's bounding box, clipped to the
-        // sector. `slice` crops it rather than letterboxing, so the aspect ratio of the
-        // source never shows up as bars inside the shape.
-        const photo = photos[i];
-        const clip = clips[i];
-        if (photo && clip) {
-          clip.setAttribute('d', body.getAttribute('d') as string);
-          let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
-          for (let k = 0; k <= 8; k++) {
-            const a2 = th - m.dHalf + (2 * m.dHalf * k) / 8;
-            for (const r of [m.r0, m.r1]) {
-              const [px, py] = pointAt(m, r, a2);
-              if (px < bx0) bx0 = px;
-              if (py < by0) by0 = py;
-              if (px > bx1) bx1 = px;
-              if (py > by1) by1 = py;
-            }
-          }
-          photo.setAttribute('x', bx0.toFixed(1));
-          photo.setAttribute('y', by0.toFixed(1));
-          photo.setAttribute('width', (bx1 - bx0).toFixed(1));
-          photo.setAttribute('height', (by1 - by0).toFixed(1));
-          // Inline, so it beats the stylesheet's low base opacity without editing it.
-          photo.style.opacity = (opacity * 0.92).toFixed(3);
-        }
-
-        const [gx0, gy0] = pointAt(m, m.r0, th - m.dHalf);
-        const [gx1, gy1] = pointAt(m, m.r0, th + m.dHalf);
-        const g = grads[i];
-        g.setAttribute('x1', gx0.toFixed(1));
-        g.setAttribute('y1', gy0.toFixed(1));
-        g.setAttribute('x2', gx1.toFixed(1));
-        g.setAttribute('y2', gy1.toFixed(1));
-
+        if (g.style.display) g.style.display = '';
+        // The only per-frame writes on a window: where it is on the ring, and how present
+        // it is. Everything else was built at angle 0 and is carried by these two.
+        // A window rises out of the ring rather than switching on where it stands: the
+        // scale is about the ring's centre, so it travels along its own radius.
+        const rise = i === centred ? 1 : fanRise(a, m);
+        const k = 0.93 + 0.07 * rise;
+        g.setAttribute(
+          'transform',
+          `rotate(${((th * 180) / Math.PI).toFixed(3)}) scale(${k.toFixed(4)})`
+        );
+        g.style.opacity = opacity.toFixed(3);
       }
 
       // The rail. It only exists when there is something to scroll, and the thumb's LENGTH
@@ -405,7 +447,7 @@ export default function ProjectsStage({
       // focused one when there is a pointer, and otherwise the one at the centre of the
       // fan: a phone has no hover, and twelve pictures with no way to learn what any of
       // them is would be the whole design's failure mode.
-      const active = hovered.current >= 0 ? hovered.current : centred;
+      const active = hovered.current >= 0 ? hovered.current : canHover ? -1 : centred;
       if (active !== shownActive.current) {
         shownActive.current = active;
         const src = active >= 0 ? cards[active] : null;

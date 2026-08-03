@@ -421,6 +421,18 @@ export function fanOpacity(a: number, m: RingMetrics): number {
   // (measured: top at y=7 against a navbar ending at y=64) after the clamp had just
   // been added to stop exactly that.
   const room = Math.min(arcDown(m) - a, a + arcUp(m));
-  const t = room / (m.pitch * 0.5);
-  return (t < 0 ? 0 : t > 1 ? 1 : t) ** 2;
+  const t = room / (m.pitch * 0.9);
+  return (t < 0 ? 0 : t > 1 ? 1 : t) ** 1.4;
+}
+
+/**
+ * How far out of the ring a window has risen, 0 at the fan's edge and 1 once it is fully
+ * in. The layer turns this into a small scale about the ring's centre, so a window
+ * travels INTO the fan along its own radius instead of switching on where it stands -
+ * "like the discs", which is what the ring already does with everything else.
+ */
+export function fanRise(a: number, m: RingMetrics): number {
+  const room = Math.min(arcDown(m) - a, a + arcUp(m));
+  const t = room / (m.pitch * 0.9);
+  return t < 0 ? 0 : t > 1 ? 1 : t;
 }

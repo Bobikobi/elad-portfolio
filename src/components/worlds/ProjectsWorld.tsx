@@ -6,6 +6,20 @@ import ProjectsStage from './ProjectsStage';
 
 const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
 
+/** Up to two initials from a project's name, for the windows with no screenshot behind
+ *  them. Four projects have neither a live site nor a preview image - they are tools and
+ *  private work, so there is nothing to photograph - and an empty pane is worse than no
+ *  window at all. Drawn, not fetched: a real logo needs an asset and a line in
+ *  lib/constants.ts, and both belong to the other lane. */
+function monogram(title: string): string {
+  const words = title
+    .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+    .split(/[\s-]+/)
+    .filter(Boolean);
+  const letters = words.slice(0, 2).map((w) => [...w][0] ?? '');
+  return letters.join('').toUpperCase() || [...title][0] || '?';
+}
+
 /** Projects = ringed Saturn, each project a "moon".
  *
  *  B8d: a window carries the site PREVIEW and no painted text. The stage draws the image
@@ -18,7 +32,15 @@ const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
  *  why it is off-screen rather than absent.
  */
 export default function ProjectsWorld({ locale }: { locale: Locale }) {
-  const ordered = [...projects].sort((a, b) => Number(b.featured) - Number(a.featured));
+  // Order: the things you can OPEN first, the ones that only describe themselves last.
+  // Featured still decides within each group. A window whose project has no live URL is
+  // also the one with no site to photograph, so this puts every empty-preview window at
+  // the far end of the ring instead of at the start of it.
+  const ordered = [...projects].sort(
+    (a, b) =>
+      Number(Boolean(b.liveUrl)) - Number(Boolean(a.liveUrl)) ||
+      Number(b.featured) - Number(a.featured)
+  );
   return (
     <ProjectsStage locale={locale} title={t('nav.projects', locale)} tagline={t('world.tagline.projects', locale)}>
       {ordered.map((p) => (
@@ -38,6 +60,7 @@ export default function ProjectsWorld({ locale }: { locale: Locale }) {
           data-title={p.title[locale]}
           data-desc={p.description[locale]}
           data-tech={p.techStack.slice(0, 3).join(' \u00b7 ')}
+          data-mark={monogram(p.title[locale])}
           data-href={p.liveUrl ?? undefined}
           href={p.liveUrl ?? homePath(locale)}
           target={p.liveUrl ? '_blank' : undefined}
