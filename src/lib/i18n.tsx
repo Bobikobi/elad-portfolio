@@ -58,7 +58,7 @@ function resolveLocale(fallback: Locale): Locale {
 
 export function I18nProvider({
   children,
-  initialLocale = 'he',
+  initialLocale = 'en',
 }: {
   children: React.ReactNode;
   initialLocale?: Locale;

@@ -6,7 +6,7 @@ import { useI18n, Locale } from '@/lib/i18n';
 import Link from 'next/link';
 import ViewModeToggle from './ViewModeToggle';
 import { usePathname, useRouter } from 'next/navigation';
-import { sectionPath, sectionForPath, homePath, type SectionId } from '@/lib/sections';
+import { sectionPath, sectionForPath, homePath, switchLocalePath, type SectionId } from '@/lib/sections';
 
 const navItems = ['about', 'services', 'projects', 'tech', 'contact'] as const;
 const sectionIds: Record<typeof navItems[number], SectionId> = {
@@ -88,22 +88,8 @@ export default function Navbar() {
   };
 
   const changeLocale = (newLocale: Locale) => {
-    // Extract current locale prefix from pathname
-    const pathSegments = pathname.split('/').filter(Boolean);
-    const currentPrefix = (pathSegments[0] === 'en' || pathSegments[0] === 'ru') ? pathSegments[0] : null;
-    
-    // Remove current locale prefix if exists
-    const pathWithoutLocale = currentPrefix 
-      ? '/' + pathSegments.slice(1).join('/')
-      : pathname;
-    
-    // Build new path with new locale prefix
-    const newPath = newLocale === 'he' 
-      ? pathWithoutLocale 
-      : `/${newLocale}${pathWithoutLocale}`;
-    
     setLocale(newLocale);
-    router.push(newPath);
+    router.push(switchLocalePath(pathname, newLocale));
   };
 
   return (
@@ -282,8 +268,8 @@ export default function Navbar() {
       </AnimatePresence>
 
       <div className="sr-only">
-        <Link href="/">Home</Link>
-        <Link href="/en">English Home</Link>
+        <Link href="/">English Home</Link>
+        <Link href="/he">Hebrew Home</Link>
         <Link href="/ru">Russian Home</Link>
       </div>
     </>

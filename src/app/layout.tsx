@@ -44,14 +44,17 @@ const inter = Inter({
   preload: false,
 });
 
+// F3 — English is the default locale, so the ROOT metadata (which every un-prefixed
+// route inherits) is English. The Hebrew strings that used to live here were not
+// rewritten, they moved intact to app/he/page.tsx, which is now Hebrew's own URL.
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.eladsaadon.dev"),
   title: {
-    default: "אלעד סעדון | מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית",
-    template: "%s | אלעד סעדון",
+    default: "Elad Saadon | Full-Stack Developer and AI Systems Architect",
+    template: "%s | Elad Saadon",
   },
   description:
-    "אלעד סעדון הוא מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית מישראל, עם התמחות בפיתוח מערכות ווב, אינטגרציית בינה מלאכותית ואוטומציה בענן.",
+    "Elad Saadon is a full-stack developer and AI systems architect from Israel, specializing in Next.js, React, TypeScript, AI integration, and cloud automation.",
   keywords: [
     "Elad Saadon",
     "אלעד סעדון",
@@ -77,8 +80,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://www.eladsaadon.dev",
     languages: {
-      "he-IL": "https://www.eladsaadon.dev",
-      "en-US": "https://www.eladsaadon.dev/en",
+      "he-IL": "https://www.eladsaadon.dev/he",
+      "en-US": "https://www.eladsaadon.dev",
       "ru-RU": "https://www.eladsaadon.dev/ru",
       "x-default": "https://www.eladsaadon.dev",
     },
@@ -94,21 +97,21 @@ export const metadata: Metadata = {
     apple: [{ url: "/favicon.png", sizes: "512x512", type: "image/png" }],
   },
   openGraph: {
-    title: "אלעד סעדון | מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית",
+    title: "Elad Saadon | Full-Stack Developer and AI Systems Architect",
     description:
-      "אלעד סעדון הוא מפתח פול-סטאק מישראל המתמחה בפיתוח מערכות, אינטגרציית בינה מלאכותית, אוטומציה בענן ופתרונות טכנולוגיים למגזר הציבורי.",
+      "Elad Saadon is a full-stack developer and AI systems architect from Israel, specializing in Next.js, React, TypeScript, AI integration, and cloud automation.",
     type: "website",
-    locale: "he_IL",
-    alternateLocale: ["en_US", "ru_RU"],
+    locale: "en_US",
+    alternateLocale: ["he_IL", "ru_RU"],
     siteName: "Elad Saadon Portfolio",
     url: "https://www.eladsaadon.dev",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Elad Saadon — Full-Stack Developer & AI Systems Architect" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Elad Saadon - Full-Stack Developer and AI Systems Architect" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "אלעד סעדון | מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית",
+    title: "Elad Saadon | Full-Stack Developer and AI Systems Architect",
     description:
-      "אלעד סעדון הוא מפתח פול-סטאק מישראל המתמחה בפיתוח מערכות, אינטגרציית בינה מלאכותית ואוטומציה בענן.",
+      "Elad Saadon is a full-stack developer and AI systems architect from Israel, specializing in Next.js, React, TypeScript, AI integration, and cloud automation.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -143,7 +146,7 @@ const jsonLd = {
       "@type": "ProfilePage",
       "@id": "https://www.eladsaadon.dev/#profilepage",
       url: "https://www.eladsaadon.dev",
-      name: "אלעד סעדון | Elad Saadon — Full-Stack Developer & AI Systems Architect",
+      name: "אלעד סעדון | Elad Saadon - Full-Stack Developer and AI Systems Architect",
       isPartOf: { "@id": "https://www.eladsaadon.dev/#website" },
       mainEntity: { "@id": "https://www.eladsaadon.dev/#person" },
       dateCreated: "2026-04-05T00:00:00Z",
@@ -175,7 +178,7 @@ const jsonLd = {
         url: "https://www.eladsaadon.dev/og-image.png",
         width: 1200,
         height: 630,
-        caption: "Elad Saadon — Full-Stack Developer & AI Systems Architect",
+        caption: "Elad Saadon - Full-Stack Developer and AI Systems Architect",
       },
       jobTitle: "Full-Stack Developer & AI Systems Architect",
       description:
@@ -272,7 +275,7 @@ const jsonLd = {
       "@type": "WebPage",
       "@id": "https://www.eladsaadon.dev/#webpage",
       url: "https://www.eladsaadon.dev",
-      name: "Elad Saadon — Full-Stack Developer & AI Systems Architect",
+      name: "Elad Saadon - Full-Stack Developer and AI Systems Architect",
       isPartOf: { "@id": "https://www.eladsaadon.dev/#website" },
       about: { "@id": "https://www.eladsaadon.dev/#person" },
       speakable: {
@@ -297,9 +300,9 @@ const jsonLd = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Locale is resolved server-side from the `x-locale` header set by the proxy (proxy.ts),
-  // so the initial SSR HTML — content, <html lang> and dir — is correct for /en and /ru
-  // instead of always defaulting to Hebrew/RTL and only correcting after hydration.
-  const locale = (((await headers()).get("x-locale") as Locale | null) ?? "he");
+  // so the initial SSR HTML — content, <html lang> and dir — is correct for /he and /ru
+  // instead of always defaulting to the English default and only correcting after hydration.
+  const locale = (((await headers()).get("x-locale") as Locale | null) ?? "en");
   const dir = locale === "he" ? "rtl" : "ltr";
   // F2 - the view mode has to be known BEFORE the tree renders, because the section
   // routes render different children in each mode. Read here, stamped on <html> so CSS
@@ -327,10 +330,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link rel="me" href="https://www.linkedin.com/in/elad-saadon-184809281/" />
         <meta name="author" content="Elad Saadon" />
         {/* Person entity hint for search engines */}
-        <meta name="subject" content="אלעד סעדון | Elad Saadon — Full-Stack Developer &amp; AI Systems Architect" />
+        <meta name="subject" content="Elad Saadon | אלעד סעדון - Full-Stack Developer and AI Systems Architect" />
         <meta name="classification" content="Personal Portfolio" />
         <meta name="coverage" content="Israel" />
-        <meta name="language" content="Hebrew, English, Russian" />
+        <meta name="language" content="English, Hebrew, Russian" />
       </head>
       <body className="min-h-full flex flex-col">
         <script

@@ -31,7 +31,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
   // F2: the mode gates everything else. `cosmic` is only a request - the provider has
   // already demoted it to classic if the browser cannot honour it - so asking the two
   // capability hooks again here would just be a second, drifting copy of that decision.
-  const isHome = pathname === '/' || pathname === '/en' || pathname === '/ru';
+  const isHome = pathname === '/' || pathname === '/he' || pathname === '/ru';
   const immersive = mode === 'cosmic' && (isHome || !!sectionForPath(pathname));
 
   return (
@@ -62,7 +62,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
 
 export default function ClientProviders({
   children,
-  initialLocale = 'he',
+  initialLocale = 'en',
   initialViewMode = DEFAULT_VIEW_MODE,
   viewModeChosen = false,
 }: {

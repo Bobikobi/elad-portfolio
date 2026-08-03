@@ -1,19 +1,19 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { RefreshCw, Bell, BarChart2, Link2, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Bell, BarChart2, Link2, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 export const metadata: Metadata = {
-  title: 'אוטומציה של תהליכים עסקיים',
+  title: 'Business Process Automation',
   description:
-    'תכנון ופיתוח אוטומציות שמקצרות עבודה ידנית: חיבור מערכות, טריגרים, עיבוד נתונים ודו"חות אוטומטיים עם Node.js, Python ו-APIs.',
+    'Planning and developing automations that reduce manual work: system integration, triggers, data processing, and automated reports with Node.js, Python, and APIs.',
   alternates: {
     canonical: 'https://www.eladsaadon.dev/services/automation-workflows',
     languages: {
-      'he-IL': 'https://www.eladsaadon.dev/services/automation-workflows',
-      'en-US': 'https://www.eladsaadon.dev/en/services/automation-workflows',
+      'he-IL': 'https://www.eladsaadon.dev/he/services/automation-workflows',
+      'en-US': 'https://www.eladsaadon.dev/services/automation-workflows',
       'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
       'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
     },
@@ -41,18 +41,18 @@ const schemas = [
     mainEntity: [
       {
         '@type': 'Question',
-        name: 'איזה תהליכים כדאי לאוטומט קודם?',
+        name: 'Which processes should I automate first?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'מתחילים בתהליכים שחוזרים הרבה פעמים בשבוע וגוזלים זמן ידני — בדרך כלל דיווחים, סנכרון נתונים ומשימות תפעוליות.',
+          text: 'Start with processes that repeat many times a week and consume manual time — usually reporting, data syncing, and operational tasks.',
         },
       },
       {
         '@type': 'Question',
-        name: 'איך מודדים הצלחה באוטומציה?',
+        name: 'How do you measure automation success?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'מודדים זמן שנחסך, ירידה בטעויות ידניות, קיצור זמני תגובה ותפוקה כוללת של הצוות לפני ואחרי ההטמעה.',
+          text: 'We measure time saved, reduction in manual errors, faster response times, and overall team output before and after implementation.',
         },
       },
     ],
@@ -62,57 +62,31 @@ const schemas = [
 const outcomes = [
   {
     icon: RefreshCw,
-    title: 'פחות עבודה חוזרת',
-    desc: 'משימות שחוזרות שוב ושוב — סנכרון נתונים, יצירת דו"חות, שליחת עדכונים — רצות לבד בלי מגע יד אדם.',
+    title: 'Less Repetitive Work',
+    desc: 'Tasks that repeat over and over — data syncing, report generation, sending updates — run on their own without human touch.',
   },
   {
     icon: Bell,
-    title: 'התראות בזמן אמת',
-    desc: 'כשמשהו דורש תשומת לב, הצוות מקבל עדכון מיידי. לא מגלים בדיעבד — מגיבים לפני שזה הופך לבעיה.',
+    title: 'Real-Time Alerts',
+    desc: 'When something needs attention, the team gets an immediate update. No discovering issues after the fact — respond before it becomes a problem.',
   },
   {
     icon: Link2,
-    title: 'מערכות מחוברות',
-    desc: 'CRM, דוא"ל, גיליונות, API — הכול מדבר אחד עם השני. מידע זורם אוטומטית ולא נופל בין הכיסאות.',
+    title: 'Connected Systems',
+    desc: 'CRM, email, spreadsheets, APIs — everything talks to each other. Information flows automatically and doesn\'t fall through the cracks.',
   },
   {
     icon: BarChart2,
-    title: 'שקיפות ולוגים',
-    desc: 'כל פעולה מתועדת. תמיד ברור מה רץ, מתי ועם איזה תוצאה — קל לאבחן ולשפר.',
-  },
-];
-
-const deliverables = [
-  'תהליך אוטומטי ראשון — מהגדרה ועד ריצה בפרודקשן',
-  'חיבור מערכות: CRM, דוא"ל, גיליונות, APIs חיצוניים',
-  'לוגים מלאים + התראות על שגיאות בזמן אמת',
-  'דשבורד ניטור ביצועים ומדדי ROI',
-  'תיעוד טכני מלא + קוד מקור בגישה פרטית',
-  'תוכנית הרחבה: אוטומציות נוספות לפי סדר עדיפות',
-  'גיבוי ושחזור אוטומטיים',
-  'תמיכה ותחזוקה שוטפת לפי צורך',
-];
-
-const faqExtra = [
-  {
-    q: 'כמה זמן לוקח להקים אוטומציה עסקית?',
-    a: 'אוטומציה פשוטה (חיבור בין שתי מערכות, טריגר לשליחת מייל) — 3–7 ימים. אוטומציה מורכבת (רב-שלבית עם עיבוד נתונים ותנאים) — 2–4 שבועות. תמיד מתחילים בתהליך הקטן ביותר שנותן ערך מיידי.',
-  },
-  {
-    q: 'מה קורה אם האוטומציה נכשלת?',
-    a: 'כל אוטומציה בנויה עם מנגנוני retry, התראות על כשל, ולוגים מפורטים. אם משהו לא עובד — מקבלים הודעה מיידית ויודעים בדיוק איפה לתקן. אין מצב של "שקט תעשייתי" שבו תהליך נופל בלי שאף אחד יודע.',
-  },
-  {
-    q: 'האם האוטומציות עובדות עם מערכות קיימות כמו Monday, Salesforce או Shopify?',
-    a: 'כן. רוב האוטומציות מתבססות על APIs ציבוריים או Webhooks. אם למערכת יש API — אפשר להתחבר. אם אין — אפשר דרך Zaps, גיליונות או קבצים. אין מערכת שאני לא יכול לחבר.',
+    title: 'Transparency & Logs',
+    desc: 'Every action is logged. It\'s always clear what ran, when, and with what result — easy to diagnose and improve.',
   },
 ];
 
 export default function AutomationWorkflowsPage() {
   const breadcrumbs = [
-    { label: 'דף הבית', href: '/' },
-    { label: 'שירותים', href: '/services' },
-    { label: 'אוטומציה עסקית', href: '/services/automation-workflows' },
+    { label: 'Home', href: '/' },
+    { label: 'Services', href: '/services' },
+    { label: 'Automation', href: '/services/automation-workflows' },
   ];
 
   return (
@@ -120,21 +94,13 @@ export default function AutomationWorkflowsPage() {
       <JsonLd data={schemas} />
 
       <GradientBar />
-      <Breadcrumbs items={breadcrumbs} locale="he" />
+      <Breadcrumbs items={breadcrumbs} locale="en" />
       <h1 className="text-3xl font-bold text-[var(--color-text-primary)] sm:text-4xl">
-        אוטומציה לתהליכים עסקיים
+        Business Process Automation
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
-        כשתהליכים רצים לבד, הצוות מתפנה לעבודה שדורשת חשיבה אמיתית. בונים אוטומציות ממוקדות שמתחילות מה-bottleneck הכי כואב ומייצרות תוצאה מיידית.
+        When processes run themselves, the team frees up for work that requires real thinking. We build focused automations that start from the most painful bottleneck and deliver immediate results.
       </p>
-
-      {/* Direct answer for featured snippet */}
-      <div className="mt-8 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
-        <p className="text-sm leading-7 text-[var(--color-text-secondary)]">
-          <strong className="text-[var(--color-text-primary)]">תשובה קצרה:</strong>{' '}
-          אוטומציה של תהליכים עסקיים — חיבור מערכות, סנכרון נתונים אוטומטי, שליחת התראות בזמן אמת, {'ויצירת דו"חות ללא מגע יד אדם.'} מתחילים מהתהליך הכי חוזר וכואב, ומודדים הצלחה בזמן שנחסך, ירידה בטעויות ועלייה בתפוקה.
-        </p>
-      </div>
 
       {/* Outcome cards */}
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
@@ -155,47 +121,34 @@ export default function AutomationWorkflowsPage() {
         })}
       </div>
 
-      {/* Deliverables */}
-      <section className="mt-14">
-        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">מה אתם מקבלים</h2>
-        <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-          {deliverables.map((item) => (
-            <li
-              key={item}
-              className="flex items-start gap-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 text-sm text-[var(--color-text-secondary)]"
-            >
-              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[var(--color-accent)]" />
-              {item}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Expanded FAQ */}
+      {/* FAQ */}
       <section className="mt-14 space-y-4">
-        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">שאלות נפוצות</h2>
-        {faqExtra.map((item) => (
-          <article
-            key={item.q}
-            className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5"
-          >
-            <h3 className="text-base font-medium text-[var(--color-text-primary)]">{item.q}</h3>
-            <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">{item.a}</p>
-          </article>
-        ))}
+        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">Frequently Asked Questions</h2>
+        <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
+          <h3 className="text-base font-medium text-[var(--color-text-primary)]">Where do we start?</h3>
+          <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
+            We start with the process that repeats most often and consumes the most manual time. That is where the fastest ROI is.
+          </p>
+        </article>
+        <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
+          <h3 className="text-base font-medium text-[var(--color-text-primary)]">How do we know the automation is working?</h3>
+          <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
+            Every process comes with logs, error alerts, and clear metrics — time saved, error reduction, increased throughput.
+          </p>
+        </article>
       </section>
 
       {/* CTA */}
       <section className="mt-14 flex flex-col gap-4 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-lg font-semibold text-[var(--color-text-primary)]">יש תהליך שגוזל לכם זמן?</p>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">ספרו לי עליו ונבדוק יחד אם אפשר לאוטומט אותו.</p>
+          <p className="text-lg font-semibold text-[var(--color-text-primary)]">Got a process that eats up your time?</p>
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Tell me about it and we will check if it can be automated.</p>
         </div>
         <Link
-          href="/#contact"
+          href="#contact"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
-          בואו נדבר <ArrowLeft size={14} />
+          Let’s Talk <ArrowLeft size={14} />
         </Link>
       </section>
     </main>

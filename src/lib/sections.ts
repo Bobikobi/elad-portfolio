@@ -36,21 +36,43 @@ export const PLANET_SECTION: Record<string, SectionId> = {
   mars: 'contact',
 };
 
-/** Locale-aware path for a section ('/about' for he, '/en/about' for en/ru). */
+/**
+ * F3 — English is the default locale and owns the un-prefixed URL space; Hebrew and
+ * Russian are prefixed. Every locale-aware link in the app goes through the three
+ * helpers below rather than re-deriving the rule, because an inline copy of it is
+ * exactly what silently rots when the default changes.
+ */
+const PREFIXED_LOCALES: readonly Locale[] = ['he', 'ru'];
+const isPrefixedLocale = (v: string): v is Locale => (PREFIXED_LOCALES as readonly string[]).includes(v);
+
+/** Locale-aware path for a section ('/about' for en, '/he/about' for he/ru). */
 export function sectionPath(section: SectionId, locale: Locale): string {
-  return locale === 'he' ? `/${section}` : `/${locale}/${section}`;
+  return locale === 'en' ? `/${section}` : `/${locale}/${section}`;
 }
 
 /** Home path per locale. */
 export function homePath(locale: Locale): string {
-  return locale === 'he' ? '/' : `/${locale}`;
+  return locale === 'en' ? '/' : `/${locale}`;
+}
+
+/** Locale-aware path for any slug below the root ('/services/x' or '/he/services/x'). */
+export function localePath(slug: string, locale: Locale): string {
+  const clean = slug.replace(/^\//, '');
+  return locale === 'en' ? `/${clean}` : `/${locale}/${clean}`;
+}
+
+/** The same pathname re-pointed at another locale, used by the language switcher. */
+export function switchLocalePath(pathname: string, locale: Locale): string {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length && isPrefixedLocale(parts[0])) parts.shift();
+  return parts.length ? localePath(parts.join('/'), locale) : homePath(locale);
 }
 
 /** Map a pathname to the focused section (or null for home / unknown routes). */
 export function sectionForPath(pathname: string): Section | null {
   const parts = pathname.split('/').filter(Boolean);
   // Drop a leading locale segment.
-  const seg = parts[0] === 'en' || parts[0] === 'ru' ? parts[1] : parts[0];
+  const seg = parts.length && isPrefixedLocale(parts[0]) ? parts[1] : parts[0];
   if (!seg) return null;
   return BY_SLUG.get(seg) ?? null;
 }
@@ -98,7 +120,7 @@ export function sectionMetadata(id: SectionId, locale: Locale) {
         'he-IL': `${BASE}${sectionPath(id, 'he')}`,
         'en-US': `${BASE}${sectionPath(id, 'en')}`,
         'ru-RU': `${BASE}${sectionPath(id, 'ru')}`,
-        'x-default': `${BASE}${sectionPath(id, 'he')}`,
+        'x-default': `${BASE}${sectionPath(id, 'en')}`,
       },
     },
   };

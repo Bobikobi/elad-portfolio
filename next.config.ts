@@ -51,6 +51,11 @@ const nextConfig: NextConfig = {
         destination: 'https://www.eladsaadon.dev/:path*',
         permanent: true, // 308 redirect — preserves SEO juice
       },
+      // F3 — English moved from /en to the un-prefixed root, so every previously
+      // indexed /en URL folds onto its new home instead of 404-ing. Two rules, not
+      // one: `/en/:path*` does not match the bare `/en`.
+      { source: '/en', destination: '/', permanent: true },
+      { source: '/en/:path*', destination: '/:path*', permanent: true },
     ];
   },
   async headers() {
