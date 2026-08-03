@@ -100,8 +100,35 @@ low tier 55.8 / 56.2, high tier 56.5 / 60.0, against a 60.0 no-ring control. One
 of 40.7 at low tier and one of 40.4 at HIGH tier are in the set; an outlier that appears
 at the unthrottled tier too is contention on this machine, not the page.
 
-Final position on the 60fps criterion: **~56fps at the low tier with three windows**, up
-from 49.5, still not 60. The residual does not attach to any feature that can be removed.
+**The one sanctioned experiment.** The SVG layer was a full-viewport box, 1440x900, over
+a live WebGL canvas - rasterized and composited at that size every frame whatever is drawn
+inside it. It now follows the fan: 570x712, **69% less raster area**. Low tier measured
+**56.0fps, 6.7% of frames over 33ms** - the same as before it, so the raster area was not
+the residual either. The change stays because it is strictly less work, not because it
+helped.
+
+### ACCEPTED DEVIATION FROM THE 60FPS CRITERION - do not re-litigate
+
+**Three windows at ~56fps on the low tier is the accepted result**, ruled by the owner
+after the evidence below. It is not a regression and should not be reported as one.
+
+What was eliminated, each by measurement rather than by argument:
+
+| suspect | test | result |
+|---|---|---|
+| per-frame JS rebuilding paths | build everything once at angle 0, per-frame writes down to a transform and an opacity | 49.5-51.7 before, 49.5-51.7 after - **no change** |
+| the window shadow | filter off | 53.2 against a 52.2 baseline |
+| the previews | images hidden | 52.8 |
+| both together | | 54.0 |
+| the scroll rail, the panel | each hidden | inside noise |
+| raster area of the vector layer | full viewport to the fan's box, -69% | 56.0, unchanged |
+| the number of windows | five, four, three | 49.5 / 53.5-55.5 / **~56** |
+
+What survives is the compositing and paint of an animated vector layer over a 3D canvas -
+inherent to overlaying SVG on WebGL, and removable only by rendering the windows inside
+the scene as textured planes, which is not worth a rewrite now. A steady 56 beats a peak
+60 with jitter, and the tier law is intact: composition is identical at both tiers and
+only cost differs.
 
 **Four corrections, all verified on the alias:**
 
