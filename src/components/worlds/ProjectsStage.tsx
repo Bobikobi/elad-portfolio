@@ -516,7 +516,15 @@ export default function ProjectsStage({
         style={{
           opacity: 0,
           transition: 'opacity 0.25s ease',
-          padding: '0 4px',
+          // A soft well of shadow rather than a panel: the words are meant to be ON the
+          // planet, and the planet's lit half is bright enough that a text-shadow alone
+          // left them barely legible in LTR, where the pose puts the copy over the disc's
+          // brightest part. No edge, no border - it reads as the world darkening under
+          // the text.
+          padding: '22px 26px',
+          margin: '-22px -26px',
+          background:
+            'radial-gradient(ellipse at 50% 45%, rgba(5,7,20,0.82) 0%, rgba(5,7,20,0.62) 48%, rgba(5,7,20,0.24) 72%, rgba(5,7,20,0) 100%)',
           textShadow: '0 2px 18px rgba(5,7,20,0.95), 0 0 40px rgba(5,7,20,0.8)',
         }}
       >
