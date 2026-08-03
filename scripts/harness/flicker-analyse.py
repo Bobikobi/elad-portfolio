@@ -86,29 +86,40 @@ def points_of(g):
     return m
 
 
-union = np.zeros((H, W), bool)
-for g in grays:
-    union |= points_of(g)
-sky_pts = np.argwhere(union & sky)
-disc_pts = np.argwhere(union & disc & ~chrome)
+# A point per frame, then STATIC points only. The asteroid debris and the moons move
+# across the frame, and a detector that tracks fixed coordinates reads a particle passing
+# through a pixel as that pixel's star switching on. The first run of this reported 99.8%
+# of points swinging - it was measuring traffic, not twinkle.
+per_frame = [points_of(g) & sky for g in grays]
+coords = [set(map(tuple, np.argwhere(m))) for m in per_frame]
 
-# One sample per point per frame: the max of a 3x3 window, so a sub-pixel wobble is not
-# read as a luminance change.
+
+def near(pt, s, r=2):
+    y, x = pt
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if (y + dy, x + dx) in s:
+                return True
+    return False
+
+
+base = sorted(coords[0])
+static = [p for p in base if sum(near(p, c) for c in coords) >= 0.9 * len(coords)]
+moving = len(base) - len(static)
+sky_pts = np.array(static, dtype=int) if static else np.zeros((0, 2), dtype=int)
+disc_pts = np.argwhere(points_of(grays[0]) & disc & ~chrome)
+
 series = np.zeros((len(sky_pts), len(grays)), dtype=np.float32)
 for j, g in enumerate(grays):
     for i, (y, x) in enumerate(sky_pts):
-        # A 7x7 window, so a point that shifts a pixel or two is still the same point.
-        series[i, j] = g[max(0, y - 3):y + 4, max(0, x - 3):x + 4].max()
+        # A 3x3 window: a static point does not need more, and a wider one would start
+        # collecting whatever is drifting past.
+        series[i, j] = g[max(0, y - 1):y + 2, max(0, x - 1):x + 2].max()
 
-peak = series.max(axis=1)
-keep = peak > MIN_PEAK
-series, peak, sky_pts = series[keep], peak[keep], sky_pts[keep]
-
-step = np.abs(np.diff(series, axis=1))
-rel = step / np.maximum(series[:, :-1], 0.02)
+peak = series.max(axis=1) if len(sky_pts) else np.zeros(0)
+step = np.abs(np.diff(series, axis=1)) if len(sky_pts) else np.zeros((0, 0))
+rel = step / np.maximum(series[:, :-1], 0.02) if step.size else np.zeros((0, 0))
 worst_rel = rel.max(axis=1) if rel.size else np.array([0.0])
-# "Appears or disappears entirely": within one point's own life, dark in one frame and
-# clearly lit in another.
 vanishes = ((series.min(axis=1) < 0.15 * peak) & (peak > 0.12)).sum() if len(peak) else 0
 
 # --- chroma at the frame edges ---------------------------------------------------
@@ -129,7 +140,7 @@ inner_chroma = float(np.percentile(ch[inner_sky], 99)) if inner_sky.any() else 0
 
 print(f"frames            {len(frames)} every {meta['EVERY']}ms  route={meta['ROUTE']} tier={meta['TIER']}")
 print(f"disc              {int(disc.sum())} px masked ({100*disc.sum()/(H*W):.1f}% of frame)")
-print(f"bright points     {len(sky_pts)} tracked in the sky")
+print(f"bright points     {len(sky_pts)} STATIC in the sky ({moving} moving, excluded)")
 if len(sky_pts):
     print(f"  luminance step between consecutive samples:")
     print(f"    median {np.median(worst_rel)*100:.1f}%   p90 {np.percentile(worst_rel,90)*100:.1f}%"
