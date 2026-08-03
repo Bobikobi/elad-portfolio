@@ -31,8 +31,13 @@ export interface RingTuning {
   thick: number;
   /** tangential px between two neighbouring windows, also measured at rMid. */
   cardGap: number;
-  /** half the total fan, degrees. Beyond this the text tilt stops being readable. */
+  /** the fan's design half-angle, degrees. The real fan is clamped below it by whatever
+   *  is actually on the screen - see fanUp / fanDown. */
   fanDeg: number;
+  /** px of screen above the ring that belongs to the navbar and must stay clear. */
+  navSafe: number;
+  /** px of clearance kept at the bottom of the viewport. */
+  bottomSafe: number;
   /** corner rounding, px. */
   corner: number;
   /** padding between the inner arc and the content box. */
@@ -49,19 +54,24 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
   landscape: {
     gap: 48,
     depth: 330,
-    // B8c - 240px of thickness put exactly two windows inside a +/-35deg fan (the arc is
-    // 634px at this framing). The image moved out of the content box and into the sector
-    // fill, which is what freed the height to make a window thinner: 180 + 16 puts three
-    // whole windows in the fan with the fourth entering, and still leaves 106px of
-    // content height at the inner edge - title, two lines of description and the chips.
-    thick: 180,
-    cardGap: 16,
+    // B8d - a window is a picture now, not a text box, so its thickness is no longer set
+    // by what has to fit inside it. Clamping the fan away from the navbar cost the top of
+    // the arc (17.5deg up against 33.4deg down at this framing); thinner windows buy the
+    // count back: 130 + 14 puts three in view with a fourth entering.
+    thick: 130,
+    cardGap: 14,
     fanDeg: 35,
     corner: 14,
     padInner: 28,
     padOuter: 24,
     padSide: 8,
-    headroom: 200,
+    // B8d - the header used to take whatever the ring left over, with a 150px floor, and
+    // at this framing that floor was binding: the title and the back control ended up
+    // pressed against the viewport edge. It is a reservation now, and the ring gives up
+    // depth for it rather than the other way round.
+    headroom: 300,
+    navSafe: 72,
+    bottomSafe: 24,
   },
   // Portrait: the planet owns the top of the frame and the windows fan BELOW it, curved
   // edge on top. The planet is much smaller here (fill 0.44 of a short viewport), so the
@@ -79,6 +89,8 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
     padOuter: 22,
     padSide: 8,
     headroom: 0,
+    navSafe: 96,
+    bottomSafe: 16,
   },
 };
 
@@ -96,8 +108,11 @@ export interface RingMetrics {
   /** +1 / -1 — which way angle grows so that window i+1 is always "after" window i on
    *  screen (down the fan in landscape, along the reading direction in portrait). */
   sweep: 1 | -1;
-  /** half the total fan, rad. */
-  fan: number;
+  /** the fan's two half-angles, rad. They are NOT equal: the space above the planet's
+   *  projected centre and the space below it are not the same, and the fan is clamped by
+   *  what is really there rather than by one symmetric constant. */
+  fanUp: number;
+  fanDown: number;
   /** half-angle of ONE window. */
   dHalf: number;
   /** arc length (px, at rMid) from one window's centre to the next. */
@@ -158,6 +173,46 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   // rectangle is bounded there. Corner rounding eats a little more.
   const contentHalf = Math.max(24, rIn * dHalf - k.padSide - k.corner * 0.35);
 
+  // B8d, defect 3 - the fan is clamped by the obstacles that are really on the screen
+  // rather than by an angle chosen in the abstract: the navbar strip above, the viewport
+  // edges everywhere else. Asymmetric, because the planet's centre does not sit halfway
+  // down the screen and there is more room below it than above.
+  //
+  // The clamp is a SCAN, not a formula. The first version solved `asin(room / r1)`, which
+  // silently assumes the fan spreads vertically - true in landscape, false in portrait,
+  // where the fan spreads sideways below the planet and the navbar is not in its way at
+  // all. That version measured a 0 degree upper fan on a phone and hid every window.
+  const design = k.fanDeg * DEG2RAD;
+  // Vertical is HARD - a window under the navbar is the defect being fixed, and one off
+  // the bottom of the page cannot be reached. Horizontal is SOFT: on a phone the ring is
+  // deliberately wider than the screen, so a window's outer corner leaving the side is
+  // the design working, and treating it as fatal collapsed the fan to nothing and left
+  // the page empty.
+  const sideSlack = vw * 0.35;
+  const fits = (delta: number): boolean => {
+    for (let e = -1; e <= 1; e += 1) {
+      const th = th0 + sweep * (delta + e * dHalf);
+      for (const r of [r0, r1, (r0 + r1) / 2]) {
+        const x = rect.cx + r * Math.cos(th);
+        const y = rect.cy + r * Math.sin(th);
+        if (y < k.navSafe || y > vh - k.bottomSafe) return false;
+        if (x < -sideSlack || x > vw + sideSlack) return false;
+      }
+    }
+    return true;
+  };
+  const scan = (dir: 1 | -1): number => {
+    const step = design / 36;
+    let best = 0;
+    for (let a = step; a <= design + 1e-9; a += step) {
+      if (!fits(dir * a)) break;
+      best = a;
+    }
+    return best;
+  };
+  const fanUp = scan(-1);
+  const fanDown = scan(1);
+
   return {
     cx: rect.cx,
     cy: rect.cy,
@@ -167,7 +222,8 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
     rMid,
     th0,
     sweep,
-    fan: k.fanDeg * DEG2RAD,
+    fanUp,
+    fanDown,
     dHalf,
     pitch: thick + k.cardGap,
     corner: k.corner,
@@ -265,13 +321,41 @@ export function arcPath(
   return `M${f(A[0])} ${f(A[1])}A${f(r)} ${f(r)} 0 ${large} ${sweep} ${f(B[0])} ${f(B[1])}`;
 }
 
+/** Arc length (px at rMid) available above and below the fan's centre. */
+export const arcUp = (m: RingMetrics) => m.fanUp * m.rMid;
+export const arcDown = (m: RingMetrics) => m.fanDown * m.rMid;
+
+/** How far into the fan the FIRST window starts: half a pitch, or the whole fan when the
+ *  fan is narrower than that. A phone leaves almost no fan at all, and an offset that
+ *  assumed half a pitch of room put the only window that fits outside it. */
+const lead = (m: RingMetrics) => Math.min(m.pitch / 2, arcUp(m));
+const tail = (m: RingMetrics) => Math.min(m.pitch / 2, arcDown(m));
+
 /** Where window `i` sits, in arc length (px at rMid) from the fan's centre. */
 export function windowArc(i: number, count: number, scroll: number, m: RingMetrics): number {
   void count;
-  return (i + 0.5) * m.pitch - m.fan * m.rMid - scroll;
+  return i * m.pitch - arcUp(m) + lead(m) - scroll;
 }
 
 /** How far the list can travel: enough to bring the last window inside the fan, no more. */
 export function scrollSpan(count: number, m: RingMetrics): number {
-  return Math.max(0, count * m.pitch - 2 * m.fan * m.rMid);
+  return Math.max(0, (count - 1) * m.pitch - arcUp(m) + lead(m) - arcDown(m) + tail(m));
+}
+
+/**
+ * 1 well inside the fan, 0 once a window has left it. Measured on the window's CENTRE,
+ * not its edges: with the fan clamped to nothing on a phone, an edge test reported every
+ * window - including the one dead centre - as outside, and the ring rendered empty.
+ * The band is short and the falloff steep on purpose: a half-faded window is a ghost.
+ */
+export function fanOpacity(a: number, m: RingMetrics): number {
+  // `room` is how far INSIDE the clamped fan this window's centre still is. The fade
+  // therefore happens inside the fan and a window is gone by the time it reaches the
+  // edge - which is what makes the clamp mean anything. Fading outward instead let
+  // windows render half a pitch past the limit, which put them back under the navbar
+  // (measured: top at y=7 against a navbar ending at y=64) after the clamp had just
+  // been added to stop exactly that.
+  const room = Math.min(arcDown(m) - a, a + arcUp(m));
+  const t = room / (m.pitch * 0.5);
+  return (t < 0 ? 0 : t > 1 ? 1 : t) ** 2;
 }

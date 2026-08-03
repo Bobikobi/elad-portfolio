@@ -56,6 +56,43 @@ export const DEG2RAD = Math.PI / 180;
  */
 export const livePlanetRect = { cx: 0, cy: 0, r: 0, vw: 0, vh: 0, stamp: -1e9 };
 
+/**
+ * The focused planet's RING PLANE, projected to screen (B8d).
+ *
+ * `u` and `v` are the screen-space images of two orthonormal in-plane world vectors, each
+ * one planet-radius long: `u` along the projected ellipse's major axis (the direction the
+ * plane is not foreshortened in), `v` perpendicular to it inside the plane. A circle of
+ * radius p planet-radii in that plane is then, on screen,
+ *
+ *     C + p * (u * cos(th) + v * sin(th))
+ *
+ * which is exactly an SVG `matrix(ux, uy, vx, vy, cx, cy)`. That is why the ring layer can
+ * keep every path in a plain unit-circle space and hand the whole ellipse to one transform
+ * instead of re-deriving elliptical arcs.
+ *
+ * `ringOuter` is where the planet's own rings end, in the same planet-radius units, so the
+ * window ring can be placed a constant distance outside them rather than a guessed one.
+ * `axisRatio` = |v| / |u|: 1 is face-on, 0 is edge-on. Below ~0.12 the plane is too closed
+ * to lay anything out in and the caller should fall back to the screen-plane ring.
+ */
+export const livePlanetPlane = {
+  ux: 1, uy: 0,
+  vx: 0, vy: 1,
+  ringOuter: 0,
+  axisRatio: 1,
+  vw: 0, vh: 0,
+  stamp: -1e9,
+};
+
+export function livePlanetPlaneFresh(vw: number, vh: number): boolean {
+  return (
+    livePlanetPlane.ringOuter > 0 &&
+    livePlanetPlane.axisRatio > 0.12 &&
+    livePlanetPlane.vw === vw &&
+    livePlanetPlane.vh === vh
+  );
+}
+
 /** True when the published limb still describes THIS viewport. */
 export function livePlanetRectFresh(vw: number, vh: number): boolean {
   return livePlanetRect.r > 0 && livePlanetRect.vw === vw && livePlanetRect.vh === vh;
