@@ -16,8 +16,16 @@ function monogram(title: string): string {
     .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
     .split(/[\s-]+/)
     .filter(Boolean);
-  const letters = words.slice(0, 2).map((w) => [...w][0] ?? '');
-  return letters.join('').toUpperCase() || [...title][0] || '?';
+  if (!words.length) return '?';
+  // One script only. These titles mix Hebrew and Latin freely ("OpenClaw - מערכת AI
+  // אוטונומית"), and taking the first letter of the first two words gave "Oמ" - two
+  // alphabets, two directions, in a two-character mark. Keep the words that match the
+  // first one's script and drop the rest.
+  const hebrew = (w: string) => /\p{Script=Hebrew}/u.test(w);
+  const first = hebrew(words[0]);
+  const same = words.filter((w) => hebrew(w) === first);
+  const letters = same.slice(0, 2).map((w) => [...w][0] ?? '');
+  return letters.join('').toUpperCase() || '?';
 }
 
 /** Projects = ringed Saturn, each project a "moon".
