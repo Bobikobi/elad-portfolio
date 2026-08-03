@@ -62,10 +62,15 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
     gap: 48,
     depth: 330,
     // B8d - a window is a picture now, not a text box, so its thickness is no longer set
-    // by what has to fit inside it. Clamping the fan away from the navbar cost the top of
-    // the arc (17.5deg up against 33.4deg down at this framing); thinner windows buy the
-    // count back: 130 + 14 puts three in view with a fourth entering.
-    thick: 130,
+    // by what has to fit inside it. Laying the ring in the planet's ring plane also gave
+    // the fan its full 35deg back on both sides, so the count comes from the fan rather
+    // than from thin windows: at 170 + 14 that is four in view.
+    //
+    // 130 was tried first and measured 49.5-51fps at the low tier against 57-59.5 for the
+    // build before it, because per-frame cost here scales with how many windows are drawn
+    // - each one is a path, a clip path and a clipped bitmap rebuilt every frame while the
+    // ring turns. Window count is the performance lever on this layer.
+    thick: 170,
     cardGap: 14,
     fanDeg: 35,
     corner: 14,
