@@ -98,7 +98,23 @@ export default function ProjectsStage({
     // pointer, so there the panel falls back to naming whichever window is at the centre
     // of the fan - otherwise a touch device would show twelve pictures and no way to
     // learn what any of them is.
-    const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    //
+    // Which of the two applies is decided by a mouse ACTUALLY MOVING, not by a media
+    // query. `(hover: hover) and (pointer: fine)` is false in a headless browser, which
+    // has no input device at all, and it is famously wrong on hybrid laptops; the first
+    // version of this shipped the touch behaviour to every desktop that ran the check
+    // before a mouse was plugged in. Starting in the fallback and leaving it on the first
+    // real mouse movement is right in both directions: nobody is ever left with no text.
+    const unbind: Array<() => void> = [];
+    let mouseSeen = false;
+    const onMouse = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') {
+        mouseSeen = true;
+        window.removeEventListener('pointermove', onMouse);
+      }
+    };
+    window.addEventListener('pointermove', onMouse, { passive: true });
+    unbind.push(() => window.removeEventListener('pointermove', onMouse));
     const cards = Array.from(deck.querySelectorAll<HTMLElement>('[data-window]'));
     const n = cards.length;
 
@@ -126,7 +142,6 @@ export default function ProjectsStage({
     const hits: SVGGElement[] = [];
     const clips: Array<SVGPathElement | null> = [];
     const marks: Array<SVGTextElement | null> = [];
-    const unbind: Array<() => void> = [];
     cards.forEach((card, i) => {
       const grad = document.createElementNS(SVG_NS, 'linearGradient');
       grad.setAttribute('id', `ring-accent-${i}`);
@@ -447,7 +462,7 @@ export default function ProjectsStage({
       // focused one when there is a pointer, and otherwise the one at the centre of the
       // fan: a phone has no hover, and twelve pictures with no way to learn what any of
       // them is would be the whole design's failure mode.
-      const active = hovered.current >= 0 ? hovered.current : canHover ? -1 : centred;
+      const active = hovered.current >= 0 ? hovered.current : mouseSeen ? -1 : centred;
       if (active !== shownActive.current) {
         shownActive.current = active;
         const src = active >= 0 ? cards[active] : null;
