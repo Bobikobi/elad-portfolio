@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Heebo, Frank_Ruhl_Libre, Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import ClientProviders from "@/components/layout/ClientProviders";
 import type { Locale } from "@/lib/i18n";
+import { DEFAULT_VIEW_MODE, VIEW_MODE_COOKIE, parseViewMode } from "@/lib/viewMode";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -300,10 +301,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // instead of always defaulting to Hebrew/RTL and only correcting after hydration.
   const locale = (((await headers()).get("x-locale") as Locale | null) ?? "he");
   const dir = locale === "he" ? "rtl" : "ltr";
+  // F2 - the view mode has to be known BEFORE the tree renders, because the section
+  // routes render different children in each mode. Read here, stamped on <html> so CSS
+  // can respond in the first paint, and handed to the provider so the client agrees.
+  const chosenMode = parseViewMode((await cookies()).get(VIEW_MODE_COOKIE)?.value);
+  const viewMode = chosenMode ?? DEFAULT_VIEW_MODE;
   return (
     <html
       lang={locale}
       dir={dir}
+      data-view={viewMode}
       className={`${heebo.variable} ${frankRuhl.variable} ${playfair.variable} ${inter.variable} h-full antialiased`}
     >
       <head>
@@ -330,7 +337,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <ClientProviders initialLocale={locale}>{children}</ClientProviders>
+        <ClientProviders
+          initialLocale={locale}
+          initialViewMode={viewMode}
+          viewModeChosen={chosenMode !== null}
+        >
+          {children}
+        </ClientProviders>
         <Analytics />
         <SpeedInsights />
       </body>

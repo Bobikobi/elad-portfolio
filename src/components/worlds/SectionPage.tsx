@@ -1,7 +1,10 @@
+import { cookies } from 'next/headers';
 import type { Locale } from '@/lib/translations';
 import { translations as tr } from '@/lib/translations';
 import { SECTIONS, type SectionId } from '@/lib/sections';
 import { JsonLd } from '@/components/JsonLd';
+import { VIEW_MODE_COOKIE, parseViewMode } from '@/lib/viewMode';
+import ClassicSection from '@/components/layout/ClassicSection';
 import PlanetWorld from '@/components/worlds/PlanetWorld';
 import AboutWorld from './AboutWorld';
 import ServicesWorld from './ServicesWorld';
@@ -60,11 +63,26 @@ function schemaFor(id: SectionId) {
 }
 
 /** One section route → its planet world. Server-rendered content (crawlable) inside
- *  the dark-glass panel; the persistent canvas (CosmicStage) flies to the planet. */
-export default function SectionPage({ id, locale }: { id: SectionId; locale: Locale }) {
+ *  the dark-glass panel; the persistent canvas (CosmicStage) flies to the planet.
+ *
+ *  In CLASSIC view (F2) the same route renders an ordinary page instead. The branch is
+ *  made HERE, on the server, off the cookie - not in a client component - so the markup
+ *  that arrives is already the right one and the structured data below is emitted
+ *  identically either way. */
+export default async function SectionPage({ id, locale }: { id: SectionId; locale: Locale }) {
   const section = SECTIONS.find((s) => s.id === id)!;
   const title = tr[section.navKey]?.[locale] ?? id;
   const schema = schemaFor(id);
+  const classic = parseViewMode((await cookies()).get(VIEW_MODE_COOKIE)?.value) === 'classic';
+
+  if (classic) {
+    return (
+      <>
+        {schema && <JsonLd data={schema} />}
+        <ClassicSection id={id} />
+      </>
+    );
+  }
   // Projects is the Layout v2 "Jupiter frame" pilot: it owns its full-bleed chrome
   // (floating windows + arc + scroll steering + back), NOT the shared glass panel.
   if (id === 'projects') {

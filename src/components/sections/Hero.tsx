@@ -5,8 +5,7 @@ import { motion, useScroll, useMotionValueEvent, useMotionValue } from 'framer-m
 import Link from 'next/link';
 import { ChevronDown } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import { useMotionDisabled } from '@/hooks/useMotionDisabled';
-import { useWebGLAvailable } from '@/hooks/useWebGLAvailable';
+import { useViewMode } from '@/lib/viewModeContext';
 import { useScene } from '@/lib/sceneStore';
 import { SWAP_V, COVER_PLATEAU, COVER_FALLOFF, coverageFor } from '@/lib/diveEnvelope';
 import { enteredOnAWorld } from '@/lib/entryRoute';
@@ -249,7 +248,8 @@ function GalaxyHome() {
 }
 
 export default function Hero() {
-  const motionDisabled = useMotionDisabled();
-  const webgl = useWebGLAvailable();
-  return motionDisabled || !webgl ? <StaticHero /> : <GalaxyHome />;
+  // Classic view already covers reduced motion and missing WebGL - the provider demotes
+  // those visitors before this renders - so one question is enough here.
+  const { mode } = useViewMode();
+  return mode === 'classic' ? <StaticHero /> : <GalaxyHome />;
 }

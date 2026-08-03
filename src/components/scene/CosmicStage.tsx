@@ -2,8 +2,7 @@
 import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
-import { useMotionDisabled } from '@/hooks/useMotionDisabled';
-import { useWebGLAvailable } from '@/hooks/useWebGLAvailable';
+import { useViewMode } from '@/lib/viewModeContext';
 import { useScene } from '@/lib/sceneStore';
 import { sectionForPath } from '@/lib/sections';
 import { captureEntryRoute } from '@/lib/entryRoute';
@@ -20,14 +19,18 @@ const GALAXY_POSTER = '/images/galaxy/poster.webp';
  * survives client-side route transitions (navigating /about → /projects flies the
  * camera without ever tearing down the GL context). Also the route→camera bridge:
  * a section route focuses its planet in the solar act; home clears the focus and
- * lets the dive driver own the galaxy. Reduced-motion / no-WebGL → renders nothing
- * (every route's content is real DOM, so the site stays fully usable).
+ * lets the dive driver own the galaxy. Classic view (which reduced-motion and no-WebGL
+ * visitors are moved into automatically, F2) → renders nothing, and the three.js chunk
+ * is never requested because this returns before the dynamic import is reached.
  */
 export default function CosmicStage() {
   const pathname = usePathname();
-  const webgl = useWebGLAvailable();
-  const motionDisabled = useMotionDisabled();
-  const immersive = webgl && !motionDisabled;
+  // One decision, made once, in ViewModeProvider. This used to re-derive it from the two
+  // capability hooks, which meant the canvas and the layout each answered "is this
+  // immersive?" separately - and the layout's answer was route-aware while this one was
+  // not, so a classic route could still be paying for a mounted scene.
+  const { mode } = useViewMode();
+  const immersive = mode === 'cosmic';
 
   // Bridge: URL is the source of truth for which world the camera is in.
   useEffect(() => {

@@ -11,6 +11,10 @@ export const translations: Record<string, Record<Locale, string>> = {
   'nav.tech': { he: 'טכנולוגיות', en: 'Tech Stack', ru: 'Технологии' },
   'nav.contact': { he: 'צור קשר', en: 'Contact', ru: 'Контакт' },
   'nav.home': { he: 'לדף הבית', en: 'Home', ru: 'Главная' },
+  // F2 - the view toggle. The label names the view you are switching TO, so the button
+  // reads as an action rather than as a status.
+  'view.classic': { he: 'תצוגה קלאסית', en: 'Classic view', ru: 'Классический вид' },
+  'view.cosmic': { he: 'תצוגה קוסמית', en: 'Cosmic view', ru: 'Космический вид' },
 
   // Hero
   'hero.greeting': { he: 'היי, אני', en: "Hi, I'm", ru: 'Привет, я' },

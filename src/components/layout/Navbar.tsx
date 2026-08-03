@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useScroll, useSpring, useMotionValueEvent } fr
 import { Menu, X } from 'lucide-react';
 import { useI18n, Locale } from '@/lib/i18n';
 import Link from 'next/link';
+import ViewModeToggle from './ViewModeToggle';
 import { usePathname, useRouter } from 'next/navigation';
 import { sectionPath, sectionForPath, homePath, type SectionId } from '@/lib/sections';
 
@@ -174,8 +175,9 @@ export default function Navbar() {
             ))}
           </ul>
 
-          {/* Language + mobile toggle */}
+          {/* View mode + language + mobile toggle */}
           <div className="flex items-center gap-3">
+            <ViewModeToggle />
             <div className="chrome-surface hidden md:flex items-center gap-1 rounded-lg p-0.5">
               {locales.map((l) => (
                 <button
@@ -255,7 +257,10 @@ export default function Navbar() {
                   </li>
                 ))}
               </ul>
-              <div className="chrome-surface mt-auto flex items-center gap-1 rounded-lg p-0.5">
+              <div className="mt-auto mb-3" onClick={() => setMobileOpen(false)}>
+                <ViewModeToggle compact />
+              </div>
+              <div className="chrome-surface flex items-center gap-1 rounded-lg p-0.5">
                 {locales.map((l) => (
                   <button
                     key={l.code}
