@@ -66,12 +66,16 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
     // the fan its full 35deg back on both sides, so the count comes from the fan rather
     // than from thin windows: at 170 + 14 that is four in view.
     //
-    // 130 was tried first and measured 49.5-51fps at the low tier against 57-59.5 for the
-    // build before it, because per-frame cost here scales with how many windows are drawn
-    // - each one is a path, a clip path and a clipped bitmap rebuilt every frame while the
-    // ring turns. Window count is the performance lever on this layer.
-    thick: 170,
-    cardGap: 14,
+    // Window count is the performance lever on this layer, and it took three measurement
+    // rounds to be sure of it. 130px thickness put five windows in the fan and measured
+    // 49.5-51fps at the low tier, against 57-59.5 for the build before and 60 for a
+    // no-ring control. Caching the canonical geometry - building every path once at angle
+    // 0 and letting a rotation carry it - was the obvious fix and changed nothing, which
+    // ruled out the per-frame JS. Nor was it any one visual feature: with the shadow off,
+    // the previews off, or both, the low tier still measured 52.2-54.0. What is left is
+    // the count itself, so the count is what gives.
+    thick: 230,
+    cardGap: 16,
     fanDeg: 35,
     corner: 14,
     padInner: 28,
