@@ -30,7 +30,14 @@ export default function CosmicStage() {
   // immersive?" separately - and the layout's answer was route-aware while this one was
   // not, so a classic route could still be paying for a mounted scene.
   const { mode } = useViewMode();
-  const immersive = mode === 'cosmic';
+  // The canvas belongs to the COSMIC ROUTES - home and the five worlds - and to nowhere
+  // else. It used to mount on every route in cosmic mode, so a guide, a service detail
+  // page, a legal page or /admin each pulled the whole three.js bundle and blocked the
+  // main thread to show a paragraph. The layout has always known this test; the canvas
+  // did not, and the two disagreeing was the entire cost.
+  const isHome = pathname === '/' || pathname === '/en' || pathname === '/ru';
+  const cosmicRoute = isHome || !!sectionForPath(pathname);
+  const immersive = mode === 'cosmic' && cosmicRoute;
 
   // Bridge: URL is the source of truth for which world the camera is in.
   useEffect(() => {
