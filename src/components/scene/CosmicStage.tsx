@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useViewMode } from '@/lib/viewModeContext';
 import { useScene } from '@/lib/sceneStore';
 import { sectionForPath } from '@/lib/sections';
+import { isCosmicRoute } from '@/lib/cosmicRoute';
 import { captureEntryRoute } from '@/lib/entryRoute';
 import SceneBoundary from '@/components/scene/SceneBoundary';
 import SceneLoader from '@/components/scene/SceneLoader';
@@ -35,9 +36,7 @@ export default function CosmicStage() {
   // page, a legal page or /admin each pulled the whole three.js bundle and blocked the
   // main thread to show a paragraph. The layout has always known this test; the canvas
   // did not, and the two disagreeing was the entire cost.
-  const isHome = pathname === '/' || pathname === '/en' || pathname === '/ru';
-  const cosmicRoute = isHome || !!sectionForPath(pathname);
-  const immersive = mode === 'cosmic' && cosmicRoute;
+  const immersive = mode === 'cosmic' && isCosmicRoute(pathname);
 
   // Bridge: URL is the source of truth for which world the camera is in.
   useEffect(() => {
