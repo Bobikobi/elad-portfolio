@@ -35,18 +35,33 @@ export async function submitContact(_prev: ContactState, formData: FormData): Pr
   recent.push(now);
   hits.set(ip, recent);
 
-  // Delivery. TODO-FORM-PROVIDER: point CONTACT_ENDPOINT at a free form backend
-  // (Web3Forms / Formspree / an n8n webhook). Secrets live in env only; the message
-  // is never echoed back to the client.
+  // Delivery via CONTACT_ENDPOINT (a Formspree form URL). Env only — the endpoint never
+  // enters git — and the message is never echoed back to the client.
   const endpoint = process.env.CONTACT_ENDPOINT;
   if (endpoint) {
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          // Without this, Formspree answers a browser-style 302 to its HTML thank-you
+          // page. fetch follows redirects by default, so the thank-you page's 200 would
+          // come back as `res.ok` and a REJECTED submission would be reported to the
+          // visitor as sent. Asking for JSON keeps the real verdict in the response.
+          accept: 'application/json',
+        },
         body: JSON.stringify({ name, email, message, source: 'eladsaadon.dev' }),
+        // A provider that hangs must not hang the server action with it.
+        signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) return { status: 'error', message: 'send' };
+      // Belt and braces for a provider that reports failure inside a 200: only trust a
+      // body that does not carry errors. Unparseable body + 2xx is treated as delivered,
+      // since not every provider answers in JSON.
+      const body = await res.json().catch(() => null);
+      if (body && (body.ok === false || (Array.isArray(body.errors) && body.errors.length))) {
+        return { status: 'error', message: 'send' };
+      }
     } catch {
       return { status: 'error', message: 'send' };
     }
