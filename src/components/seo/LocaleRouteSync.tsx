@@ -30,7 +30,8 @@ export default function LocaleRouteSync() {
     if (syncedPath.current === pathname) return;
     syncedPath.current = pathname;
     const routeLocale = localeForPath(pathname);
-    if (routeLocale && routeLocale !== locale) setLocale(routeLocale);
+    // persist: false — the route forced this, the visitor did not choose it.
+    if (routeLocale && routeLocale !== locale) setLocale(routeLocale, false);
   }, [pathname, locale, setLocale]);
 
   return null;

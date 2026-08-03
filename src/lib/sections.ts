@@ -1,4 +1,7 @@
-import type { Locale } from './i18n';
+// Locale comes straight from translations, not from i18n: i18n now imports
+// localeForPath from here, and pointing back at i18n would be a cycle (harmless while
+// the import is type-only, but only one edit away from not being).
+import type { Locale } from './translations';
 
 /**
  * The cosmic sections — each is a real crawlable route AND a planet/target the
@@ -62,11 +65,17 @@ export function localePath(slug: string, locale: Locale): string {
 }
 
 /**
- * Route roots that exist in all three languages. Everything else under the un-prefixed
- * space — /guides (Hebrew-only articles), /privacy, /terms, /accessibility — has ONE
- * URL serving every language, so it neither pins a locale nor moves when one is chosen.
+ * Route roots that exist in all three languages, so an un-prefixed one means English.
  */
 const LOCALIZED_ROOTS: ReadonlySet<string> = new Set(SECTIONS.map((s) => s.slug));
+
+/**
+ * Hand-written Hebrew-only subtrees: no English or Russian counterpart exists, so they
+ * keep their indexed un-prefixed URLs and are pinned to Hebrew rather than inheriting
+ * the English default. Exported because proxy.ts resolves the same question on the
+ * server and a second copy of this list is a divergence waiting to happen.
+ */
+export const HEBREW_ONLY_PREFIXES = ['/guides'] as const;
 
 /** The same pathname re-pointed at another locale, used by the language switcher. */
 export function switchLocalePath(pathname: string, locale: Locale): string {
@@ -81,16 +90,28 @@ export function switchLocalePath(pathname: string, locale: Locale): string {
 }
 
 /**
- * The locale a pathname pins, or null when the route serves every language from one URL.
+ * The locale a pathname PINS, or null when the route serves every language from one URL
+ * and therefore has to follow the visitor's stored preference instead.
  *
- * The un-prefixed answer has to be 'en', not "no answer". A sync that only recognises
- * PREFIXED segments can correct the UI language toward Hebrew or Russian but never back
- * to the default, so choosing English from /ru/about left <html lang="ru"> on a page
- * whose whole content was English. Measured on the branch alias, not reasoned about.
+ * This is the single rule for "what language is this URL", and both the server (proxy.ts)
+ * and the client (i18n resolveLocale, LocaleRouteSync) answer the question through it.
+ *
+ * Two things it has to get right, both learned by measuring rather than reasoning:
+ *
+ * 1. The un-prefixed answer is 'en', not "no answer". A sync that only recognises
+ *    PREFIXED segments can correct the UI toward Hebrew or Russian but never back to the
+ *    default, so choosing English from /ru/about left <html lang="ru"> on English content.
+ *
+ * 2. A pinned route beats a stored preference, because on these routes the CONTENT is not
+ *    negotiable: /about renders <SectionPage locale="en" /> decided by the route file on
+ *    the server. A stored 'ru' could only ever repaint the chrome around it, which is how
+ *    /about came to render a Russian navbar over an English page. Only the URL can decide
+ *    a route whose body the URL already decided.
  */
 export function localeForPath(pathname: string): Locale | null {
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length && isPrefixedLocale(parts[0])) return parts[0];
+  if (HEBREW_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'he';
   if (!parts.length) return 'en';
   return LOCALIZED_ROOTS.has(parts[0]) ? 'en' : null;
 }

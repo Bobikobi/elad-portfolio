@@ -1,13 +1,20 @@
 'use client';
 import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { translations, type Locale } from './translations';
+import { localeForPath } from './sections';
 
 export { translations };
 export type { Locale };
 
 interface I18nContextType {
   locale: Locale;
-  setLocale: (l: Locale) => void;
+  /**
+   * `persist` is false for a change the ROUTE forced rather than the visitor chose.
+   * Navigating onto an English URL must not quietly overwrite someone's saved Hebrew,
+   * or the legal pages — the only ones that still honour the preference — would drift
+   * to whatever language they happened to browse last.
+   */
+  setLocale: (l: Locale, persist?: boolean) => void;
   t: (key: string) => string;
   dir: 'rtl' | 'ltr';
 }
@@ -43,10 +50,26 @@ function subscribeLocale(cb: () => void) {
   return () => listeners.delete(cb);
 }
 
+/**
+ * F3.1 — the ROUTE wins over the stored preference whenever the route pins a language.
+ *
+ * Reading storage first was the bug: a visitor with a stored 'ru' landing on /about got a
+ * Russian navbar wrapped around an English page, because /about renders
+ * `<SectionPage locale="en" />` chosen by the route file on the server. The preference
+ * could repaint the chrome and nothing else, so it produced a half-translated page.
+ *
+ * Correcting it in an effect afterwards is not good enough either — that is a second
+ * render, and it is what LocaleRouteSync was already trying and failing to do. Resolving
+ * it HERE means the very first client render already agrees with the server.
+ *
+ * `localeForPath` returns null only for the routes that genuinely serve every language
+ * from one URL (/privacy, /terms, /accessibility); there, and only there, the stored
+ * preference decides, and chrome and content move together so nothing is ever mixed.
+ */
 function resolveLocale(fallback: Locale): Locale {
   if (overrideLocale) return overrideLocale;
-  const pathLocale = window.location.pathname.split('/')[1];
-  if (isLocale(pathLocale)) return pathLocale;
+  const routeLocale = localeForPath(window.location.pathname);
+  if (routeLocale) return routeLocale;
   try {
     const saved = localStorage.getItem('locale');
     if (isLocale(saved)) return saved;
@@ -87,9 +110,11 @@ export function I18nProvider({
     }
   }, []);
 
-  const setLocale = useCallback((l: Locale) => {
+  const setLocale = useCallback((l: Locale, persist = true) => {
     overrideLocale = l;
-    try { localStorage.setItem('locale', l); } catch { /* private mode */ }
+    if (persist) {
+      try { localStorage.setItem('locale', l); } catch { /* private mode */ }
+    }
     document.documentElement.lang = l;
     document.documentElement.dir = l === 'he' ? 'rtl' : 'ltr';
     listeners.forEach((cb) => cb());
