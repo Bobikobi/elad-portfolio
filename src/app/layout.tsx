@@ -12,10 +12,30 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 // preloaded on every route, wired to --font-sans/--font-mono, and used by nothing. The
 // only cost of template leftovers is that they are invisible until someone measures.
 
+// S6 — `preload: false` on ALL FOUR families, so each locale fetches only the files its
+// own glyphs need.
+//
+// Per-locale PRELOAD cannot be expressed here, and it is worth writing down why rather
+// than leaving the next person to rediscover it. next/font emits its preload links from
+// the static module graph of a route, but the locale on this site is not static for the
+// whole route space: the un-prefixed tree serves English AND the Hebrew-only guides, and
+// since F3.2 the legal pages resolve their language from a COOKIE at request time. A
+// build-time decision cannot follow a request-time value, so no arrangement of per-locale
+// layouts can scope the preloads for those routes.
+//
+// Dropping preload gets the same end result by a different route: with no link forcing
+// the fetch, the browser applies unicode-range and only downloads a file some rendered
+// glyph actually needs. Measured before this change, a Russian page pulled 102.6 KB of
+// Heebo and Frank Ruhl that `html[lang='ru']` never asks for - a preload link overrides
+// exactly the judgement that would have skipped them.
+//
+// The cost is the head start on the fonts a page DOES use, which is why /he LCP is
+// measured either side of this in docs/briefs/s6-fonts-verify.md.
 const heebo = Heebo({
   variable: "--font-heebo",
   subsets: ["hebrew", "latin"],
   weight: ["400", "500", "600", "700"],
+  preload: false,
 });
 
 // Display serif + body for he/en (Hebrew + Latin coverage).
@@ -23,14 +43,11 @@ const frankRuhl = Frank_Ruhl_Libre({
   variable: "--font-frank",
   subsets: ["hebrew", "latin"],
   weight: ["300", "500"],
+  preload: false,
 });
-// Russian (Cyrillic) pair — matched roles: elegant serif display + clean body.
-//
-// `preload: false` on both, deliberately. The <html> element carrying the font variables
-// lives in this root layout, so the pair has to be DECLARED here for the /ru swap to
-// resolve — but declaring is not the same as shipping. Without this, every Hebrew and
-// English page preloaded two Cyrillic families it can never render a glyph from. With it,
-// only the pages whose computed font-family actually names them fetch the files.
+// Russian (Cyrillic) pair — matched roles: elegant serif display + clean body. These two
+// have carried `preload: false` since B9, which is why they were already correctly scoped
+// out of English and Hebrew pages; the two above have now joined them.
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin", "cyrillic"],
