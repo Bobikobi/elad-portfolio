@@ -5,6 +5,7 @@ import { Menu, X } from 'lucide-react';
 import { useI18n, Locale } from '@/lib/i18n';
 import Link from 'next/link';
 import ViewModeToggle from './ViewModeToggle';
+import Wordmark from './Wordmark';
 import { usePathname, useRouter } from 'next/navigation';
 import { sectionPath, sectionForPath, homePath, switchLocalePath, type SectionId } from '@/lib/sections';
 
@@ -126,12 +127,9 @@ export default function Navbar() {
             className="flex items-center opacity-90 hover:opacity-100 transition-opacity"
             aria-label={t('nav.home')}
           >
-            <span
-              className="text-3xl font-bold tracking-wide text-[var(--color-text-primary)]"
-              style={{ fontFamily: "'Glamora', serif" }}
-            >
-              E.S
-            </span>
+            {/* Outline, not a webfont — see Wordmark. `tracking-wide` is baked into the
+                path, so the class is gone rather than doubled. */}
+            <Wordmark className="text-3xl text-[var(--color-text-primary)]" />
           </Link>
 
           {/* Desktop links */}
