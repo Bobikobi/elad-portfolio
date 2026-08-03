@@ -61,11 +61,38 @@ export function localePath(slug: string, locale: Locale): string {
   return locale === 'en' ? `/${clean}` : `/${locale}/${clean}`;
 }
 
+/**
+ * Route roots that exist in all three languages. Everything else under the un-prefixed
+ * space — /guides (Hebrew-only articles), /privacy, /terms, /accessibility — has ONE
+ * URL serving every language, so it neither pins a locale nor moves when one is chosen.
+ */
+const LOCALIZED_ROOTS: ReadonlySet<string> = new Set(SECTIONS.map((s) => s.slug));
+
 /** The same pathname re-pointed at another locale, used by the language switcher. */
 export function switchLocalePath(pathname: string, locale: Locale): string {
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length && isPrefixedLocale(parts[0])) parts.shift();
-  return parts.length ? localePath(parts.join('/'), locale) : homePath(locale);
+  if (!parts.length) return homePath(locale);
+  // A single-URL route stays put: pushing /he/privacy would be a 404, and before F3
+  // the same line 404'd on /en/privacy — it was simply invisible while Hebrew, the
+  // primary audience, happened to be the un-prefixed default.
+  if (!LOCALIZED_ROOTS.has(parts[0])) return pathname;
+  return localePath(parts.join('/'), locale);
+}
+
+/**
+ * The locale a pathname pins, or null when the route serves every language from one URL.
+ *
+ * The un-prefixed answer has to be 'en', not "no answer". A sync that only recognises
+ * PREFIXED segments can correct the UI language toward Hebrew or Russian but never back
+ * to the default, so choosing English from /ru/about left <html lang="ru"> on a page
+ * whose whole content was English. Measured on the branch alias, not reasoned about.
+ */
+export function localeForPath(pathname: string): Locale | null {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length && isPrefixedLocale(parts[0])) return parts[0];
+  if (!parts.length) return 'en';
+  return LOCALIZED_ROOTS.has(parts[0]) ? 'en' : null;
 }
 
 /** Map a pathname to the focused section (or null for home / unknown routes). */
