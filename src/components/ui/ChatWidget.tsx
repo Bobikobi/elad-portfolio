@@ -36,6 +36,14 @@ const LABELS = {
     ru: 'Привет! Я виртуальный помощник Элада 👋\nСпросите о проектах, навыках или контактах.',
   },
   error: { he: 'משהו השתבש, נסה שוב', en: 'Something went wrong, try again', ru: 'Что-то пошло не так' },
+  // Disclosure at the point of use, not only in the privacy policy: whatever is typed
+  // here leaves for a third-party model, and someone should be able to know that before
+  // they type it rather than by going looking for a legal page.
+  aiNotice: {
+    he: 'ההודעות מעובדות אצל ספק בינה מלאכותית כדי לייצר תשובה.',
+    en: 'Messages are processed by an AI provider to generate replies.',
+    ru: 'Сообщения обрабатываются провайдером ИИ для формирования ответа.',
+  },
   typing: { he: 'מקליד...', en: 'Typing...', ru: 'Печатает...' },
   // Graceful, specific failure states (R5.5) — a visitor should always know whether to
   // retry, wait, or just email instead.
@@ -262,6 +270,9 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
           </div>
 
           <div className="px-3 pb-3">
+            <p className="mb-2 text-[11px] leading-snug text-[var(--color-star-white)]/45">
+              {t('aiNotice')}
+            </p>
             {turnstileSiteKey ? (
               <div ref={turnstileRef} className="min-h-[65px]" />
             ) : (

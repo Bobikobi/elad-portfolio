@@ -1,8 +1,11 @@
 # Privacy policy rewrite - DRAFT FOR APPROVAL
 
-**This is a proposal, not live text.** Nothing here ships until the owner approves it.
-The live page is `src/app/privacy/PrivacyContent.tsx`, still carrying the false Supabase
-claim.
+**This is a proposal, not live text.** The live page is
+`src/app/privacy/PrivacyContent.tsx`, still carrying the false Supabase claim.
+
+Status: text approved in substance by the owner; both blanks now filled by their rulings
+(region eu-central-1, Turnstile and Upstash dropped). It ships WITH M1, never before -
+see Sequencing.
 
 Conventions applied: hyphens only in Hebrew and English; Russian keeps its normal
 punctuation, including the em-dash.
@@ -22,16 +25,19 @@ problem is that it describes a system that does not exist.
 | Google Analytics | **Not wired in.** `NEXT_PUBLIC_GA_ID` is a dead env var and the CSP still allows googletagmanager for nothing | see "loose ends" |
 | Chat model | Kimi (Moonshot AI) primary, Google Gemini fallback | `api/chat/route.ts:278,322` |
 | Chat storage | Nothing is stored today | M6 would change this |
-| Anti-abuse | IP-based rate limiting; Cloudflare Turnstile on the chat; Upstash Redis for distributed limits when configured | `api/chat/route.ts:172,235` |
+| Anti-abuse | IP-based rate limiting. Cloudflare Turnstile and Upstash Redis exist in the code but are env-gated and **will not be live at launch** (ruling 4), so neither is described | `api/chat/route.ts:172,235` |
 
-## Two blanks only the owner can fill
+## Blanks, now filled by the owner
 
-1. **Neon region.** The text must name the real one ("EU (Frankfurt)" / "US East" / ...).
-   The database is being created now.
-2. **Which optional integrations will be live in production at launch**: Cloudflace
-   Turnstile (`TURNSTILE_SECRET_KEY`) and Upstash Redis (`UPSTASH_REDIS_REST_*`). Both are
-   env-gated and currently inactive without keys. If they will not be set, delete
-   section 6's second sentence and the Turnstile row from section 7.
+1. **Neon region: `eu-central-1` (Frankfurt).** Vercel functions are pinned to `fra1` in
+   `vercel.json` to match, so an EU function queries an EU database and the data stays in
+   the EU. They were serving from `iad1` (US East).
+2. **Turnstile and Upstash are NOT live at launch** (ruling 4). Both mentions are deleted
+   rather than hedged: the honeypot plus the DB-backed rate limit are what will actually
+   be running, and a privacy page must not describe services that are switched off.
+
+The only remaining placeholder is the "last updated" date, which is set on the day it
+ships.
 
 **Sequencing:** section 3 describes database storage, which is only true once M1 ships.
 This text must land WITH M1 or after it - never before, or it describes something that is
@@ -57,7 +63,7 @@ or shared for commercial purposes, and they are not used for advertising.
 
 **3. Where it is stored**
 Contact form submissions are stored in a PostgreSQL database hosted by Neon in the
-`<REGION>` region, and are transmitted over an encrypted connection. They are kept for as
+eu-central-1 (Frankfurt) region, and are transmitted over an encrypted connection. They are kept for as
 long as needed to handle the enquiry and any work that follows from it, and you can ask
 for them to be deleted at any time.
 
@@ -78,14 +84,12 @@ and aggregate: they report page counts and loading performance, not individuals.
 **6. The chat widget**
 Messages you type are sent to an AI provider so that a reply can be generated - currently
 Moonshot AI (Kimi), with Google Gemini as a fallback. Conversations are not stored on this
-site. To keep the widget from being abused, requests are rate limited and may be checked
-by Cloudflare Turnstile.
+site. To keep the widget from being abused, requests are rate limited.
 
 **7. Who else processes data**
 - Vercel - hosting and cookieless analytics
 - Neon - database hosting
 - Moonshot AI and Google - chat replies only
-- Cloudflare - anti-abuse checks on the chat
 
 Your IP address is processed transiently for security and rate limiting. It is not stored
 alongside your message and is not used to profile you.
@@ -112,7 +116,7 @@ withdraw consent at any time. Write to eladeladsaa@gmail.com and it will be hand
 למטרות מסחריות, ולא נעשה בהם שימוש לפרסום.
 
 **3. היכן המידע נשמר**
-פניות מטופס יצירת הקשר נשמרות במסד נתונים PostgreSQL המתארח אצל Neon באזור `<REGION>`,
+פניות מטופס יצירת הקשר נשמרות במסד נתונים PostgreSQL המתארח אצל Neon באזור eu-central-1 (Frankfurt),
 והעברת המידע מתבצעת בחיבור מוצפן. הן נשמרות למשך הזמן הדרוש לטיפול בפנייה ובעבודה
 שנובעת ממנה, וניתן לבקש את מחיקתן בכל עת.
 
@@ -131,14 +135,12 @@ withdraw consent at any time. Write to eladeladsaa@gmail.com and it will be hand
 
 **6. ווידג'ט הצ'אט**
 הודעות שנכתבות בצ'אט נשלחות לספק בינה מלאכותית כדי לייצר תשובה - כרגע Moonshot AI (Kimi),
-עם Google Gemini כגיבוי. השיחות אינן נשמרות באתר הזה. כדי למנוע ניצול לרעה, הבקשות מוגבלות
-בקצב ועשויות להיבדק באמצעות Cloudflare Turnstile.
+עם Google Gemini כגיבוי. השיחות אינן נשמרות באתר הזה. כדי למנוע ניצול לרעה, הבקשות מוגבלות בקצב.
 
 **7. מי עוד מעבד מידע**
 - Vercel - אחסון האתר ומדידה ללא עוגיות
 - Neon - אחסון מסד הנתונים
 - Moonshot AI ו-Google - יצירת תשובות בצ'אט בלבד
-- Cloudflare - בדיקות מניעת ניצול לרעה בצ'אט
 
 כתובת ה-IP שלך מעובדת באופן זמני לצורכי אבטחה והגבלת קצב. היא אינה נשמרת לצד ההודעה
 ואינה משמשת לפרופיל משתמש.
@@ -168,7 +170,7 @@ eladeladsaa@gmail.com והבקשה תטופל.
 
 **3. Где данные хранятся**
 Сообщения из формы обратной связи хранятся в базе данных PostgreSQL, размещённой в Neon в
-регионе `<REGION>`; передача выполняется по зашифрованному соединению. Они хранятся
+регионе eu-central-1 (Frankfurt); передача выполняется по зашифрованному соединению. Они хранятся
 столько, сколько нужно для обработки запроса и последующей работы, и вы можете в любой
 момент попросить их удалить.
 
@@ -189,14 +191,12 @@ cookie и в агрегированном виде: они показывают 
 **6. Виджет чата**
 Сообщения отправляются провайдеру ИИ для формирования ответа — сейчас это Moonshot AI
 (Kimi), с Google Gemini в качестве резервного варианта. Переписка на этом сайте не
-сохраняется. Чтобы виджетом не злоупотребляли, запросы ограничиваются по частоте и могут
-проверяться через Cloudflare Turnstile.
+сохраняется. Чтобы виджетом не злоупотребляли, запросы ограничиваются по частоте.
 
 **7. Кто ещё обрабатывает данные**
 - Vercel — хостинг и аналитика без cookie
 - Neon — хостинг базы данных
 - Moonshot AI и Google — только формирование ответов в чате
-- Cloudflare — защита чата от злоупотреблений
 
 Ваш IP-адрес обрабатывается временно, для безопасности и ограничения частоты запросов. Он
 не сохраняется вместе с сообщением и не используется для профилирования.
@@ -206,6 +206,21 @@ cookie и в агрегированном виде: они показывают 
 отозвать согласие. Напишите на eladeladsaa@gmail.com — запрос будет обработан.
 
 ---
+
+## Where this is also disclosed
+
+Section 6 is not the only place the AI processing is stated. Ruling 6 put a one-line
+notice inside the chat widget itself, above the input:
+
+| locale | string |
+|---|---|
+| en | Messages are processed by an AI provider to generate replies. |
+| he | ההודעות מעובדות אצל ספק בינה מלאכותית כדי לייצר תשובה. |
+| ru | Сообщения обрабатываются провайдером ИИ для формирования ответа. |
+
+Disclosure at the point of use rather than only in a legal page: whatever someone types
+leaves for a third-party model, and they should be able to know that before typing it
+rather than by going looking.
 
 ## Implementation note
 
