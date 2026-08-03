@@ -385,9 +385,6 @@ export default function ProjectsStage({
       pitchRef.current = m.pitch;
       centreOffsetRef.current = arcUp(m) - Math.min(m.pitch / 2, arcUp(m));
 
-      svg.setAttribute('width', String(vw));
-      svg.setAttribute('height', String(vh));
-      space.setAttribute('transform', `matrix(${m.matrix.map((v) => v.toFixed(4)).join(' ')})`);
 
       const box = fanBox(m);
       const L = clamp(box.x, 0, vw);
@@ -397,6 +394,25 @@ export default function ProjectsStage({
       list.style.top = `${T.toFixed(1)}px`;
       list.style.width = `${Math.min(box.w, vw - L).toFixed(1)}px`;
       list.style.height = `${Math.min(box.h, vh - T).toFixed(1)}px`;
+
+      // The SVG box is the FAN's box, not the viewport's. A full-viewport vector layer
+      // sitting over a live WebGL canvas is rasterized and composited at that size every
+      // frame whatever is drawn in it; the ring only ever occupies a fraction of it.
+      // The padding covers the rail outside r1 and the windows' shadow.
+      const pad = 56;
+      const sx = clamp(box.x - pad, 0, vw);
+      const sy = clamp(box.y - pad, 0, vh);
+      const sw = Math.min(box.w + pad * 2, vw - sx);
+      const sh = Math.min(box.h + pad * 2, vh - sy);
+      svg.style.left = `${sx.toFixed(1)}px`;
+      svg.style.top = `${sy.toFixed(1)}px`;
+      svg.setAttribute('width', sw.toFixed(1));
+      svg.setAttribute('height', sh.toFixed(1));
+      // ...which means the ring's own coordinates are now relative to that box.
+      const mx = [...m.matrix] as typeof m.matrix;
+      mx[4] -= sx;
+      mx[5] -= sy;
+      space.setAttribute('transform', `matrix(${mx.map((v) => v.toFixed(4)).join(' ')})`);
 
       const span = span0;
       spanRef.current = span;
@@ -553,7 +569,7 @@ export default function ProjectsStage({
       </header>
 
       {/* The shapes. Screen-space px (no viewBox), under the content, never interactive. */}
-      <svg ref={svgRef} className="ring-layer pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
+      <svg ref={svgRef} className="ring-layer pointer-events-none absolute" aria-hidden />
 
       {/* The list: a real scroll container over the fan. The rail gives it something to
           scroll; the deck is sticky and zero-height so the windows stay put in screen
