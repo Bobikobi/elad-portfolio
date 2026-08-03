@@ -5,4 +5,4 @@ deployed preview alias.
 
 | stage | date | verdict | commit |
 |---|---|---|---|
-| [B8b](B8b-brief.md) - project windows as annular sectors ([verify](B8b-verify.md)) | 2026-08-03 | PARTIAL - criteria 1-5, 7 pass locally; criterion 6 unverified; not yet measured on the preview alias | uncommitted |
+| [B8b](B8b-brief.md) - project windows as annular sectors ([verify](B8b-verify.md)) | 2026-08-03 | PASS - all 7 criteria on the preview alias, criterion 6 on a real GPU at both tiers | f11f3aa (+ harness follow-up) |

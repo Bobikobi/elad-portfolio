@@ -2,36 +2,51 @@
 
 ### HARNESS
 
-`scripts/harness/b8b-ring.mjs` - puppeteer-core against system Chromium, one isolated
-browser context per case. Loads /projects with `?ringprobe=1`, waits 10.5s for the
-entry flight to settle, then measures the rendered DOM: inner-arc distance to the
+`scripts/harness/b8b-ring.mjs` - geometry. puppeteer-core against system Chromium, one
+isolated browser context per case. Loads /projects with `?ringprobe=1`, waits 10.5s for
+the entry flight to settle, then measures the rendered DOM: inner-arc distance to the
 planet centre, perpendicular distance from that centre to each straight edge, outer-arc
-sagitta, `isPointInFill` on the rotated corners of every content box, text overflow,
-and the cost of one full ring rebuild. Screenshots before and after a scroll.
-Output (gitignored): `.harness-out/b8b/`.
+sagitta, `isPointInFill` on the rotated corners of every content box, text overflow, and
+the cost of one full ring rebuild. Screenshots before and after a scroll.
+
+`scripts/harness/b8b-fps.mjs` - criterion 6. Same page on the REAL GPU
+(`--use-gl=angle --use-angle=vulkan`, verified renderer string), 4s of continuous
+ring scrolling per case, reporting the frame-interval distribution rather than an
+average. Two tiers: untouched, and CDP `Emulation.setCPUThrottlingRate` 6x. Also
+asserts the tier law by diffing the published ring geometry between tiers.
+
+Output (gitignored): `.harness-out/b8b/`, `.harness-out/b8b-fps/`.
 
 ### RUNS
 
 | run | status |
 |---|---|
-| desktop 1440x900, he/en/ru | done, local production build |
-| laptop 1280x800, he | done, local production build |
-| mobile 390x844, he/en | done, local production build |
-| deployed preview alias | **NOT RUN** - no Vercel CLI on this machine |
-| low tier / CPU throttle | **NOT RUN** |
-| high tier on a real GPU | **NOT RUN** - headless here is SwiftShader |
+| desktop 1440x900, he/en/ru | preview alias |
+| laptop 1280x800, he | preview alias |
+| mobile 390x844, he/en | preview alias |
+| criterion 6, desktop + mobile, high tier (Intel RPL-P) | preview alias |
+| criterion 6, desktop + mobile, low tier (6x CPU throttle) | preview alias |
 
-### MEASURED (local `next build` + `next start`, not the preview alias)
+Alias: `elad-portfolio-git-feat-cosmic-r1-r2-bobikobis-projects.vercel.app`, commit
+`f11f3aa`, reached with the protection-bypass header.
+
+### MEASURED (deployed preview alias)
 
 | # | criterion | target | measured | verdict |
 |---|---|---|---|---|
 | 1 | gap inner arc to limb constant | +/-4px | spread 0.00-0.01px over 21 samples per arc | PASS* |
-| 2 | side edges radial through centre | within 2% of R | worst 0.005% of R | PASS |
-| 3 | outer edge sagitta | > 3px | 14.08-15.42px desktop, 31.81px mobile | PASS |
+| 2 | side edges radial through centre | within 2% of R | worst 0.006% of R | PASS |
+| 3 | outer edge sagitta | > 3px | 14.16-15.51px desktop, 31.92px mobile | PASS |
 | 4 | hairline unbroken, corners rounded | all four sides | single closed subpath per window (one M, one Z), stroked; 14px quadratic corner joins on all four corners; portrait thickness clamped so the outer arc cannot cross the viewport edge | PASS, structural + screenshots |
 | 5 | text fully inside, three locales | no collision | all four rotated corners + centre of every content box inside the fill; 0 text overflow, 0 clipped inline boxes, he/en/ru | PASS |
-| 6 | 60fps while scrolling, both tiers | 60fps | **NOT MEASURED.** Headless is SwiftShader, so the frame rate measures software 3D, not this layer. What is measured: one full ring rebuild costs 0.6-1.8ms, and it only runs when the limb or the scroll actually moved | UNVERIFIED |
-| 7 | he/en/ru + mobile screenshots | attached | 12 PNGs (6 cases, static + scrolled) in `.harness-out/b8b/` | PASS |
+| 6 | 60fps while scrolling, both tiers | 60fps | high tier 60.0 / 59.5 fps (desktop / mobile), low tier 59.8 / 60.0 fps. Worst single frame 33.4ms; frames over 33ms: 0%, 0.4%, 0.8%, 0%. One full ring rebuild costs 0.5-1.8ms | PASS |
+| 7 | he/en/ru + mobile screenshots | attached | 12 PNGs in `.harness-out/b8b/`, 4 more in `.harness-out/b8b-fps/` | PASS |
+
+Tier law (L2): ring geometry between high and low tier differs by 0.35px desktop and
+3.60px mobile, and every difference is in R alone - r0, r1, rMid, dHalf, fan, th0 and the
+content box all derive from it. That is the pose's own micro-drift sampled at two
+different phases across two page loads, not a tier-dependent composition; it sits inside
+the vantage breath the plan already lists as deferred (6.8px on Saturn).
 
 \* see the first adversarial item below - criterion 1 needs reading with care.
 
@@ -63,16 +78,25 @@ Output (gitignored): `.harness-out/b8b/`.
 5. **A settle mistaken for correctness.** The 9s settle was raised from 4s after the
    he-desktop case caught the camera still flying in (R = 267.7 instead of 336.2). The
    numbers did not change, but the screenshot did.
+6. **Criterion 6 measured on a page with no scene on it.** This one actually happened.
+   The first GPU run used `--use-gl=angle --use-angle=gl-egl` and reported a flawless
+   60fps, median 16.7ms and worst 16.8ms on all four cases INCLUDING 6x CPU throttling -
+   an impossible result that looked like a clean pass. WebGL had failed to initialise, so
+   the page was DOM only. Caught because the published ring R was exactly 306.0, the
+   design constant to the decimal, which the live silhouette fit never returns. The
+   harness now refuses to measure at all unless R differs from the design value, and the
+   flag set is pinned with the probe results that justify it.
+7. **CPU throttling that never applied.** Low tier is only meaningful if the throttle is
+   live during the sample; it is sent over CDP before the run and the worst frame does
+   move with it (16.8ms high vs 33.3ms low on desktop), so it is taking effect.
 
 ### VERDICT
 
-**PARTIAL.** Criteria 1-5 and 7 pass on a local production build. Criterion 6 is
-unverified and cannot be verified on this machine's headless renderer. Nothing here is
-measured on the preview alias, which PART 2 makes the only reportable source, so none
-of these numbers are final under the plan's own rules.
+**PASS.** All seven criteria measured on the deployed preview alias, criterion 6 on the
+machine's real GPU at both tiers.
 
-### REMAINING
+### REMAINING (owner decisions, not defects)
 
-- Deploy the branch preview and re-run the harness with `BASE=<alias> BYPASS=<token>`.
-- Measure criterion 6 on a real GPU, high tier and CPU-throttled low tier.
-- Owner ruling on the two open questions in the brief.
+- Ruling on the two open questions in the brief: the read-only `publishLimb` addition to
+  `CameraRig.tsx` under PART 5.2, and whether 2-3 windows on desktop / 1 on mobile at
+  +/-35deg is accepted or the thickness and fan should be retuned.
