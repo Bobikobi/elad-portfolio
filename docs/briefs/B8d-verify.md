@@ -81,12 +81,64 @@ the owner's call, not mine.
 5. **The panel could be showing stale text.** It is compared idle and after a hover in
    every case, and the two differ in all seven.
 
+### SECOND ROUND - the caching ruling, and four owner corrections
+
+The ruling said to cache before trading content, and it was right to ask. It was also,
+measurably, not the cost.
+
+**Caching, done as directed.** A window at angle th is the window at angle 0 rotated by
+th, so the sector path, its clip path, the preview's box and the accent's gradient are now
+built once at angle 0 and rebuilt only when the ring's shape changes. Per-frame writes on
+a window are a transform and an opacity. Low tier before: 49.5-51.7. Low tier after:
+49.5-51.7. **No change**, which rules out per-frame JS.
+
+**Nor is it any one visual feature.** At the low tier, on the cached build: baseline 52.2,
+shadow off 53.2, previews off 52.8, both off 54.0. All within each other.
+
+**So the ceiling survived, and the count is what gives.** Thickness 230, three windows:
+low tier 55.8 / 56.2, high tier 56.5 / 60.0, against a 60.0 no-ring control. One reading
+of 40.7 at low tier and one of 40.4 at HIGH tier are in the set; an outlier that appears
+at the unthrottled tier too is contention on this machine, not the page.
+
+Final position on the 60fps criterion: **~56fps at the low tier with three windows**, up
+from 49.5, still not 60. The residual does not attach to any feature that can be removed.
+
+**Four corrections, all verified on the alias:**
+
+| ask | result |
+|---|---|
+| order: openable first, non-opening last | first five are all live-linked; the four with no site are at the tail |
+| no empty panes | the four with neither a live site nor a screenshot carry a drawn monogram - AV, AS, AW, OA |
+| words only on hover | with no pointer: the centred project. After a mouse moves off a window: empty. On a window: that project |
+| scroll like the discs, not cells vanishing | windows rise along their own radius - a scale about the ring centre over a longer fade - instead of switching on where they stand |
+
+**Preview images: assets missing, not a loading fault.** `openclaw`, `web-scraper`,
+`ai-style` and `accessibility-widget` have neither `previewImage` nor `liveUrl` in
+`lib/constants.ts`; the other eight load correctly. Real logos need an asset in `public/`
+and a line in `lib/constants.ts`, both of which belong to the other lane, so the monogram
+is the version that needs neither.
+
+**Three things that were wrong on the way, and what caught them:**
+
+1. The monograms rendered MIRRORED. The ring-plane matrix has a negative determinant at
+   this pose - the plane is seen from below - and shapes survive that invisibly while
+   letters do not.
+2. Hover-only text did not take effect anywhere. The test was
+   `(hover: hover) and (pointer: fine)`, which is false in a headless browser and wrong on
+   hybrid laptops. It waits for a real `pointermove` from a mouse now.
+3. A monogram came out as "Oמ" - two alphabets and two directions in a two-character mark,
+   from titles that mix Hebrew and Latin. One script only now.
+4. Two verification rounds read a STALE deploy and were nearly reported as failures. The
+   poll now keys on a value the new build actually changes.
+
 ### VERDICT
 
-**PARTIAL.** The redesign and defects 3 and 4 are done and measured. The 60fps criterion
-passes at high tier and fails at low tier (53.5-55.5). Nothing else outstanding.
+**PARTIAL.** The redesign, both surviving review defects, the mount ruling and all four
+owner corrections are done and measured. The 60fps criterion reads ~56fps at the low tier
+with three windows - better than 49.5, short of 60, and not attributable to any removable
+feature.
 
 ### NOT DONE
 
-- SCENE-FLICKER (the twinkle / bloom / aliasing / occlusion / chromatic-aberration task)
-  has not been started.
+- SCENE-FLICKER (twinkle / bloom / aliasing / occlusion / chromatic aberration) has not
+  been started.
