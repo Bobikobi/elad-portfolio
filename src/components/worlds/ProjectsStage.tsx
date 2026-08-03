@@ -15,6 +15,7 @@ import {
   arcUp,
   arcDown,
   fanOpacity,
+  screenAt,
   type RingMetrics,
 } from '@/lib/ringGeometry';
 import { livePlanetPlane } from '@/lib/orbitFraming';
@@ -105,6 +106,13 @@ export default function ProjectsStage({
 
     const defs = document.createElementNS(SVG_NS, 'defs');
     svg.appendChild(defs);
+    // Every path below is built in CANONICAL space around the origin; this group carries
+    // it to the screen. When the planet's ring plane is known that matrix is the plane's
+    // projection, so the windows become slices of the same plane the rings lie in - and
+    // the arcs, the corner joins and the rail stay circular maths in a file that never
+    // learns what an ellipse is.
+    const space = document.createElementNS(SVG_NS, 'g');
+    svg.appendChild(space);
     const bodies: SVGPathElement[] = [];
     const accents: SVGPathElement[] = [];
     const grads: SVGLinearGradientElement[] = [];
@@ -156,12 +164,15 @@ export default function ProjectsStage({
       const hitG = document.createElementNS(SVG_NS, 'g');
       hitG.setAttribute('aria-hidden', 'true');
       hitG.setAttribute('style', 'pointer-events: auto; cursor: pointer');
-      svg.appendChild(hitG);
+      space.appendChild(hitG);
       hits.push(hitG);
       if (photo) hitG.appendChild(photo);
 
       const body = document.createElementNS(SVG_NS, 'path');
       body.setAttribute('class', 'ring-window');
+      // The plane matrix scales the two axes differently, so a stroke would come out
+      // thicker one way than the other. This keeps the hairline a hairline.
+      body.setAttribute('vector-effect', 'non-scaling-stroke');
       // B8d - the window IS the preview now, so the glass over it is a tint rather than a
       // surface: at the panel weight (0.78) under a 0.32 photo the screenshot was a dark
       // smudge. Set inline, not in the stylesheet, because `app/**` belongs to the other
@@ -175,6 +186,7 @@ export default function ProjectsStage({
       accent.setAttribute('fill', 'none');
       accent.setAttribute('stroke', `url(#ring-accent-${i})`);
       accent.setAttribute('stroke-width', '1.5');
+      accent.setAttribute('vector-effect', 'non-scaling-stroke');
       hitG.appendChild(accent);
       accents.push(accent);
 
@@ -216,10 +228,12 @@ export default function ProjectsStage({
     // "there are more of these" is said in the same geometry as the thing it describes.
     const railArc = document.createElementNS(SVG_NS, 'path');
     railArc.setAttribute('class', 'ring-rail');
-    svg.appendChild(railArc);
+    railArc.setAttribute('vector-effect', 'non-scaling-stroke');
+    space.appendChild(railArc);
     const thumbArc = document.createElementNS(SVG_NS, 'path');
     thumbArc.setAttribute('class', 'ring-thumb');
-    svg.appendChild(thumbArc);
+    thumbArc.setAttribute('vector-effect', 'non-scaling-stroke');
+    space.appendChild(thumbArc);
 
     /** Bounding box of the whole fan, sampled off the sector boundary so it is right for
      *  every locale and both orientations without four hand-written cases. */
@@ -230,7 +244,7 @@ export default function ProjectsStage({
       for (let s = 0; s <= 24; s++) {
         const th = m.th0 + m.sweep * (-up + ((up + down) * s) / 24);
         for (const r of [m.r0, m.r1]) {
-          const [x, y] = pointAt(m, r, th);
+          const [x, y] = screenAt(m, r, th);
           if (x < x0) x0 = x;
           if (y < y0) y0 = y;
           if (x > x1) x1 = x;
@@ -277,6 +291,7 @@ export default function ProjectsStage({
 
       svg.setAttribute('width', String(vw));
       svg.setAttribute('height', String(vh));
+      space.setAttribute('transform', `matrix(${m.matrix.map((v) => v.toFixed(4)).join(' ')})`);
 
       const box = fanBox(m);
       const L = clamp(box.x, 0, vw);
@@ -433,7 +448,7 @@ export default function ProjectsStage({
     return () => {
       cancelAnimationFrame(raf);
       unbind.forEach((fn) => fn());
-      hits.forEach((g) => g.remove());
+      space.remove();
       defs.remove();
       railArc.remove();
       thumbArc.remove();
