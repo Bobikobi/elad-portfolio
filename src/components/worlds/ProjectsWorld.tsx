@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import { ExternalLink } from 'lucide-react';
 import type { Locale } from '@/lib/translations';
 import { translations as tr } from '@/lib/translations';
@@ -14,57 +13,65 @@ const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
  *
  *  What this file owns is only what goes INSIDE the sector's inscribed content box. That
  *  box is small and its height is set by the ring (the sector is narrowest at its inner
- *  edge), so the preview is a full-bleed backdrop under a scrim rather than a banner
- *  stacked above the text: it keeps the image and still gives the text the whole box.
+ *  edge). B8c: the preview is no longer an element inside that box - a rectangle with its
+ *  own background sitting inside a ring segment read as a window inside a window. It is
+ *  published here as `data-preview` and painted by the stage INTO the sector itself,
+ *  clipped to the shape, so the window has one outline and no inner one.
  *  Content is server-rendered here (crawlable) and passed in as the stage's children. */
 export default function ProjectsWorld({ locale }: { locale: Locale }) {
   const ordered = [...projects].sort((a, b) => Number(b.featured) - Number(a.featured));
   return (
     <ProjectsStage locale={locale} title={t('nav.projects', locale)} tagline={t('world.tagline.projects', locale)}>
-      {ordered.map((p) => (
-        <article
-          key={p.id}
-          data-window
-          className="ring-card group absolute left-0 top-0 flex flex-col justify-end overflow-hidden rounded-[12px]"
-        >
-          {p.previewImage && (
-            <Image
-              src={p.previewImage}
-              alt=""
-              fill
-              sizes="320px"
-              aria-hidden
-              className="pointer-events-none object-cover opacity-30 transition-opacity duration-300 group-hover:opacity-45"
-            />
-          )}
-          <div className="ring-card-scrim pointer-events-none absolute inset-0" />
-          <div className="relative flex flex-col gap-1.5 p-3.5">
-            <div className="flex items-start justify-between gap-3">
-              <h2 className="world-title line-clamp-2 text-[var(--color-star-white)]">
-                {p.title[locale]}
-              </h2>
-              {p.liveUrl && (
-                <a
-                  href={p.liveUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center gap-1 text-xs text-[var(--color-core-gold)]/80 transition-colors hover:text-[var(--color-core-gold)]"
-                >
-                  {t('projects.visit', locale)} <ExternalLink size={12} />
-                </a>
-              )}
-            </div>
-            <p className="world-body line-clamp-2 text-[var(--color-star-white)]/70">{p.description[locale]}</p>
-            <ul className="flex flex-nowrap gap-x-2.5 overflow-hidden">
+      {ordered.map((p) => {
+        const body = (
+          <>
+            <h2 className="world-title line-clamp-2 text-[var(--color-star-white)]">
+              {p.title[locale]}
+            </h2>
+            <p className="world-body line-clamp-2 text-[var(--color-star-white)]/70">
+              {p.description[locale]}
+            </p>
+            <ul className="flex flex-nowrap items-center gap-x-2.5 overflow-hidden">
               {p.techStack.slice(0, 3).map((tech) => (
                 <li key={tech} className="world-chip whitespace-nowrap text-[var(--color-core-gold)]/70">
                   {tech}
                 </li>
               ))}
+              {p.liveUrl && (
+                <li className="ms-auto inline-flex shrink-0 items-center gap-1 text-xs text-[var(--color-core-gold)]/80">
+                  {t('projects.visit', locale)} <ExternalLink size={12} aria-hidden />
+                </li>
+              )}
             </ul>
-          </div>
-        </article>
-      ))}
+          </>
+        );
+        // The whole window opens the project. It is one anchor, not an anchor nested in a
+        // card: the "visit" affordance above is a list item inside it, because an <a>
+        // inside an <a> is invalid and browsers silently unnest it.
+        return p.liveUrl ? (
+          <a
+            key={p.id}
+            data-window
+            data-preview={p.previewImage ?? undefined}
+            href={p.liveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${p.title[locale]} - ${t('projects.visit', locale)}`}
+            className="ring-card absolute left-0 top-0 flex cursor-pointer flex-col justify-center gap-1.5 overflow-hidden"
+          >
+            {body}
+          </a>
+        ) : (
+          <article
+            key={p.id}
+            data-window
+            data-preview={p.previewImage ?? undefined}
+            className="ring-card absolute left-0 top-0 flex flex-col justify-center gap-1.5 overflow-hidden"
+          >
+            {body}
+          </article>
+        );
+      })}
     </ProjectsStage>
   );
 }

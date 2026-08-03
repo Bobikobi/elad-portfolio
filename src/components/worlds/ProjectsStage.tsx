@@ -11,6 +11,7 @@ import {
   pointAt,
   windowArc,
   scrollSpan,
+  arcPath,
   type RingMetrics,
 } from '@/lib/ringGeometry';
 import { useWorldExit } from '@/hooks/useWorldExit';
@@ -81,6 +82,7 @@ export default function ProjectsStage({
     // measurements assert against the same numbers the camera is framed from instead of
     // re-deriving them. Off by default — nothing extra reaches a normal render.
     const probe = new URLSearchParams(window.location.search).has('ringprobe');
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const cards = Array.from(deck.querySelectorAll<HTMLElement>('[data-window]'));
     const n = cards.length;
 
@@ -95,6 +97,8 @@ export default function ProjectsStage({
     const bodies: SVGPathElement[] = [];
     const accents: SVGPathElement[] = [];
     const grads: SVGLinearGradientElement[] = [];
+    const photos: Array<SVGImageElement | null> = [];
+    const clips: Array<SVGPathElement | null> = [];
     const unbind: Array<() => void> = [];
     cards.forEach((card, i) => {
       const grad = document.createElementNS(SVG_NS, 'linearGradient');
@@ -109,6 +113,30 @@ export default function ProjectsStage({
       }
       defs.appendChild(grad);
       grads.push(grad);
+
+      // The preview, painted INTO the sector and clipped to it (B8c). Putting it in an
+      // element inside the content box drew a second rounded rectangle within the ring
+      // segment - a window inside a window. Clipped to the shape there is only ever one
+      // outline, and the photo picks up the curves for free.
+      const src = card.dataset.preview;
+      let photo: SVGImageElement | null = null;
+      let clipPath: SVGPathElement | null = null;
+      if (src) {
+        const clip = document.createElementNS(SVG_NS, 'clipPath');
+        clip.setAttribute('id', `ring-clip-${i}`);
+        clipPath = document.createElementNS(SVG_NS, 'path');
+        clip.appendChild(clipPath);
+        defs.appendChild(clip);
+
+        photo = document.createElementNS(SVG_NS, 'image');
+        photo.setAttribute('class', 'ring-photo');
+        photo.setAttribute('href', src);
+        photo.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+        photo.setAttribute('clip-path', `url(#ring-clip-${i})`);
+        svg.appendChild(photo);
+      }
+      photos.push(photo);
+      clips.push(clipPath);
 
       const body = document.createElementNS(SVG_NS, 'path');
       body.setAttribute('class', 'ring-window');
@@ -128,6 +156,7 @@ export default function ProjectsStage({
       const hot = (on: boolean) => {
         body.classList.toggle('is-hot', on);
         accent.classList.toggle('is-hot', on);
+        photo?.classList.toggle('is-hot', on);
       };
       const onEnter = () => hot(true);
       const onLeave = () => hot(false);
@@ -149,6 +178,15 @@ export default function ProjectsStage({
       });
     });
 
+    // The ring's own scrollbar (B8c): a rail concentric with the windows, outside them, so
+    // "there are more of these" is said in the same geometry as the thing it describes.
+    const railArc = document.createElementNS(SVG_NS, 'path');
+    railArc.setAttribute('class', 'ring-rail');
+    svg.appendChild(railArc);
+    const thumbArc = document.createElementNS(SVG_NS, 'path');
+    thumbArc.setAttribute('class', 'ring-thumb');
+    svg.appendChild(thumbArc);
+
     /** Bounding box of the whole fan, sampled off the sector boundary so it is right for
      *  every locale and both orientations without four hand-written cases. */
     const fanBox = (m: RingMetrics) => {
@@ -169,14 +207,33 @@ export default function ProjectsStage({
 
     let raf = 0;
     let sig = '';
+    // B8c — the ring follows a DAMPED copy of scrollTop, not scrollTop itself. A wheel
+    // notch is ~100px in one step, which at this radius is eleven degrees of rotation in
+    // a single frame: the windows arrived in jumps however smooth the rest of the frame
+    // was. The native scroll still owns the position (so the wheel, the trackpad, touch,
+    // the keyboard and the departure gesture all keep working unchanged); only what the
+    // ring DRAWS is eased toward it.
+    const SCROLL_TAU = 0.085; // seconds to 1/e — quick enough not to feel like lag
+    let shown = 0;
+    let lastT = 0;
     const update = (force = false) => {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const m = ringMetrics(vw, vh, rtl, portrait);
+      const now = performance.now();
+      const dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0;
+      lastT = now;
+      const span0 = scrollSpan(n, m);
+      const target = clamp(list.scrollTop, 0, span0);
+      if (force || reduce) shown = target;
+      else {
+        shown += (target - shown) * (1 - Math.exp(-dt / SCROLL_TAU));
+        if (Math.abs(target - shown) < 0.25) shown = target;
+      }
       // The rig's pose has a live micro-drift, so the ring has to be rebuilt whenever the
       // limb moves — but only then. This guard is what keeps a 60Hz loop from doing 12
       // path rebuilds a frame while the planet is settled and nobody is scrolling.
-      const next = `${vw}|${vh}|${m.cx.toFixed(1)}|${m.cy.toFixed(1)}|${m.R.toFixed(1)}|${Math.round(list.scrollTop)}`;
+      const next = `${vw}|${vh}|${m.cx.toFixed(1)}|${m.cy.toFixed(1)}|${m.R.toFixed(1)}|${shown.toFixed(1)}`;
       if (!force && next === sig) return;
       sig = next;
       const t0 = probe ? performance.now() : 0;
@@ -195,10 +252,10 @@ export default function ProjectsStage({
       list.style.width = `${Math.min(box.w, vw - L).toFixed(1)}px`;
       list.style.height = `${Math.min(box.h, vh - T).toFixed(1)}px`;
 
-      const span = scrollSpan(n, m);
+      const span = span0;
       spanRef.current = span;
       rail.style.height = `${(list.clientHeight + span).toFixed(1)}px`;
-      const scroll = clamp(list.scrollTop, 0, span);
+      const scroll = shown;
 
       const head = headerRef.current;
       if (head && !m.portrait) {
@@ -228,6 +285,7 @@ export default function ProjectsStage({
           card.style.visibility = 'hidden';
           body.setAttribute('d', '');
           accent.setAttribute('d', '');
+          photos[i]?.setAttribute('width', '0');
           continue;
         }
         card.style.visibility = '';
@@ -235,6 +293,31 @@ export default function ProjectsStage({
         body.setAttribute('opacity', opacity.toFixed(3));
         accent.setAttribute('d', innerArcPath(m, m.r0, th - m.dHalf, th + m.dHalf));
         accent.setAttribute('opacity', opacity.toFixed(3));
+
+        // The photo is a plain rect covering the sector's bounding box, clipped to the
+        // sector. `slice` crops it rather than letterboxing, so the aspect ratio of the
+        // source never shows up as bars inside the shape.
+        const photo = photos[i];
+        const clip = clips[i];
+        if (photo && clip) {
+          clip.setAttribute('d', body.getAttribute('d') as string);
+          let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+          for (let k = 0; k <= 8; k++) {
+            const a2 = th - m.dHalf + (2 * m.dHalf * k) / 8;
+            for (const r of [m.r0, m.r1]) {
+              const [px, py] = pointAt(m, r, a2);
+              if (px < bx0) bx0 = px;
+              if (py < by0) by0 = py;
+              if (px > bx1) bx1 = px;
+              if (py > by1) by1 = py;
+            }
+          }
+          photo.setAttribute('x', bx0.toFixed(1));
+          photo.setAttribute('y', by0.toFixed(1));
+          photo.setAttribute('width', (bx1 - bx0).toFixed(1));
+          photo.setAttribute('height', (by1 - by0).toFixed(1));
+          photo.setAttribute('opacity', opacity.toFixed(3));
+        }
 
         const [gx0, gy0] = pointAt(m, m.r0, th - m.dHalf);
         const [gx1, gy1] = pointAt(m, m.r0, th + m.dHalf);
@@ -253,6 +336,26 @@ export default function ProjectsStage({
           `translate(${(cxp - L).toFixed(1)}px, ${(cyp - T).toFixed(1)}px)` +
           ` rotate(${rot.toFixed(2)}deg) translate(-50%, -50%)`;
       }
+
+      // The rail. It only exists when there is something to scroll, and the thumb's LENGTH
+      // is the fraction of the ring currently on screen - the same information a scrollbar
+      // gives, said as an arc.
+      const rTrack = m.r1 + 16;
+      if (span > 1) {
+        const visible = 2 * m.fan * m.rMid;
+        const frac = clamp(visible / (visible + span), 0.08, 1);
+        const at = span > 0 ? clamp(shown / span, 0, 1) : 0;
+        const a0 = m.th0 - m.sweep * m.fan;
+        const a1 = m.th0 + m.sweep * m.fan;
+        const t0a = a0 + (a1 - a0) * (at * (1 - frac));
+        const t1a = a0 + (a1 - a0) * (at * (1 - frac) + frac);
+        railArc.setAttribute('d', arcPath(m, rTrack, Math.min(a0, a1), Math.max(a0, a1)));
+        thumbArc.setAttribute('d', arcPath(m, rTrack, Math.min(t0a, t1a), Math.max(t0a, t1a)));
+      } else {
+        railArc.setAttribute('d', '');
+        thumbArc.setAttribute('d', '');
+      }
+
       list.dataset.ready = '1';
       if (probe) {
         svg.dataset.ring = JSON.stringify({
@@ -277,8 +380,11 @@ export default function ProjectsStage({
       cancelAnimationFrame(raf);
       unbind.forEach((fn) => fn());
       defs.remove();
+      railArc.remove();
+      thumbArc.remove();
       bodies.forEach((p) => p.remove());
       accents.forEach((p) => p.remove());
+      photos.forEach((p) => p?.remove());
       for (const card of cards) card.style.cssText = '';
       delete list.dataset.ready;
     };

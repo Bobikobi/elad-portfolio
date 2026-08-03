@@ -49,8 +49,13 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
   landscape: {
     gap: 48,
     depth: 330,
-    thick: 240,
-    cardGap: 20,
+    // B8c - 240px of thickness put exactly two windows inside a +/-35deg fan (the arc is
+    // 634px at this framing). The image moved out of the content box and into the sector
+    // fill, which is what freed the height to make a window thinner: 180 + 16 puts three
+    // whole windows in the fan with the fourth entering, and still leaves 106px of
+    // content height at the inner edge - title, two lines of description and the chips.
+    thick: 180,
+    cardGap: 16,
     fanDeg: 35,
     corner: 14,
     padInner: 28,
@@ -241,6 +246,23 @@ export function innerArcPath(
   const A = pointAt(m, r0, thA + a0);
   const B = pointAt(m, r0, thB - a0);
   return `M${f(A[0])} ${f(A[1])}A${f(r0)} ${f(r0)} 0 0 1 ${f(B[0])} ${f(B[1])}`;
+}
+
+/**
+ * A bare arc, for the scroll rail (B8c). Same convention as the window paths so the rail
+ * sits concentric with everything else rather than being a straight bar beside a ring.
+ */
+export function arcPath(
+  m: Pick<RingMetrics, 'cx' | 'cy'>,
+  r: number,
+  thA: number,
+  thB: number
+): string {
+  const A = pointAt(m, r, thA);
+  const B = pointAt(m, r, thB);
+  const large = Math.abs(thB - thA) > Math.PI ? 1 : 0;
+  const sweep = thB > thA ? 1 : 0;
+  return `M${f(A[0])} ${f(A[1])}A${f(r)} ${f(r)} 0 ${large} ${sweep} ${f(B[0])} ${f(B[1])}`;
 }
 
 /** Where window `i` sits, in arc length (px at rMid) from the fan's centre. */

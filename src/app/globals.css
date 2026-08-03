@@ -474,20 +474,41 @@ html[lang='ru'] .world-body {
 /* A window's CONTENT box — the rectangle inscribed in the sector. Size and transform are
    owned by the ring layer; everything here is skin only. transform-origin must be the
    top-left corner: the layer places the box with translate → rotate → translate(-50%,-50%)
-   and that chain only lands on the right radius from a corner origin. */
+   and that chain only lands on the right radius from a corner origin.
+
+   It has NO surface of its own — no background, no border, no radius (B8c). It used to
+   carry the preview image and a scrim, which drew a second rounded rectangle inside the
+   ring segment: a window inside a window. The image now fills the sector itself. */
 .ring-card {
   position: absolute;
   transform-origin: 0 0;
   will-change: transform;
   pointer-events: auto;
+  text-decoration: none;
 }
-.ring-card-scrim {
-  background: linear-gradient(
-    to top,
-    rgba(5, 7, 20, 0.92) 0%,
-    rgba(5, 7, 20, 0.6) 55%,
-    rgba(5, 7, 20, 0.18) 100%
-  );
+
+/* The preview, painted into the sector and clipped to it. Kept low: the window's job is
+   to be readable, and a site screenshot is busy at any size. It lifts on hover, which is
+   also the moment the text matters least. */
+.ring-photo { opacity: 0.32; transition: opacity 0.3s ease; }
+.ring-photo.is-hot { opacity: 0.55; }
+
+/* Scroll rail (B8c): the ring's own scrollbar, concentric with it. The pulse runs a few
+   times on arrival and stops — it is there to say "these move", not to keep moving. */
+.ring-rail { fill: none; stroke: rgba(238, 241, 255, 0.1); stroke-width: 2; stroke-linecap: round; }
+.ring-thumb {
+  fill: none;
+  stroke: rgba(255, 201, 120, 0.75);
+  stroke-width: 3;
+  stroke-linecap: round;
+  animation: ring-thumb-pulse 1.6s ease-in-out 3;
+}
+@keyframes ring-thumb-pulse {
+  0%, 100% { stroke: rgba(255, 201, 120, 0.75); stroke-width: 3; }
+  50% { stroke: rgba(255, 201, 120, 1); stroke-width: 5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ring-thumb { animation: none; }
 }
 
 /* ===== World window list (other worlds) ===== */
