@@ -22,12 +22,13 @@ const OUT = process.env.OUT || path.join(process.cwd(), '.harness-out', 'b8b-fps
 const SETTLE = Number(process.env.SETTLE || 11000);
 fs.mkdirSync(OUT, { recursive: true });
 
+const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const CASES = [
   { name: 'desktop-high', vp: { width: 1440, height: 900 }, throttle: 1 },
   { name: 'desktop-low', vp: { width: 1440, height: 900 }, throttle: 6 },
   { name: 'mobile-high', vp: { width: 390, height: 844, isMobile: true, hasTouch: true }, throttle: 1 },
   { name: 'mobile-low', vp: { width: 390, height: 844, isMobile: true, hasTouch: true }, throttle: 6 },
-];
+].filter((c) => !ONLY || ONLY.includes(c.name));
 
 /**
  * Scroll the ring for SECS seconds and record every animation frame. Reported as

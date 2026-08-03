@@ -437,16 +437,18 @@ html[lang='ru'] .world-body {
 /* The windows are SVG <path> annular sectors; this is only their skin. The hairline has
    to survive on all four curved edges, which is the whole reason the shape is a path and
    not a clip-path on a div — a clip-path would cut the border off with everything else. */
-.ring-layer {
-  /* One shadow pass for the whole ring rather than a filter per path — the `d` of every
-     visible path is rewritten whenever the limb drifts, and a per-path filter would
-     re-rasterize each of them separately every time. */
-  filter: drop-shadow(0 12px 26px rgba(8, 10, 34, 0.55));
-}
 .ring-window {
   fill: rgba(5, 7, 20, 0.78);
   stroke: rgba(238, 241, 255, 0.14);
   stroke-width: 1;
+  /* The shadow belongs to the WINDOW, not to the layer (B8c). B8b put one pass on the
+     whole `.ring-layer` on the theory that one filter beats twelve — which held only
+     while the layer was paths. Once the previews joined it, every limb drift made the
+     browser re-rasterize a filtered layer containing bitmaps: measured on the preview at
+     390x844, 42.2fps with 42.3% of frames over 33ms, against 60fps and 0% with the
+     filter off. Per path it is 59.8fps on mobile and 60 on desktop, so the shadow stays
+     and the images are simply not inside it. */
+  filter: drop-shadow(0 12px 26px rgba(8, 10, 34, 0.55));
   transition: fill 0.3s ease, stroke 0.3s ease;
 }
 .ring-window.is-hot {
