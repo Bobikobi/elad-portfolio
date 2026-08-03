@@ -2,6 +2,13 @@
 import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { translations, type Locale } from './translations';
 import { localeForPath } from './sections';
+import { LOCALE_COOKIE, localeCookie, parseLocale } from './localePref';
+
+/** The preference the SERVER saw, read from the same cookie it read. */
+function cookieLocale(): Locale | null {
+  const hit = document.cookie.match(new RegExp(`(?:^|;\\s*)${LOCALE_COOKIE}=([^;]*)`));
+  return parseLocale(hit?.[1]);
+}
 
 export { translations };
 export type { Locale };
@@ -70,6 +77,11 @@ function resolveLocale(fallback: Locale): Locale {
   if (overrideLocale) return overrideLocale;
   const routeLocale = localeForPath(window.location.pathname);
   if (routeLocale) return routeLocale;
+  // F3.2 — the COOKIE before localStorage, because the cookie is what the server just
+  // used to choose the `lang` and `dir` on the HTML being hydrated. Consulting a
+  // different source here is how the client ends up disagreeing with its own markup.
+  const fromCookie = cookieLocale();
+  if (fromCookie) return fromCookie;
   try {
     const saved = localStorage.getItem('locale');
     if (isLocale(saved)) return saved;
@@ -106,13 +118,27 @@ export function I18nProvider({
   useEffect(() => {
     const pathLocale = window.location.pathname.split('/')[1];
     if (isLocale(pathLocale)) {
+      document.cookie = localeCookie(pathLocale);
       try { localStorage.setItem('locale', pathLocale); } catch { /* private mode */ }
+      return;
     }
+    // F3.2 migration. Everyone who chose a language before this shipped has it in
+    // localStorage and nowhere else, so the server would keep guessing English for them
+    // and they would keep seeing the flip. Mint the cookie from what they already have,
+    // once, and their next visit is server-correct.
+    if (cookieLocale()) return;
+    try {
+      const saved = localStorage.getItem('locale');
+      if (isLocale(saved)) document.cookie = localeCookie(saved);
+    } catch { /* private mode — nothing to migrate */ }
   }, []);
 
   const setLocale = useCallback((l: Locale, persist = true) => {
     overrideLocale = l;
     if (persist) {
+      // Cookie first: it is the copy the server reads. localStorage stays as a mirror so
+      // nothing that already depends on it breaks.
+      document.cookie = localeCookie(l);
       try { localStorage.setItem('locale', l); } catch { /* private mode */ }
     }
     document.documentElement.lang = l;
