@@ -187,7 +187,7 @@ export default function ProjectsStage({
         mark.setAttribute('class', 'ring-mark');
         mark.setAttribute('text-anchor', 'middle');
         mark.setAttribute('dominant-baseline', 'central');
-        mark.setAttribute('fill', 'rgba(255,201,120,0.30)');
+        mark.setAttribute('fill', 'rgba(255,201,120,0.42)');
         mark.setAttribute('style', 'font-family: var(--font-display); font-weight: 300; letter-spacing: 0.08em');
         mark.textContent = card.dataset.mark;
       }
@@ -334,6 +334,13 @@ export default function ProjectsStage({
           mark.setAttribute('x', m.rContent.toFixed(1));
           mark.setAttribute('y', '0');
           mark.setAttribute('font-size', Math.max(22, Math.min(64, m.contentHalf * 1.5)).toFixed(0));
+          // The ring-plane matrix can have a NEGATIVE determinant - here it does, because
+          // the plane is seen from below and its `v` points up the screen. Shapes and
+          // photographs survive being mirrored without anyone noticing; letters do not,
+          // and the monograms rendered back to front. Flipping about the text's own
+          // baseline undoes it without moving it.
+          const det = m.matrix[0] * m.matrix[3] - m.matrix[1] * m.matrix[2];
+          mark.setAttribute('transform', det < 0 ? `translate(0,0) scale(1,-1)` : '');
         }
         const g = grads[i];
         g.setAttribute('x1', gx0.toFixed(1));
