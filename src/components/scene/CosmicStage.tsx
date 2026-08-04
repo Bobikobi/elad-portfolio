@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useViewMode } from '@/lib/viewModeContext';
 import { useScene } from '@/lib/sceneStore';
-import { sectionForPath } from '@/lib/sections';
+import { isImmersiveRoute, sectionForPath } from '@/lib/sections';
 import { captureEntryRoute } from '@/lib/entryRoute';
 import SceneBoundary from '@/components/scene/SceneBoundary';
 import SceneLoader from '@/components/scene/SceneLoader';
@@ -25,12 +25,12 @@ const GALAXY_POSTER = '/images/galaxy/poster.webp';
  */
 export default function CosmicStage() {
   const pathname = usePathname();
-  // One decision, made once, in ViewModeProvider. This used to re-derive it from the two
-  // capability hooks, which meant the canvas and the layout each answered "is this
-  // immersive?" separately - and the layout's answer was route-aware while this one was
-  // not, so a classic route could still be paying for a mounted scene.
+  // TWO conditions, and both are load-bearing. The mode is the visitor's (already demoted
+  // by the provider if the browser cannot honour it) and the route decides whether this
+  // page is a scene at all. Dropping the route half is what put the galaxy behind the
+  // privacy policy and left every guide and legal page paying for a running canvas.
   const { mode } = useViewMode();
-  const immersive = mode === 'cosmic';
+  const immersive = mode === 'cosmic' && isImmersiveRoute(pathname);
 
   // Bridge: URL is the source of truth for which world the camera is in.
   useEffect(() => {

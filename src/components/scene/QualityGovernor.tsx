@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { useScene, type Quality } from '@/lib/sceneStore';
 
 /**
@@ -66,10 +66,6 @@ export default function QualityGovernor() {
   const setQuality = useScene((s) => s.setQuality);
   const setDisplayHz = useScene((s) => s.setDisplayHz);
   const setPacing = useScene((s) => s.setPacing);
-  const invalidate = useThree((s) => s.invalidate);
-  const setFrameloop = useThree((s) => s.setFrameloop);
-  // 0 until the estimate lands; the flip from 0 → measured is what starts the paced loop.
-  const displayHz = useScene((s) => s.displayHz);
 
   const started = useRef(0);
   const samples = useRef<number[]>([]);
@@ -79,29 +75,11 @@ export default function QualityGovernor() {
   const belowFor = useRef(0);
   const aboveFor = useRef(0);
   const downgrades = useRef(0);
-  const pacedRef = useRef(false);
 
-  // Paced driver for the even-60 lock: R3F is switched to on-demand and we ask for one
-  // frame per 1/60s slot. Frames are still real frames (same delta-driven easing), we
-  // simply stop asking for the ones the design does not need.
-  useEffect(() => {
-    if (!displayHz || !pacedRef.current) return;
-    // Switch to on-demand HERE, in the same tick that starts the driver, so there is
-    // never a window where the loop is off and nothing is asking for frames.
-    setFrameloop('demand');
-    let raf = 0;
-    let last = 0;
-    const period = 1000 / EVEN_TARGET;
-    const tick = (ts: number) => {
-      raf = requestAnimationFrame(tick);
-      if (ts - last >= period - 1) {
-        last = ts;
-        invalidate();
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); setFrameloop('always'); };
-  }, [invalidate, setFrameloop, displayHz]);
+  // The paced driver used to live here. It now belongs to FramePacer, which also owns the
+  // idle throttle — two components calling setFrameloop is how a scene ends up with a loop
+  // that neither of them thinks it turned off. This file governs the TIER and the pacing
+  // PROFILE; it no longer touches the loop.
 
   useFrame((_, delta) => {
     const now = performance.now() / 1000;
@@ -123,9 +101,6 @@ export default function QualityGovernor() {
         samples.current.length = 0;
         setDisplayHz(measured);
         setPacing(pacing);
-        // Only engage the paced loop where it actually buys something: a panel faster
-        // than 60 but below the smooth threshold, whose uncapped cadence is uneven.
-        if (pacing === 'even' && measured > EVEN_TARGET + 6) pacedRef.current = true;
       }
       return;
     }

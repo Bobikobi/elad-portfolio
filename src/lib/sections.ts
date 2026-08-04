@@ -125,6 +125,31 @@ export function sectionForPath(pathname: string): Section | null {
   return BY_SLUG.get(seg) ?? null;
 }
 
+/**
+ * Does this route get the live WebGL cosmos at all?
+ *
+ * Exactly six routes do: home in each locale, and the five planet-world section routes.
+ * Everything else - the legal pages, the guides, the service pages, 404 - is long-form
+ * reading and gets a plain background.
+ *
+ * This exists because both the layout and the canvas mount used to answer that question
+ * separately, and one of them dropped the route half: the layout knew /privacy was not
+ * immersive while CosmicStage only checked the view mode, so the galaxy rendered behind
+ * the privacy policy in production and every content route paid for a running scene. One
+ * predicate, imported by both, is the only way that stays true.
+ */
+export function isImmersiveRoute(pathname: string): boolean {
+  const parts = pathname.split('/').filter(Boolean);
+  const rest = parts.length && isPrefixedLocale(parts[0]) ? parts.slice(1) : parts;
+  // Home, in any locale.
+  if (rest.length === 0) return true;
+  // Deliberately NOT sectionForPath(), which matches on the first segment alone and so
+  // answers "yes" for /services/nextjs-development and every other service sub-page.
+  // Those are long-form reading, not worlds. Exactly one segment, and it must be a section.
+  if (rest.length > 1) return false;
+  return BY_SLUG.has(rest[0]);
+}
+
 /** Per-section, per-locale SEO title + description (Hebrew is primary). */
 export const SECTION_META: Record<SectionId, Record<Locale, { title: string; description: string }>> = {
   about: {

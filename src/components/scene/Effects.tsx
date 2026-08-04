@@ -167,6 +167,10 @@ export default function Effects() {
         <GodRays
           ref={(e: GodRaysLike | null) => { godRaysRef.current = e ?? null; }}
           sun={sunMesh}
+          // Explicit rather than relying on the effect's default: the rays are blurred and
+          // mip-based, so half resolution is close to free visually and is a quarter of
+          // the fragments in the pass that samples 26-60 times per pixel.
+          resolutionScale={0.5}
           samples={high ? 60 : 26}
           density={0.86}
           decay={0.93}
@@ -188,6 +192,9 @@ export default function Effects() {
       <Bloom
         key={solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}
         mipmapBlur
+        // Half-res base for the same reason as the rays: the blur is a mip chain, so the
+        // pass cannot resolve detail this buffer would have carried anyway.
+        resolutionScale={0.5}
         intensity={solar ? (focused ? 0.34 : 0.6) : 0.5}
         luminanceThreshold={solar ? (focused ? 0.86 : 0.72) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
