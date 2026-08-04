@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useViewMode } from '@/lib/viewModeContext';
 import { useScene } from '@/lib/sceneStore';
 import { sectionForPath } from '@/lib/sections';
+import { isCosmicRoute } from '@/lib/cosmicRoute';
 import { captureEntryRoute } from '@/lib/entryRoute';
 import SceneBoundary from '@/components/scene/SceneBoundary';
 import SceneLoader from '@/components/scene/SceneLoader';
@@ -30,7 +31,12 @@ export default function CosmicStage() {
   // immersive?" separately - and the layout's answer was route-aware while this one was
   // not, so a classic route could still be paying for a mounted scene.
   const { mode } = useViewMode();
-  const immersive = mode === 'cosmic';
+  // The canvas belongs to the COSMIC ROUTES - home and the five worlds - and to nowhere
+  // else. It used to mount on every route in cosmic mode, so a guide, a service detail
+  // page or a legal page each pulled the whole three.js bundle and blocked the main
+  // thread to show a paragraph. The layout has always known this test; the canvas did
+  // not, and the two disagreeing was the entire cost.
+  const immersive = mode === 'cosmic' && isCosmicRoute(pathname);
 
   // Bridge: URL is the source of truth for which world the camera is in.
   useEffect(() => {
