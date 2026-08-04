@@ -1,0 +1,888 @@
+'use client';
+import { useRef, useMemo, useEffect, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import { useCursor } from '@react-three/drei';
+import * as THREE from 'three';
+import { useRouter } from 'next/navigation';
+import { useScene } from '@/lib/sceneStore';
+import { planetPositions, planetRadii, planetRingNormal, PLANET_PAGES } from '@/lib/planetPositions';
+import { PLANET_SECTION, sectionPath } from '@/lib/sections';
+import { BODY_FACTS } from '@/lib/bodyFacts';
+import { useI18n } from '@/lib/i18n';
+import { HUD_AVAILABLE } from '../DebugHud';
+import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
+import { makeRng, SEED } from '@/lib/rng';
+import Sun from '../solar/Sun';
+import AsteroidBelt from '../solar/AsteroidBelt';
+import WorldBackdrop from '../solar/WorldBackdrop';
+import ZodiacalDust from '../solar/ZodiacalDust';
+
+const _wp = new THREE.Vector3();
+const DEG2RAD = Math.PI / 180;
+
+/** Live per-body eclipse strengths, published for verification (HUD gate only).
+ *  `__eclipse` is the DAMPED value the shader sees; `__eclipseRaw` is this frame's
+ *  geometry. Sampling the damped one to measure how OFTEN eclipses happen is a trap: its
+ *  time constant is longer than any sane sampling interval, so one real event smears
+ *  across the next several samples and the rate comes out several times too high. */
+const eclipseReport: Record<string, number> = {};
+const eclipseRawReport: Record<string, number> = {};
+/**
+ * Orbital-phase setters, one per body (HUD gate only). Eclipses are a real geometric
+ * consequence of where the planets happen to be, and the orbits take five to ten minutes
+ * a revolution — so waiting for an alignment is not a test, it is a vigil. This lets the
+ * harness PUT two bodies in line and then measure whether the shadow is actually cast,
+ * which is the part worth verifying.
+ */
+const phaseSetters: Record<string, (a: number) => void> = {};
+if (HUD_AVAILABLE && typeof window !== 'undefined') {
+  const w = window as unknown as Record<string, unknown>;
+  w.__eclipse = eclipseReport;
+  w.__eclipseRaw = eclipseRawReport;
+  w.__orbitPhase = (key: string, angle: number) => phaseSetters[key]?.(angle);
+  w.__orbitKeys = () => Object.keys(phaseSetters);
+  // RULING 1: the orbital elements themselves. An eclipse now needs the two bodies to
+  // agree on longitude AND to be near their nodes, so a harness can no longer find one by
+  // matching longitudes alone — it has to be able to solve the geometry.
+  w.__orbitElements = () => PLANETS.map((p) => ({ key: p.key, orbit: p.orbit, size: p.size, inclDeg: p.incl ?? 0, node: p.node ?? 0 }));
+}
+
+// --- A1: focused-planet texture tiering ------------------------------------------------
+// The overview keeps its 2K base map (small on screen); once a page-planet is FOCUSED
+// (ORBIT, ~2/3 of the frame) we lazily upgrade it — mid (half-res webp) on a mid GPU, hi
+// (native 8K/4K webp) on a strong desktop GPU, and NOT at all on mobile (coarse pointer
+// stays 2K). Load is fetch → createImageBitmap → gl.initTexture (pre-upload, no arrival
+// stall) → a ~0.5s crossfade via a mix uniform, so the disc is never naked/black/popping.
+// Only one planet is ever focused, so at most one hi texture is resident; it is disposed
+// on leave (budget: max one 8K resident — verified via renderer.info in dev).
+type HiTier = 'base' | 'mid' | 'hi';
+const DEV = process.env.NODE_ENV !== 'production';
+const HI_FADE = 0.5; // s
+
+let _white1: THREE.DataTexture | null = null;
+function white1(): THREE.DataTexture {
+  if (!_white1) {
+    _white1 = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
+    _white1.needsUpdate = true;
+  }
+  return _white1;
+}
+
+function hiTierFor(): HiTier {
+  if (typeof window === 'undefined') return 'base';
+  if (window.matchMedia('(pointer: coarse)').matches) return 'base'; // mobile stays 2K
+  return useScene.getState().quality === 'high' ? 'hi' : 'mid';
+}
+
+/** Fetch + decode a tier texture off the critical path and pre-upload it to the GPU so the
+ *  material swap never stalls the flight. flipY handled to match the base TextureLoader map. */
+async function loadHiRes(key: string, tier: HiTier, gl: THREE.WebGLRenderer): Promise<THREE.Texture | null> {
+  const res = await fetch(`/textures/hi/${key}.${tier}.webp`);
+  if (!res.ok) return null;
+  const bitmap = await createImageBitmap(await res.blob(), { imageOrientation: 'flipY' });
+  const tex = new THREE.Texture(bitmap);
+  tex.flipY = false; // bitmap already flipped → matches the base map's orientation
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
+  tex.wrapS = THREE.RepeatWrapping; // match the base map (A2 band shear)
+  tex.needsUpdate = true;
+  gl.initTexture(tex);
+  return tex;
+}
+
+/** A radial ring strip (colour + alpha vs radius) on a 1-D canvas — mapped radially by
+ *  the rebuilt RingGeometry UVs. Bright tan bands, a dark Cassini-style gap, soft edges. */
+function makeRingTexture(): THREE.Texture {
+  const w = 1024;
+  const cnv = document.createElement('canvas');
+  cnv.width = w;
+  cnv.height = 1;
+  const ctx = cnv.getContext('2d')!;
+  const smooth = (a: number, b: number, x: number) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  for (let x = 0; x < w; x++) {
+    const u = x / (w - 1); // 0 inner .. 1 outer
+    // The outer taper runs from 0.52 rather than 0.93 (RULING: "ease ring brightness
+    // toward the tips as they exit frame"). At the /projects vantage the ring rim spans
+    // about 1.5 frame widths, so the outer half of it is always the part being cropped —
+    // and a hard-edged band cropping at the frame edge is precisely what reads as a beige
+    // swoosh rather than as a ring system. Fading it instead keeps the cropping (poster
+    // language, and it stays) while making what crops already faint. The taper starts
+    // just past the Cassini gap at u = 0.5, so the structure that identifies the rings —
+    // the gap, the banding, the bright inner B ring — is all before it and untouched.
+    const edges = smooth(0, 0.05, u) * (1 - smooth(0.52, 1.0, u));
+    const cassini = 1 - 0.9 * Math.exp(-Math.pow((u - 0.5) / 0.025, 2)); // dark gap
+    const encke = 1 - 0.5 * Math.exp(-Math.pow((u - 0.78) / 0.012, 2));
+    const bands = 0.78 + 0.22 * Math.sin(u * 90) * Math.sin(u * 23);
+    const a = Math.min(1, edges * cassini * encke * (0.55 + 0.45 * bands));
+    const shade = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(u * 40 + 1));
+    ctx.fillStyle = `rgba(${(226 * shade) | 0}, ${(206 * shade) | 0}, ${(158 * shade) | 0}, ${a.toFixed(3)})`;
+    ctx.fillRect(x, 0, 1, 1);
+  }
+  const tx = new THREE.CanvasTexture(cnv);
+  tx.colorSpace = THREE.SRGBColorSpace;
+  tx.anisotropy = 8;
+  return tx;
+}
+
+// --- RULING 1: orbital inclinations ----------------------------------------------------
+// Every orbit used to lie in exactly the same plane, which is not how a solar system is
+// built and had one measurable consequence: an eclipse only ever needed the two bodies to
+// agree on LONGITUDE, so "something is eclipsed somewhere" was true in 42% of random
+// system configurations. Weather, not an event.
+//
+// Real orbits are inclined to the ecliptic by a couple of degrees each, about their own
+// line of nodes — which is exactly why real eclipses are rare and why they happen at the
+// NODES. Adding that here costs nothing (the eclipse test is already fully 3-D) and buys
+// two things at once: the rarity, and the depth of a system whose planets weave above and
+// below the dust plane instead of sliding along it like beads on a wire.
+//
+// The construction is deliberately the minimal perturbation of the old one: take the same
+// point on the same flat circle and ROTATE IT about the node axis by `incl`. At 4° the
+// projection onto the ecliptic shrinks by 0.24%, so every framing, label anchor and tour
+// pose that was tuned against the flat system still holds; the whole change lives in the
+// (small) vertical offset. `node` is randomised per planet — a shared line of nodes would
+// put every planet back in one plane at the same two longitudes.
+const _op = new THREE.Vector3();
+/**
+ * Point on an inclined circular orbit of radius `r` at argument `a`, where the orbital
+ * plane is the ecliptic rotated by `incl` about the horizontal axis at longitude `node`.
+ * (Rodrigues, specialised: the axis lies in the plane and the source point does too, so
+ * the cross product is purely vertical and the whole thing is a handful of multiplies.)
+ * The body crosses the ecliptic (y = 0) at a = node and a = node + π — its two nodes.
+ */
+function orbitPoint(out: THREE.Vector3, r: number, a: number, incl: number, node: number) {
+  const px = Math.cos(a) * r;
+  const pz = Math.sin(a) * r;
+  if (incl === 0) return out.set(px, 0, pz);
+  const ci = Math.cos(incl), si = Math.sin(incl);
+  const nx = Math.cos(node), nz = Math.sin(node);
+  const k = (nx * px + nz * pz) * (1 - ci);
+  return out.set(px * ci + nx * k, (nz * px - nx * pz) * si, pz * ci + nz * k);
+}
+
+/** One planet on a tilted circular orbit — real texture + atmospheric rim light. */
+interface PlanetSpec {
+  key: string;
+  tex: string;
+  rim: string;
+  orbit: number;
+  size: number;
+  speed: number;
+  phase: number;
+  /** Orbital inclination to the ecliptic, DEGREES (RULING 1). */
+  incl?: number;
+  /** Longitude of the ascending node, RADIANS — where this orbit crosses the ecliptic. */
+  node?: number;
+  tilt?: number;
+  rings?: boolean;
+  moons?: number;
+  /** Optional cool multiplier on the body to counter the warm sun (Earth). */
+  bodyColor?: string;
+  /** A2: gas-giant "living bands". `flow` = domain-warp turbulence amplitude on the
+   *  albedo UV; `shear` = per-unit-time latitudinal band shear (adjacent bands oppose).
+   *  `haze` = Mars drifting dust-haze amount. `earth` = enable the cloud + night-lights
+   *  layers. All zero/undefined ⇒ a static rocky body. */
+  flow?: number;
+  shear?: number;
+  haze?: number;
+  earth?: boolean;
+  /** A3: atmospheric limb-scattering hue + idle strength (~0.4 subtle). Falls back to
+   *  `rim` when `atmo` is absent; airless bodies use a low strength. */
+  atmo?: string;
+  atmoStrength?: number;
+}
+
+function Moons({ count, planetSize }: { count: number; planetSize: number }) {
+  const group = useRef<THREE.Group>(null);
+  const moons = useMemo(() => {
+    const rnd = makeRng(SEED.moons);
+    return Array.from({ length: count }, (_, i) => ({
+      // Hug the planet so at the close ORBIT vantage the moons stay a tight system
+      // around it (not scattered across the frame / over the content column).
+      r: planetSize * (1.4 + i * 0.12),
+      size: planetSize * (0.09 + rnd() * 0.06),
+      speed: 0.5 - i * 0.03,
+      phase: rnd() * 6.28,
+      tilt: (rnd() - 0.5) * 0.5,
+    }));
+  }, [count, planetSize]);
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    group.current?.children.forEach((m, i) => {
+      const o = moons[i];
+      const a = o.phase + t * o.speed;
+      m.position.set(Math.cos(a) * o.r, Math.sin(a) * o.r * Math.sin(o.tilt), Math.sin(a) * o.r * Math.cos(o.tilt));
+    });
+  });
+  return (
+    <group ref={group}>
+      {moons.map((o, i) => (
+        <mesh key={i}>
+          <sphereGeometry args={[o.size, 16, 16]} />
+          <meshStandardMaterial color="#b8b2a8" roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// v2 "poster camera": bright, close framing. Distances compressed hard and planets
+// large so each reads as a real textured ball; the page-planets (earth/mars/jupiter/
+// saturn) sit inside ~radius 8 so ≥3 stay fully in frame while outer decorative
+// planets crop at the edges by design. Orbits are SLOW (full revolution ~5-10 min:
+// speed ≈ 2π/period) so any exit/return is a rare, graceful event; phases staggered
+// so the idle frame never lines the planets up. No orbit rings (no glowing hoops).
+//
+// RULING 1: `incl`/`node` — inclinations ordered roughly as the real ones (Mercury the
+// steepest, Jupiter the flattest) but compressed into 1.5-4°, with the nodes scattered so
+// no two orbits share a line of nodes.
+const PLANETS: PlanetSpec[] = [
+  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, phase: 0.6, incl: 4.0, node: 0.35, atmoStrength: 0.12 },
+  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, phase: 3.7, incl: 3.4, node: 2.10, atmo: '#f6e6b0', atmoStrength: 0.6 },
+  // Earth gets a gentle cool multiplier to counter the warm sun (reads blue/white,
+  // not gold); the close-orbit over-exposure is handled by per-planet ORBIT exposure
+  // in CameraRig (inner planets sit so close to the sun the lit disc would otherwise
+  // clip to gold regardless of albedo).
+  { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, incl: 2.2, node: 4.35, tilt: 0.41, bodyColor: '#cfe0ff', earth: true, atmo: '#a8d0ff', atmoStrength: 0.5 },
+  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, incl: 2.6, node: 0.95, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
+  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, incl: 1.6, node: 3.30, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
+  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, atmo: '#f0dcae', atmoStrength: 0.45 },
+  // B10: the two outermost orbits are pulled in. On its own this is a small effect — the
+  // in-frame share of a full revolution at the resting overview goes 34.4%→35.6% for
+  // Uranus and 31.8%→33.4% for Neptune — because what actually pushes an outer body out
+  // of frame is the overview camera sitting INSIDE the system at 10.25 units, so the near
+  // half of every outer orbit passes below the frustum. That is the same reason Jupiter
+  // (48.8%) and Saturn (38.6%) leave frame too. Reachability is solved where it lives, in
+  // the label driver — see the rim markers in PlanetLabels.
+  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 8.9, size: 0.44, speed: 0.0074, phase: 3.0, incl: 2.0, node: 1.65, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
+  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 9.8, size: 0.42, speed: 0.0062, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
+];
+
+// A3 / B13: atmospheric limb scattering, driven by the IMPACT PARAMETER rather than by a
+// fresnel term.
+//
+// The old version shaded a BackSide shell with `1 - dot(view, normal)`. On a back face the
+// outward normal points away from the camera, so that expression is 1 over the entire far
+// hemisphere: the whole visible annulus came out at full brightness and then stopped dead
+// at the shell's own silhouette. That is a hard-edged outline ring, which is what the
+// planets were wearing — read as "grey edges" around the disc.
+//
+// What an atmosphere actually does is fall off with height above the surface, so the value
+// to shade with is `b`, the perpendicular distance from the planet's centre to the view
+// ray. It is exactly the height of the sightline's closest approach. An exponential in
+// (b − planetR) gives a real scale-height falloff, and a smoothstep to zero before the
+// shell's silhouette guarantees the geometry's own edge can never be visible.
+// --- G2: the terminator, and why it was a knife edge -----------------------------------
+//
+// The bodies are MeshStandardMaterial lit by the sun's point light, so their diffuse term is
+// three's own `saturate( dot( geometryNormal, directLight.direction ) )` — clamped Lambert.
+// Clamped Lambert has a first-derivative discontinuity exactly at N·L = 0, and on a sphere
+// that lands as a hard line across the disc. On Earth it was unmissable: the surface cut to
+// black on one pixel while the night-lights shell (which fades from N·L = 0.08 with a soft
+// ramp) and the cloud shell (hard-clamped, so it cut at a THIRD place) disagreed about where
+// the terminator even was. Three definitions of one line, none of them matching.
+//
+// One definition now, shared by the surface and both shells: wrapped Lambert with an eased
+// toe. The wrap lets light reach W past the geometric terminator, renormalised so the fully
+// lit pole still returns exactly 1 — the lit hemisphere's gradient is therefore untouched,
+// which is the whole point, since only the crease is the defect. The toe then eases the last
+// stretch to zero so the shadow edge has no crease either.
+//
+// Note the shape of the ruling this implements: the same softening applies to every body,
+// not just Earth. A hard terminator is a property of the shading model, so scoping the fix
+// to one planet would leave Earth lit by different physics than Mars — Earth is only where
+// it read worst, because Earth is the one body carrying shells keyed to that same line.
+const TERM_WRAP = 0.18; // how far past N·L = 0 the light reaches
+const TERM_TOE = 0.35;  // the eased stretch, in units of the wrapped ramp
+/** The one soft-terminator definition. Shared as a string so the shells cannot drift. */
+const SOFT_NL = /* glsl */ `
+  float softNL( float x ) {
+    float t = clamp( ( x + ${TERM_WRAP.toFixed(2)} ) / ${(1 + TERM_WRAP).toFixed(2)}, 0.0, 1.0 );
+    return t * smoothstep( 0.0, ${TERM_TOE.toFixed(2)}, t );
+  }
+`;
+
+const ATMO_SHELL = 1.12; // shell radius as a multiple of the planet radius
+const rimVert = /* glsl */ `
+  varying vec3 vWPos; varying vec3 vWN; varying vec3 vCenter; varying float vScale;
+  void main() {
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vWPos = wp.xyz;
+    vWN = normalize(mat3(modelMatrix) * normal);
+    vCenter = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vScale = length(modelMatrix[0].xyz);   // carries the hover scale-up too
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+const rimFrag = /* glsl */ `
+  uniform vec3 uColor; uniform float uIntensity; uniform float uBaseR;
+  varying vec3 vWPos; varying vec3 vWN; varying vec3 vCenter; varying float vScale;
+  void main() {
+    float shellR  = uBaseR * vScale;                     // vScale already holds ATMO_SHELL
+    float planetR = shellR / ${ATMO_SHELL.toFixed(2)};   // …so the surface is one factor in
+
+    // Height of this sightline's closest approach to the planet centre.
+    vec3 D = normalize(vWPos - cameraPosition);
+    vec3 OC = vCenter - cameraPosition;
+    float b = length(OC - D * dot(OC, D));
+    float x = clamp((b - planetR) / max(shellR - planetR, 1e-4), 0.0, 1.0);
+
+    float haze = exp(-x * 2.8);            // broad atmospheric glow hugging the limb
+    float edge = exp(-x * 11.0);           // thin, whiter forward-scattering line
+    float cut  = 1.0 - smoothstep(0.62, 1.0, x);  // zero well inside the geometry's edge
+
+    vec3 L = normalize(-vWPos);            // toward the sun at the origin
+    float lit = smoothstep(-0.25, 0.35, dot(normalize(vWN), L)); // softly through the terminator
+
+    vec3 col = uColor + vec3(0.5) * edge;
+    float a = (haze * 0.55 + edge * 0.8) * cut * lit * uIntensity;
+    gl_FragColor = vec4(col, a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
+// --- A2: Earth cloud shell + night-lights (day/night) ---------------------------------
+// Both layers ride the surface's spin (children of the albedo mesh); clouds add a hair of
+// extra rotation so they drift over the ground. `vWN`/`vWPos` give the sun-facing factor
+// (sun at world origin) so lights show on the dark hemisphere and clouds shade at the
+// terminator — the pair is what turns a blue ball into a living planet.
+const earthVert = /* glsl */ `
+  varying vec2 vUv; varying vec3 vWN; varying vec3 vWPos;
+  void main() {
+    vUv = uv;
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vWPos = wp.xyz;
+    vWN = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+const earthNightFrag = /* glsl */ `
+  uniform sampler2D uMap; varying vec2 vUv; varying vec3 vWN; varying vec3 vWPos;
+  void main() {
+    float lit = dot(normalize(vWN), normalize(-vWPos));
+    // G2: the crossover is now DERIVED from the terminator's wrap rather than hand-tuned to
+    // roughly agree with it — the lights come up exactly as the surface light dies out, and
+    // the two can no longer drift apart when the wrap is retuned.
+    float night = smoothstep(${(TERM_WRAP * 0.5).toFixed(3)}, ${(-TERM_WRAP).toFixed(3)}, lit); // 1 on the dark hemisphere
+    vec3 lights = texture2D(uMap, vUv).rgb;
+    gl_FragColor = vec4(lights * 1.2, night);           // additive; alpha gates to night
+    // B3: the lights were multiplied by 2.0 and laid additively over an already-bright
+    // disc. Tone mapping is applied for the whole frame in the composer now
+    // (ExposureToneMap), so the chunk below is inert while a composer owns the render —
+    // it is kept only so this shader stays correct if it is ever drawn direct-to-canvas.
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+const earthCloudFrag = /* glsl */ `
+  uniform sampler2D uMap; varying vec2 vUv; varying vec3 vWN; varying vec3 vWPos;
+  ${SOFT_NL}
+  void main() {
+    float c = texture2D(uMap, vUv).r;                    // cloud density (grayscale)
+    // G2: was a hard clamp, so the clouds' terminator sat at N·L = 0 while the surface's and
+    // the night-lights' sat elsewhere. Same softNL as the surface now.
+    float lit = softNL(dot(normalize(vWN), normalize(-vWPos)));
+    float shade = 0.12 + 0.9 * lit;                      // clouds go dark past the terminator
+    float a = smoothstep(0.16, 0.7, c) * 0.9;
+    gl_FragColor = vec4(vec3(shade), a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
+function EarthLayers({ radius }: { radius: number }) {
+  const clouds = useRef<THREE.Mesh>(null);
+  const cloudTex = useMemo(() => {
+    const tx = new THREE.TextureLoader().load('/textures/earth_clouds.webp');
+    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
+  }, []);
+  const nightTex = useMemo(() => {
+    const tx = new THREE.TextureLoader().load('/textures/earth_night.webp');
+    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
+  }, []);
+  useEffect(() => () => { cloudTex.dispose(); nightTex.dispose(); }, [cloudTex, nightTex]);
+  const cloudUniforms = useMemo(() => ({ uMap: { value: cloudTex } }), [cloudTex]);
+  const nightUniforms = useMemo(() => ({ uMap: { value: nightTex } }), [nightTex]);
+  useFrame((_, dt) => { if (clouds.current) clouds.current.rotation.y += dt * 0.045; });
+  const skip = () => null; // overlays are visual only — never intercept planet taps
+  return (
+    <>
+      <mesh scale={1.002} raycast={skip}>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <shaderMaterial vertexShader={earthVert} fragmentShader={earthNightFrag} uniforms={nightUniforms} transparent blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <mesh ref={clouds} scale={1.02} raycast={skip}>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <shaderMaterial vertexShader={earthVert} fragmentShader={earthCloudFrag} uniforms={cloudUniforms} transparent depthWrite={false} />
+      </mesh>
+    </>
+  );
+}
+
+// --- R5.7: Earth's Moon ----------------------------------------------------------------
+// A real lunar albedo map on a body at the TRUE size ratio (0.2725 × Earth), on an orbit
+// that is visibly INCLINED to the ecliptic — a coplanar moon reads as a bead sliding
+// along a wire, an inclined one immediately reads as a second world in orbit. The
+// distance is compressed hard (the real 60 Earth radii would put it off-frame at every
+// vantage) but the tidal lock is honest: the same face is always turned toward Earth.
+// Lives inside Earth's orbit group but OUTSIDE its spin group, so it neither inherits
+// Earth's axial tilt nor the hover scale-up.
+const MOON_RATIO = 0.2725; // real Moon/Earth radius ratio
+const MOON_DIST = 2.9; // Earth radii (compressed from 60 so it stays in the ORBIT frame)
+const MOON_INCL = 22 * DEG2RAD; // exaggerated from 5.1° so the inclination reads
+const MOON_PERIOD = 26; // s per revolution — slow enough to feel orbital, not spun
+
+const _mwp = new THREE.Vector3();
+const _mdir = new THREE.Vector3();
+const _mrel = new THREE.Vector3();
+const _mearth = new THREE.Vector3();
+
+function EarthMoon({ planetSize }: { planetSize: number }) {
+  const pivot = useRef<THREE.Group>(null);
+  const body = useRef<THREE.Mesh>(null);
+  const tex = useMemo(() => {
+    const tx = new THREE.TextureLoader().load('/textures/moon.jpg');
+    tx.colorSpace = THREE.SRGBColorSpace;
+    tx.anisotropy = 8;
+    return tx;
+  }, []);
+  useEffect(() => () => { tex.dispose(); }, [tex]);
+  const r = planetSize * MOON_DIST;
+  useFrame((state) => {
+    const a = (state.clock.elapsedTime / MOON_PERIOD) * Math.PI * 2;
+    if (pivot.current) pivot.current.rotation.y = a;
+    // Tidal lock. The mesh is a CHILD of the pivot, so it already inherits the pivot's yaw
+    // — which is exactly the lock: one rotation per revolution, in the same sense, keeping
+    // the same face turned inward. Counter-rotating it by -a (as this did) cancels that
+    // inheritance and pins the Moon's orientation in world space, so over one orbit it
+    // presents every face to Earth in turn: the precise opposite of the claim. Measured on
+    // the alias as faceDot swinging across 0.97 of its full range per revolution.
+    // Its local -X side is what points at Earth, and -X is the centre of an equirectangular
+    // lunar map, so the near side is the face on show.
+
+    // Verification handle (HUD_AVAILABLE gate — stripped from production). Ratio and
+    // inclination are geometry, and tidal lock is a relationship that only exists while
+    // the thing is moving, so publish the live numbers rather than the constants.
+    if (HUD_AVAILABLE && body.current) {
+      const w = window as unknown as { __moon?: unknown };
+      const earth = planetPositions.get('earth');
+      if (earth) {
+        body.current.getWorldPosition(_mwp);
+        body.current.getWorldDirection(_mdir); // the mesh's local +Z in world space
+        _mrel.copy(_mwp).sub(earth);
+        w.__moon = {
+          rel: [_mrel.x, _mrel.y, _mrel.z],
+          dist: _mrel.length(),
+          radius: planetSize * MOON_RATIO,
+          earthRadius: planetSize,
+          // Cosine of the angle between the face the Moon presents and the direction back
+          // to Earth. Tidally locked ⇒ this stays constant as it goes round.
+          faceDot: _mdir.dot(_mearth.copy(_mrel).normalize()),
+        };
+      }
+    }
+  });
+  return (
+    <group rotation={[MOON_INCL, 0, 0]}>
+      <group ref={pivot}>
+        {/* Opaque + depth-written like every other body, so it occludes and is occluded
+            correctly against Earth and the belt. */}
+        <mesh ref={body} position={[r, 0, 0]} raycast={() => null}>
+          <sphereGeometry args={[planetSize * MOON_RATIO, 32, 32]} />
+          <meshStandardMaterial map={tex} roughness={0.98} metalness={0.0} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function Planet({ spec }: { spec: PlanetSpec }) {
+  const { locale } = useI18n();
+  const router = useRouter();
+  const gl = useThree((s) => s.gl);
+  const focused = useScene((s) => s.focusedPlanet);
+  const group = useRef<THREE.Group>(null);
+  const spinGroup = useRef<THREE.Group>(null);
+  const mesh = useRef<THREE.Mesh>(null);
+  const ringMesh = useRef<THREE.Mesh>(null);
+  const angle = useRef(spec.phase);
+  // A1 hi-res crossfade state (page planets only).
+  const hiShader = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
+  const hiTex = useRef<THREE.Texture | null>(null);
+  const hiTarget = useRef(0); // 0 = show base, 1 = show hi
+  const [hovered, setHovered] = useState(false);
+  const eclipse = useRef(0); // damped 0..1 — how much of the sun this body is losing
+  const page = PLANET_PAGES[spec.key];
+  // R5.6 — the four bodies that are NOT section routes still answer the pointer: they
+  // raise a glass tooltip (name + a real astronomy fact + the wink). The tooltip's DOM
+  // lives in PlanetLabelsOverlay; here we only publish WHICH body is under the pointer.
+  const decorative = !page && !!BODY_FACTS[spec.key];
+  // Clicking a planet navigates to its section route; the URL is the source of
+  // truth and CosmicStage's bridge flies the camera there.
+  const open = () => {
+    // A drag-to-rotate gesture (T6) ends with a pointerup on a planet too — don't let
+    // it navigate. The threshold flag is set by DragControls.
+    if (useScene.getState().dragMoved) return;
+    const section = PLANET_SECTION[spec.key];
+    if (section) router.push(sectionPath(section, locale));
+  };
+  useCursor(hovered && (!!page || decorative));
+
+  const texture = useMemo(() => {
+    const tx = new THREE.TextureLoader().load(spec.tex);
+    tx.colorSpace = THREE.SRGBColorSpace;
+    tx.anisotropy = 8;
+    tx.wrapS = THREE.RepeatWrapping; // let the A2 band shear scroll U seamlessly
+    return tx;
+  }, [spec.tex]);
+  // Albedo material. Page planets get a mix-in hi-res sampler (A1): the base 2K map is
+  // always the floor; `uHiMap`/`uHiMix` crossfade the focused hi-res texture in on top of
+  // it in the exact same UV space, so upgrade/downgrade is a fade, never a pop.
+  const material = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({ map: texture, color: spec.bodyColor ?? '#ffffff', roughness: 0.9, metalness: 0.02 });
+    m.onBeforeCompile = (shader) => {
+      shader.uniforms.uHiMap = { value: white1() };
+      shader.uniforms.uHiMix = { value: 0 };
+      shader.uniforms.uTime = { value: 0 };
+      shader.uniforms.uFlow = { value: spec.flow ?? 0 };   // A2 gas-giant band turbulence
+      shader.uniforms.uShear = { value: spec.shear ?? 0 }; // A2 latitudinal band shear
+      shader.uniforms.uHaze = { value: spec.haze ?? 0 };   // A2 Mars dust haze
+      // B5 inter-planet eclipse: the occluder's world position + radius, and how much of
+      // this frame's shadow to apply. The cone is recomputed PER FRAGMENT so the penumbra
+      // is a real curved sweep across the sphere, not a global dim.
+      shader.uniforms.uOccPos = { value: new THREE.Vector3(9999, 0, 0) };
+      shader.uniforms.uOccR = { value: 0 };
+      shader.uniforms.uEclipse = { value: 0 };
+      shader.vertexShader = shader.vertexShader.replace(
+        'void main() {',
+        'varying vec3 vWPosP;\nvoid main() {'
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+         vWPosP = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;`
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'void main() {',
+        'uniform vec3 uOccPos; uniform float uOccR, uEclipse;\nvarying vec3 vWPosP;\nvoid main() {'
+      );
+      // G2 — soften the diffuse terminator. `dotNL` is declared inside three's own
+      // `lights_physical_pars_fragment`, and onBeforeCompile runs BEFORE includes are
+      // resolved, so the chunk is inlined here (from the installed source, not from memory)
+      // with that one line rewritten. Scoped to this material: patching ShaderChunk would
+      // silently re-light every standard material in the app, including ones nobody looked at.
+      {
+        const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
+        const HARD = 'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );';
+        // Both markers are load-bearing and both are three-version-dependent, so neither may
+        // fail quietly: a missed replace here would leave the terminator hard and look exactly
+        // like a tuning disagreement rather than a broken patch.
+        if (!CHUNK || !CHUNK.includes(HARD)) {
+          throw new Error('G2: three\'s RE_Direct_Physical dotNL line has moved — the soft terminator patch is not applied');
+        }
+        if (!shader.fragmentShader.includes('#include <lights_physical_pars_fragment>')) {
+          throw new Error('G2: meshphysical no longer includes lights_physical_pars_fragment');
+        }
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <lights_physical_pars_fragment>',
+          SOFT_NL + CHUNK.replace(HARD, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );')
+        );
+      }
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `{
+           if ( uEclipse > 0.001 ) {
+             vec3 rayDir = normalize( vWPosP );          // the sun sits at the origin
+             float along = dot( uOccPos, rayDir );
+             if ( along > 0.0 ) {
+               // Parallel rays (see lib/eclipse.ts): the shadow keeps the occluder's own
+               // width instead of a point source's ever-growing cone.
+               float perp = length( uOccPos - rayDir * along );
+               // Wide penumbra: a shadow edge on a world is soft over many pixels. A
+               // narrow one reads as a hard-edged mask laid over the disc (B13).
+               float lit = smoothstep( uOccR * 0.15, uOccR * 1.55, perp );
+               outgoingLight *= mix( 1.0, mix( ${ECLIPSE_FLOOR.toFixed(2)}, 1.0, lit ), uEclipse );
+             }
+           }
+         }
+         #include <opaque_fragment>`
+      );
+      shader.fragmentShader =
+        `uniform sampler2D uHiMap; uniform float uHiMix, uTime, uFlow, uShear, uHaze;
+         float _h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+         float _n(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+           return mix(mix(_h(i),_h(i+vec2(1,0)),u.x), mix(_h(i+vec2(0,1)),_h(i+vec2(1,1)),u.x), u.y); }
+        ` + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
+           vec2 flowUv = vMapUv;
+           if ( uFlow > 0.0 ) {
+             // Latitudinal band shear — adjacent bands scroll in opposite directions
+             // (wraps via RepeatWrapping); plus two-octave domain-warp turbulence so the
+             // bands swirl, not just slide. Reads over ~20-30s.
+             float bandDir = sin( vMapUv.y * 20.0 );
+             flowUv.x += bandDir * uShear * uTime;
+             float t = uTime * 0.03;
+             float w = ( _n( vec2( vMapUv.x * 4.0 - t,       vMapUv.y * 10.0 ) ) - 0.5 ) * 0.6
+                     + ( _n( vec2( vMapUv.x * 8.0 + t * 1.7, vMapUv.y * 16.0 ) ) - 0.5 ) * 0.4;
+             flowUv.x += w * uFlow;
+             flowUv.y += w * uFlow * 0.35;
+           }
+           vec4 sampledDiffuseColor = texture2D( map, flowUv );
+           diffuseColor *= sampledDiffuseColor;
+           // A1: crossfade the hi-res map in (same warped UV + material tint).
+           diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( uHiMap, flowUv ).rgb * diffuse, uHiMix );
+           if ( uHaze > 0.0 ) {
+             // Mars: a faint warm dust-haze drifting slowly across the disc.
+             float hz = _n( vec2( vMapUv.x * 3.0 + uTime * 0.01, vMapUv.y * 5.0 - uTime * 0.006 ) );
+             diffuseColor.rgb += vec3(0.55, 0.32, 0.18) * ( hz - 0.4 ) * uHaze;
+           }
+         #endif`
+      );
+      hiShader.current = shader;
+    };
+    return m;
+  }, [texture, spec.bodyColor, spec.flow, spec.shear, spec.haze]);
+  useEffect(() => () => material.dispose(), [material]);
+  // Procedural ring strip (colour + alpha vs radius), drawn to a 1-D canvas and mapped
+  // radially. Deterministic and CSP-safe — avoids the saturn_ring.png alpha-layout that
+  // sampled transparent under RingGeometry's UVs and made the rings vanish entirely.
+  const ringTex = useMemo(() => (spec.rings ? makeRingTexture() : null), [spec.rings]);
+  // Rebuild the ring UVs so U runs radially (inner→outer edge) to match the strip.
+  const ringGeo = useMemo(() => {
+    if (!spec.rings) return null;
+    const inner = spec.size * 1.35;
+    const outer = spec.size * 2.5;
+    const g = new THREE.RingGeometry(inner, outer, 128, 1);
+    const pos = g.attributes.position;
+    const uv = g.attributes.uv;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      uv.setXY(i, (v.length() - inner) / (outer - inner), 0.5);
+    }
+    uv.needsUpdate = true;
+    return g;
+  }, [spec.rings, spec.size]);
+  const incl = (spec.incl ?? 0) * DEG2RAD;
+  const atmoStrength = spec.atmoStrength ?? 0.4;
+  const rimMat = useRef<THREE.ShaderMaterial>(null);
+  const rimUniforms = useMemo(
+    () => ({
+      uColor: { value: new THREE.Color(spec.atmo ?? spec.rim) },
+      uIntensity: { value: atmoStrength },
+      // The geometry radius, NOT the shell radius: the mesh's own `scale={ATMO_SHELL}` is
+      // already inside modelMatrix, so vScale carries it (and the hover scale-up too).
+      uBaseR: { value: spec.size },
+    }),
+    [spec.atmo, spec.rim, atmoStrength, spec.size]
+  );
+
+  // EVERY body publishes its live world position + radius now, not just the four page
+  // planets: the label driver needs the decorative bodies too in order to hang their
+  // tooltips on them (R5.6).
+  useEffect(() => {
+    planetPositions.set(spec.key, new THREE.Vector3());
+    planetRadii.set(spec.key, spec.size);
+    if (spec.rings) planetRingNormal.set(spec.key, new THREE.Vector3(0, 1, 0));
+    if (HUD_AVAILABLE) phaseSetters[spec.key] = (a: number) => { angle.current = a; };
+    return () => {
+      delete phaseSetters[spec.key];
+      texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose();
+      planetPositions.delete(spec.key); planetRadii.delete(spec.key); planetRingNormal.delete(spec.key);
+      if (useScene.getState().hoveredBody === spec.key) useScene.getState().setHoveredBody(null);
+    };
+  }, [texture, ringTex, ringGeo, spec.key, spec.size]);
+
+  // A1: lazily upgrade this planet's albedo the moment it becomes the focused world, and
+  // fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
+  useEffect(() => {
+    if (!page || focused !== spec.key) { hiTarget.current = 0; return; }
+    const tier = hiTierFor();
+    if (tier === 'base') return; // mobile keeps the 2K base
+    let cancelled = false;
+    loadHiRes(spec.key, tier, gl).then((tex) => {
+      if (!tex) return;
+      if (cancelled) { tex.dispose(); return; }
+      hiTex.current?.dispose();
+      hiTex.current = tex;
+      if (hiShader.current) hiShader.current.uniforms.uHiMap.value = tex;
+      hiTarget.current = 1;
+      if (DEV) console.log(`[tex] ${spec.key} ${tier} resident — textures=${gl.info.memory.textures}`);
+    });
+    return () => { cancelled = true; hiTarget.current = 0; };
+  }, [focused, page, spec.key, gl]);
+
+  useFrame((state, dt) => {
+    // SPARKLE-2: the heliocentric revolution stops while ANY world is focused — not this
+    // planet's, any. It is the one motion that has to stop, and it is the only one that does.
+    //
+    // The ORBIT vantage is solved from the sun direction, so while a planet revolves the
+    // vantage revolves with it and the camera swings around the world at 1.4-2.4 degrees per
+    // 1.2s, forever. That lens rotation sweeps the entire sky across the frame, which is what
+    // read as specks drifting around the planet. Measured: 21.2px predicted from the rotation
+    // alone against 17.6px of actual star drift, on stars whose parallax cannot exceed 0.37px.
+    // Freezing the revolution is what stops the lens; nothing done to the particles could.
+    //
+    // A revolution is imperceptible from two planet-radii away anyway — Earth moves through
+    // roughly a tenth of a degree of its orbit in the time anyone reads a panel.
+    //
+    // `angle` is an ACCUMULATOR, so not adding to it is the whole implementation: departure
+    // resumes from the angle reached, never re-derived from the clock, and there is no jump
+    // back to the overview. Everything local keeps running — self-rotation below, moons,
+    // clouds, night lights, haze flow, twinkle, and the B5 vantage breath in CameraRig.
+    if (!useScene.getState().focusedPlanet) angle.current += dt * spec.speed;
+    // Atmosphere strength eases toward its idle value, brightening on hover (a fade, not a switch).
+    const rimTarget = hovered && page ? atmoStrength * 1.8 : atmoStrength;
+    // Through the live material, not the memoised literal — see ZodiacalDust for the reason.
+    const uI = rimMat.current?.uniforms.uIntensity;
+    if (uI) uI.value += (rimTarget - uI.value) * Math.min(1, dt * 6);
+    // A2: drive the flow/haze animation (all planets that compiled the shader).
+    if (hiShader.current) hiShader.current.uniforms.uTime.value = state.clock.elapsedTime;
+    // A1: crossfade the hi-res map toward its target; once fully faded out, free the GPU
+    // texture (budget: at most one hi texture resident, since only one world is focused).
+    if (page && hiShader.current) {
+      const u = hiShader.current.uniforms.uHiMix;
+      const step = dt / HI_FADE;
+      u.value += Math.sign(hiTarget.current - u.value) * Math.min(Math.abs(hiTarget.current - u.value), step);
+      if (hiTarget.current === 0 && u.value <= 0.001 && hiTex.current) {
+        hiTex.current.dispose();
+        hiTex.current = null;
+        hiShader.current.uniforms.uHiMap.value = white1();
+        if (DEV) console.log(`[tex] ${spec.key} disposed — textures=${gl.info.memory.textures}`);
+      }
+    }
+    if (group.current) {
+      // RULING 1: an inclined circle, not a flat one (see orbitPoint).
+      orbitPoint(_op, spec.orbit, angle.current, incl, spec.node ?? 0);
+      group.current.position.copy(_op);
+      // Publish the live world position. The label driver (priority 2) reads it LATER in
+      // this same frame, so pills are never a frame behind the body they name (R5.4).
+      group.current.getWorldPosition(_wp);
+      planetPositions.get(spec.key)?.copy(_wp);
+      // The ring plane's world normal — its local +Z, since RingGeometry lies in XY. The
+      // camera needs it to keep the rings open (see azimuthForLit / the ring solve); it is
+      // published from here because this is the only place that knows the mesh's own
+      // rotation, and a second copy of that constant in the rig would go stale in silence.
+      if (spec.rings && ringMesh.current) {
+        const rn = planetRingNormal.get(spec.key);
+        if (rn) rn.set(0, 0, 1).transformDirection(ringMesh.current.matrixWorld).normalize();
+      }
+
+      // B5: is anything standing between this body and the star? Occluder positions come
+      // from the shared map, so they can be one frame old — for a shadow that takes tens
+      // of seconds to cross a disc, that is not a lag anyone can see.
+      const hit = eclipseFor(spec.key, _wp, spec.size);
+      const target = hit ? hit.strength : 0;
+      eclipse.current += (target - eclipse.current) * Math.min(1, dt * 2.2);
+      if (hiShader.current) {
+        hiShader.current.uniforms.uEclipse.value = eclipse.current;
+        if (hit) {
+          hiShader.current.uniforms.uOccPos.value.copy(hit.occ);
+          hiShader.current.uniforms.uOccR.value = hit.occR;
+        }
+      }
+      // The atmosphere must go out with the light — a lit limb over an eclipsed disc is
+      // the giveaway that a shadow is painted on rather than cast.
+      if (rimMat.current) rimMat.current.uniforms.uIntensity.value *= 1 - 0.8 * eclipse.current;
+      if (HUD_AVAILABLE) {
+        eclipseReport[spec.key] = +eclipse.current.toFixed(4);
+        eclipseRawReport[spec.key] = +target.toFixed(4);
+      }
+    }
+    if (mesh.current) mesh.current.rotation.y += dt * 0.3;
+  });
+
+  const bind =
+    page || decorative
+      ? {
+          onClick: (e: { stopPropagation: () => void }) => {
+            e.stopPropagation();
+            if (page) open();
+            // Touch has no hover: a tap on a decorative body toggles its tooltip.
+            else if (!useScene.getState().dragMoved) {
+              const s = useScene.getState();
+              s.setHoveredBody(s.hoveredBody === spec.key ? null : spec.key);
+            }
+          },
+          // Only the page planets take their hover from the raycaster (it drives the scale
+          // + atmosphere lift, where a dropped frame of hover costs nothing). A DECORATIVE
+          // body's tooltip is driven by the hysteresis in PlanetLabelDriver instead: raw
+          // enter/leave chatters on a small disc that orbits under a still cursor, and two
+          // writers for one piece of state would only fight each other.
+          onPointerOver: (e: { stopPropagation: () => void }) => {
+            e.stopPropagation();
+            setHovered(true);
+          },
+          onPointerOut: () => {
+            setHovered(false);
+          },
+        }
+      : {};
+
+  return (
+    <group ref={group} name={`planet:${spec.key}`}>
+      <group ref={spinGroup} rotation={[0, 0, spec.tilt ?? 0]} scale={hovered && page ? 1.12 : 1}>
+        <mesh ref={mesh} {...bind} material={material}>
+          <sphereGeometry args={[spec.size, 64, 64]} />
+          {/* A2: Earth's cloud + night-lights shells ride the surface spin. */}
+          {spec.earth && <EarthLayers radius={spec.size} />}
+        </mesh>
+        {/* Atmospheric rim light (heightened realism, tinted from the planet). */}
+        <mesh scale={ATMO_SHELL} raycast={() => null}>
+          <sphereGeometry args={[spec.size, 48, 48]} />
+          <shaderMaterial ref={rimMat} vertexShader={rimVert} fragmentShader={rimFrag} uniforms={rimUniforms} transparent side={THREE.BackSide} blending={THREE.AdditiveBlending} depthWrite={false} />
+        </mesh>
+        {spec.rings && ringTex && ringGeo && (
+          <mesh ref={ringMesh} rotation={[Math.PI / 2.05, 0, 0]} geometry={ringGeo}>
+            <meshBasicMaterial map={ringTex} transparent opacity={1} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        )}
+        {spec.moons && <Moons count={spec.moons} planetSize={spec.size} />}
+      </group>
+      {/* R5.7 — the real Moon, on its own inclined orbit outside Earth's spin group. */}
+      {spec.earth && <EarthMoon planetSize={spec.size} />}
+    </group>
+  );
+}
+
+/**
+ * Act 2: the solar system. M2 = basic reveal (sun + real central light + orbiting
+ * bodies + Saturn rings + starfield). M3 adds textures, God Rays, moons, labels,
+ * the living light and eclipse moments.
+ */
+export default function SolarAct() {
+  const root = useRef<THREE.Group>(null);
+  const high = useScene((s) => s.quality) === 'high';
+  useFrame((_, dt) => {
+    // The system's own slow yaw is the second half of the heliocentric revolution and freezes
+    // with it — see the note on `angle` in Planet. Leaving this running would have left 0.004
+    // rad/s still turning the vantage, which is the same "the parent is still moving" mistake
+    // useSkyLock exists to catch. Accumulator, so departure continues rather than re-syncs.
+    if (root.current && !useScene.getState().focusedPlanet) root.current.rotation.y += dt * 0.004;
+  });
+  return (
+    <>
+      <ambientLight intensity={0.06} />
+      {/* Star sphere + nebulae come from the shared SceneRoot sky (one universe). */}
+      <group ref={root} rotation={[0.42, 0, 0]} name="solarRoot">
+        <Sun />
+        <ZodiacalDust count={high ? 5200 : 1900} />
+        {PLANETS.map((p) => (
+          <Planet key={p.key} spec={p} />
+        ))}
+        {/* Cost-only tier split (the composition LAW): identical belt, fewer bodies. */}
+        <AsteroidBelt count={high ? 17000 : 6000} />
+      </group>
+      {/* A4: per-world nebula backdrop (world-fixed, shows only while a world is focused). */}
+      <WorldBackdrop />
+      {/* Section pills, the belt marker and the decorative-body tooltips all live in the
+          DOM overlay now (PlanetLabels) — see the note there on frame ordering. */}
+    </>
+  );
+}

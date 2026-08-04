@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 
+// F3 — English is the default locale and owns the un-prefixed URL space.
 export const siteConfig = {
   name: 'Elad Saadon',
   brand: 'Elad Saadon Portfolio',
   url: 'https://www.eladsaadon.dev',
-  locale: 'he_IL',
-  defaultTitle: 'אלעד סעדון | מפתח Full-Stack וארכיטקט מערכות AI',
+  locale: 'en_US',
+  defaultTitle: 'Elad Saadon | Full-Stack Developer and AI Systems Architect',
   description:
-    'אלעד סעדון הוא מפתח Full-Stack וארכיטקט מערכות AI מישראל, עם התמחות ב-Next.js, React, TypeScript, אינטגרציית AI ואוטומציה בענן.',
+    'Elad Saadon is a full-stack developer and AI systems architect from Israel, specializing in Next.js, React, TypeScript, AI integration, and cloud automation.',
   author: {
     name: 'Elad Saadon',
     url: 'https://www.eladsaadon.dev',
@@ -30,8 +31,8 @@ export const defaultMetadata: Metadata = {
   alternates: {
     canonical: siteConfig.url,
     languages: {
-      'he-IL': siteConfig.url,
-      'en-US': `${siteConfig.url}/en`,
+      'he-IL': `${siteConfig.url}/he`,
+      'en-US': siteConfig.url,
       'ru-RU': `${siteConfig.url}/ru`,
       'x-default': siteConfig.url,
     },

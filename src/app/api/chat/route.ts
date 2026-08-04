@@ -65,6 +65,11 @@ const MAX_REQUESTS_PER_WINDOW = 10;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const BLOCK_DURATION_MS = 5 * 60_000;
 const RATE_LIMIT_WINDOW_SECONDS = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
+// A per-minute limit bounds a burst but not a slow grind: 10/min sustained is 14,400
+// upstream calls a day off one address. The daily cap is what actually protects the API
+// key from being drained. 60 messages a day is far past any real visitor's use.
+const MAX_REQUESTS_PER_DAY = 60;
+const DAY_MS = 86_400_000;
 
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -98,6 +103,17 @@ function getAllowedHosts() {
       hosts.add(new URL(publicUrl).host);
     } catch {
       // Ignore invalid URL values in env.
+    }
+  }
+
+  // A PREVIEW deployment serves from its own hostname, so a chat request made from the
+  // preview's own page failed this check and every message came back 403 — the widget was
+  // dead on every branch deploy, which is also the one place this project verifies things.
+  // Trust the deployment's own hosts there. Production keeps the strict list above: these
+  // are only added when Vercel says this is not the production environment.
+  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') {
+    for (const h of [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]) {
+      if (h) hosts.add(h);
     }
   }
 
@@ -155,8 +171,34 @@ function checkRateLimitInMemory(key: string) {
   };
 }
 
+const dailyStore = new Map<string, { day: number; count: number }>();
+
+/**
+ * Per-address daily budget. Deliberately separate from the per-minute limiter: that one
+ * exists to stop a burst, this one exists to stop the API key being spent. It runs before
+ * the Redis path so the cap holds whether or not Upstash is configured.
+ */
+function checkDailyBudget(key: string, now: number) {
+  const day = Math.floor(now / DAY_MS);
+  const entry = dailyStore.get(key);
+
+  if (!entry || entry.day !== day) {
+    // Cheap ceiling on the map: a new day invalidates every entry anyway.
+    if (dailyStore.size > 5000) dailyStore.clear();
+    dailyStore.set(key, { day, count: 1 });
+    return { allowed: true };
+  }
+
+  entry.count += 1;
+  return { allowed: entry.count <= MAX_REQUESTS_PER_DAY };
+}
+
 async function checkRateLimit(key: string) {
   const now = Date.now();
+
+  if (!checkDailyBudget(key, now).allowed) {
+    return { allowed: false, remaining: 0, resetMs: DAY_MS - (now % DAY_MS) };
+  }
 
   if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
     const bucket = Math.floor(now / RATE_LIMIT_WINDOW_MS);
@@ -220,11 +262,20 @@ function validateRequestSource(req: NextRequest) {
   return matchesAllowedHost(origin) || matchesAllowedHost(referer);
 }
 
+/**
+ * Turnstile is optional infrastructure, not a precondition for the widget existing.
+ * When no secret is configured the captcha stage is skipped entirely and the rate limits
+ * carry the anti-abuse load; when a secret IS configured the check is mandatory and a
+ * missing or bad token is refused. What must never happen is the previous behaviour:
+ * production with no secret rejected every message, so the widget was dead site-wide.
+ */
+function isTurnstileConfigured() {
+  return Boolean(process.env.TURNSTILE_SECRET_KEY);
+}
+
 async function verifyTurnstileToken(token: string, ip: string) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) {
-    return process.env.NODE_ENV !== 'production';
-  }
+  if (!secret) return false;
 
   const formData = new FormData();
   formData.append('secret', secret);
@@ -261,6 +312,85 @@ function validateMessages(messages: unknown) {
   });
 }
 
+// --- model providers -------------------------------------------------------------------
+// Server-only. The key is read from the environment and NEVER leaves this module — there
+// is no client-side path to it, and no `NEXT_PUBLIC_` variant exists on purpose.
+const KIMI_API_KEY = process.env.KIMI_API_KEY;
+const KIMI_BASE_URL = process.env.KIMI_BASE_URL ?? 'https://api.moonshot.ai/v1';
+const KIMI_MODEL = process.env.KIMI_MODEL ?? 'kimi-k2-0905-preview';
+const UPSTREAM_TIMEOUT_MS = 20_000;
+
+type ChatTurn = { role?: unknown; text?: unknown };
+
+const asText = (m: ChatTurn) => String(m.text ?? '').slice(0, MAX_MESSAGE_LENGTH);
+
+/** Kimi (Moonshot) — OpenAI-compatible chat completions. Returns '' on any failure so
+ *  the caller can answer with a single graceful error state. */
+async function askKimi(messages: ChatTurn[]): Promise<string> {
+  const body = {
+    model: KIMI_MODEL,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: asText(m) })),
+    ],
+    max_tokens: 400,
+    temperature: 0.7,
+  };
+  try {
+    const res = await fetch(`${KIMI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      // Status + short reason only — never the payload, which can echo the prompt.
+      console.error(`[chat] kimi ${res.status}`, String(data?.error?.message ?? '').slice(0, 120));
+      return '';
+    }
+    return String(data?.choices?.[0]?.message?.content ?? '').trim();
+  } catch (e) {
+    console.error('[chat] kimi request failed', e instanceof Error ? e.name : 'unknown');
+    return '';
+  }
+}
+
+/** Gemini fallback — used only when no Kimi key is configured. */
+async function askGemini(messages: ChatTurn[]): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return '';
+  try {
+    const res = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: messages.map((m) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: asText(m) }],
+          })),
+          generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
+        }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      console.error(`[chat] gemini ${res.status}`, String(data?.error?.message ?? '').slice(0, 120));
+      return '';
+    }
+    return String(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim();
+  } catch (e) {
+    console.error('[chat] gemini request failed', e instanceof Error ? e.name : 'unknown');
+    return '';
+  }
+}
+
 function jsonWithRateHeaders(body: Record<string, unknown>, init: { status: number }, rateInfo: { remaining: number; resetMs: number }) {
   return NextResponse.json(body, {
     ...init,
@@ -278,7 +408,7 @@ export async function POST(req: NextRequest) {
 
   if (!rateInfo.allowed) {
     return jsonWithRateHeaders(
-      { error: 'Too many requests. Please try again later.' },
+      { error: 'rate_limited' },
       { status: 429 },
       rateInfo
     );
@@ -286,64 +416,43 @@ export async function POST(req: NextRequest) {
 
   try {
     if (!validateRequestSource(req)) {
-      return jsonWithRateHeaders({ error: 'Forbidden request source' }, { status: 403 }, rateInfo);
+      return jsonWithRateHeaders({ error: 'forbidden' }, { status: 403 }, rateInfo);
     }
 
     const body = await req.json();
     const { messages, turnstileToken } = body as { messages?: unknown; turnstileToken?: unknown };
 
     if (!validateMessages(messages)) {
-      return jsonWithRateHeaders({ error: 'Invalid input' }, { status: 400 }, rateInfo);
+      return jsonWithRateHeaders({ error: 'invalid_input' }, { status: 400 }, rateInfo);
     }
 
-    if (typeof turnstileToken !== 'string' || turnstileToken.length < 10) {
-      return jsonWithRateHeaders({ error: 'Missing anti-bot verification' }, { status: 400 }, rateInfo);
-    }
-
-    const turnstileOk = await verifyTurnstileToken(turnstileToken, ip);
-    if (!turnstileOk) {
-      return jsonWithRateHeaders({ error: 'Anti-bot verification failed' }, { status: 403 }, rateInfo);
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return jsonWithRateHeaders({ error: 'Chat not configured' }, { status: 503 }, rateInfo);
-    }
-
-    const sanitized = (messages as { role?: unknown; text?: unknown }[])
-      .slice(-MAX_MESSAGES)
-      .map((m) => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: String(m.text ?? '').slice(0, MAX_MESSAGE_LENGTH) }],
-      }));
-
-    const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: sanitized,
-          generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
-        }),
+    if (isTurnstileConfigured()) {
+      if (typeof turnstileToken !== 'string' || turnstileToken.length < 10) {
+        return jsonWithRateHeaders({ error: 'captcha_missing' }, { status: 400 }, rateInfo);
       }
-    );
 
-    const data = await response.json();
-    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const turnstileOk = await verifyTurnstileToken(turnstileToken, ip);
+      if (!turnstileOk) {
+        return jsonWithRateHeaders({ error: 'captcha_failed' }, { status: 403 }, rateInfo);
+      }
+    }
+
+    const trimmed = (messages as { role?: unknown; text?: unknown }[]).slice(-MAX_MESSAGES);
+
+    // Kimi is the primary model; Gemini stays wired as a fallback so the widget keeps
+    // working on any deployment that has not been given a Kimi key yet.
+    const provider = KIMI_API_KEY ? 'kimi' : process.env.GEMINI_API_KEY ? 'gemini' : null;
+    if (!provider) {
+      return jsonWithRateHeaders({ error: 'not_configured' }, { status: 503 }, rateInfo);
+    }
+
+    const text = provider === 'kimi' ? await askKimi(trimmed) : await askGemini(trimmed);
     if (!text) {
-      const errMsg = data?.error?.message ?? JSON.stringify(data).slice(0, 200);
-      console.error('Gemini empty response');
-      console.error('Gemini error summary:', errMsg.slice(0, 120));
-      return jsonWithRateHeaders({ error: 'Chat service temporarily unavailable' }, { status: 500 }, rateInfo);
+      return jsonWithRateHeaders({ error: 'upstream_unavailable' }, { status: 502 }, rateInfo);
     }
 
     return jsonWithRateHeaders({ text }, { status: 200 }, rateInfo);
   } catch {
-    return jsonWithRateHeaders({ error: 'Server error' }, { status: 500 }, rateInfo);
+    return jsonWithRateHeaders({ error: 'server_error' }, { status: 500 }, rateInfo);
   }
 }

@@ -12,9 +12,10 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://www.eladsaadon.dev/ru/services/nextjs-development',
     languages: {
-      'he-IL': 'https://www.eladsaadon.dev/services/nextjs-development',
-      'en-US': 'https://www.eladsaadon.dev/en/services/nextjs-development',
+      'he-IL': 'https://www.eladsaadon.dev/he/services/nextjs-development',
+      'en-US': 'https://www.eladsaadon.dev/services/nextjs-development',
       'ru-RU': 'https://www.eladsaadon.dev/ru/services/nextjs-development',
+      'x-default': 'https://www.eladsaadon.dev/services/nextjs-development',
     },
   },
 };
@@ -144,7 +145,7 @@ export default function NextJsDevelopmentPage() {
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Поделитесь деталями, и мы вместе посмотрим, что можно сделать.</p>
         </div>
         <Link
-          href="/#contact"
+          href="/ru#contact"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
           Давайте поговорим <ArrowLeft size={14} />

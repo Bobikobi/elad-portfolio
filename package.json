@@ -2,32 +2,47 @@
   "name": "elad-portfolio",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "repo:guard": "node scripts/public-repo-guard.mjs",
     "security:scan": "gitleaks detect --source . --no-git --redact --report-format json --report-path gitleaks-workingtree.json --verbose",
     "security:scan:history": "gitleaks git --redact --report-format json --report-path gitleaks-history.json --verbose ."
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@react-three/drei": "10.7.7",
+    "@react-three/fiber": "9.6.1",
+    "@react-three/postprocessing": "3.0.4",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.7.0",
+    "maath": "0.10.8",
     "next": "16.2.2",
+    "postprocessing": "6.39.3",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "three": "0.185.1",
+    "zustand": "5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "0.185.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "puppeteer-core": "^24.42.0",
+    "r3f-perf": "7.2.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

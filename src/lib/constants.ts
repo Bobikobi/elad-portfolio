@@ -172,18 +172,18 @@ export const projects: Project[] = [
   {
     id: 'elad-portfolio',
     title: {
-      he: 'פורטפוליו אישי',
-      en: 'Personal Portfolio',
-      ru: 'Личное Портфолио',
+      he: 'פורטפוליו קוסמי',
+      en: 'Cosmic Portfolio',
+      ru: 'Космическое портфолио',
     },
     description: {
-      he: 'אתר הפורטפוליו הזה עצמו - Next.js 16, Tailwind CSS v4 ו-Framer Motion. תמיכה ב-3 שפות כולל RTL, ווידג\'ט נגישות מובנה, security headers ועיצוב dark-mode מלא.',
-      en: 'This very portfolio - built with Next.js 16, Tailwind CSS v4, and Framer Motion. Trilingual i18n with RTL, built-in accessibility widget, security headers, and dark-mode design.',
-      ru: 'Этот самый портфолио - Next.js 16, Tailwind CSS v4 и Framer Motion. Поддержка 3 языков с RTL, виджет доступности и security headers.',
+      he: 'האתר הזה. חוויית WebGL בזמן אמת - גוללים אל תוך הגלקסיה, צוללים דרך הליבה שלה ומגיעים למערכת שמש חיה שבה כל כוכב לכת הוא עמוד באתר. בנוי ב-Next.js 16 ו-React Three Fiber: שיידרים ב-GLSL, שרשרת post-processing, מנוע שמתאים את קצב הפריימים לקצב הרענון של המסך (כולל 120Hz), וסצנה עם seed קבוע שנטענת זהה בכל פעם. שלוש שפות עם תמיכת RTL מלאה.',
+      en: 'This site. A real-time WebGL experience - scroll into the galaxy, dive through its core, and arrive in a living solar system where every planet is a section of the site. Built with Next.js 16 and React Three Fiber: custom GLSL shaders, a post-processing pipeline, an engine that paces itself to the display\'s refresh rate (including 120Hz), and a fully seeded scene that renders identically on every load. Three locales with full RTL.',
+      ru: 'Этот сайт. WebGL-опыт в реальном времени - вы прокручиваете страницу в галактику, ныряете сквозь её ядро и попадаете в живую солнечную систему, где каждая планета - раздел сайта. Next.js 16 и React Three Fiber: собственные GLSL-шейдеры, конвейер пост-обработки, движок, подстраивающийся под частоту обновления экрана (включая 120 Гц), и сцена с фиксированным seed, отрисовывающаяся одинаково при каждой загрузке. Три языка с полной поддержкой RTL.',
     },
     category: 'web-app',
-    techStack: ['Next.js 16', 'TypeScript', 'Tailwind CSS v4', 'Framer Motion', 'i18n'],
-    liveUrl: 'https://elad-s-portfolio.vercel.app',
+    techStack: ['Next.js 16', 'React Three Fiber', 'Three.js', 'GLSL', 'TypeScript', 'Tailwind CSS v4', 'i18n / RTL'],
+    liveUrl: 'https://www.eladsaadon.dev',
     githubUrl: 'https://github.com/Bobikobi/elad-portfolio',
     previewImage: '/images/projects/elad-portfolio-preview.jpg',
     featured: true,
@@ -238,7 +238,21 @@ export const techCategories = [
   },
   {
     key: 'frontend',
-    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Framer Motion', 'Three.js / R3F', 'PWA / Web Push', 'Recharts', 'shadcn/ui'],
+    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Framer Motion', 'PWA / Web Push', 'Recharts', 'shadcn/ui'],
+  },
+  {
+    // Split out of `frontend`, where the whole of the real-time 3D work was a single
+    // "Three.js / R3F" chip among eight. It is the largest thing on this site and it was the
+    // least visible item in the list describing it.
+    key: 'realtime',
+    items: [
+      'Three.js',
+      'React Three Fiber',
+      'WebGL / GLSL shaders',
+      'Post-processing pipelines',
+      'GPU instancing',
+      'Real-time performance engineering',
+    ],
   },
   {
     key: 'backend',
@@ -254,7 +268,7 @@ export const techCategories = [
   },
   {
     key: 'cloud',
-    items: ['Vercel', 'GCP', 'Oracle Cloud', 'nginx', 'gunicorn', 'pm2', 'Docker', 'GitHub Actions', 'AWS SES', 'Sentry', 'Google Sheets API', 'Facebook Graph API'],
+    items: ['Vercel', 'Vercel CI / Preview Deploys', 'GCP', 'Oracle Cloud', 'nginx', 'gunicorn', 'pm2', 'Docker', 'GitHub Actions', 'AWS SES', 'Sentry', 'Google Sheets API', 'Facebook Graph API'],
   },
 ];
 

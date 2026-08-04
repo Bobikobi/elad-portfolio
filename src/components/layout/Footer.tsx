@@ -3,6 +3,7 @@ import { Mail } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import Link from 'next/link';
 import { GithubIcon, LinkedinIcon } from '@/components/ui/SocialIcons';
+import Wordmark from './Wordmark';
 
 const socials = [
   { icon: GithubIcon, href: 'https://github.com/Bobikobi', label: 'GitHub' },
@@ -15,19 +16,14 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="relative z-10" style={{ borderTop: '1px solid transparent', borderImage: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.4) 30%, rgba(6,182,212,0.4) 70%, transparent) 1' }}>
-      <div className="mx-auto max-w-[1200px] px-6 py-12">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          {/* Logo */}
-          <span
-            className="text-3xl font-bold tracking-wide text-[var(--color-text-primary)]"
-            style={{ fontFamily: "'Glamora', serif" }}
-          >
-            E.S
-          </span>
+    <footer className="relative z-10 border-t border-[rgba(238,241,255,0.1)] bg-[var(--color-space-void)]">
+      {/* Compact single-band footer: logo · links · socials on one row (stacks tight on
+          mobile), with a small copyright + texture credit beneath. */}
+      <div className="mx-auto max-w-[1200px] px-6 py-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <Wordmark className="text-xl text-[var(--color-text-primary)]" />
 
-          {/* Links */}
-          <div className="flex items-center gap-6 text-sm text-[var(--color-text-tertiary)]">
+          <div className="flex items-center gap-5 text-[13px] text-[var(--color-text-tertiary)]">
             <Link href="/accessibility" className="hover:text-[var(--color-text-secondary)] transition-colors">
               {t('footer.accessibility')}
             </Link>
@@ -39,7 +35,6 @@ export default function Footer() {
             </Link>
           </div>
 
-          {/* Socials */}
           <div className="flex items-center gap-4">
             {socials.map((s) => (
               <a
@@ -50,14 +45,32 @@ export default function Footer() {
                 aria-label={s.label}
                 className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:scale-110 transition-all"
               >
-                <s.icon size={18} strokeWidth={1.5} />
+                <s.icon size={17} strokeWidth={1.5} />
               </a>
             ))}
           </div>
         </div>
 
-        <div className="mt-8 text-center text-xs text-[var(--color-text-tertiary)]">
+        <div className="mt-3 text-center text-[11px] leading-relaxed text-[var(--color-text-tertiary)]/80">
           &copy; {year} Elad Saadon. {t('footer.rights')}
+          <span className="mx-1.5 opacity-40">·</span>
+          <a
+            href="https://www.solarsystemscope.com/textures/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-[var(--color-text-secondary)] transition-colors"
+          >
+            Planet textures: Solar System Scope (CC BY 4.0)
+          </a>
+          <span className="mx-1.5 opacity-40">·</span>
+          <a
+            href="https://images.nasa.gov/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-[var(--color-text-secondary)] transition-colors"
+          >
+            Nebula imagery: NASA/ESA Hubble (public domain)
+          </a>
         </div>
       </div>
     </footer>

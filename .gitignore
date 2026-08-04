@@ -49,8 +49,12 @@ next-env.d.ts
 *.key
 *.crt
 
-# internal ops — not for public repo
-/scripts/
+# internal ops — not for public repo. `/scripts/*` (not `/scripts/`) so the harness
+# subdirectory can be re-included: git never descends into a fully ignored directory,
+# which silently swallows any negation beneath it.
+/scripts/*
+# reusable verification harnesses live IN the repo (MEGA PLAN part 6); their output does not
+!/scripts/harness/
 PRIVATE_REPO_LIMITATION_AND_NEXT_STEP.md
 *.cer
 *.p12
@@ -62,3 +66,22 @@ PRIVATE_REPO_LIMITATION_AND_NEXT_STEP.md
 gitleaks-workingtree.json
 gitleaks-history.json
 security-reports/
+
+# Local visual-verification harness (not for commit) — everything at the root starting
+# with an underscore is temp harness: scripts, shell helpers and the frames they capture.
+/_*.mjs
+/_*.sh
+/_*.png
+/_*.json
+
+# local visual-verification chrome profile (never commit)
+.automation-profile/
+tsconfig.check.json
+
+# harness output (screenshots + measurement reports)
+.harness-out/
+
+# One package manager. The lockfile is pnpm-lock.yaml; an npm or yarn install here
+# would build a second, divergent dependency tree from the same package.json.
+package-lock.json
+yarn.lock

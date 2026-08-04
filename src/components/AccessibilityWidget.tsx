@@ -59,22 +59,26 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
   const side = isRTL ? 'start-6' : 'end-6';
 
   const [open, setOpen] = useState(false);
-  const [state, setState] = useState<A11yState>(DEFAULT_STATE);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  // Load saved state from localStorage
-  useEffect(() => {
+  // Restored in the state INITIALISER, not by setting state from an effect. The saved
+  // settings are known before the first client render, so reading them there means the
+  // visitor's chosen font size and contrast are applied on that render instead of on a second
+  // one — the old version rendered every page at default size first, then corrected, which is
+  // a visible reflow for exactly the visitors least able to tolerate one.
+  //
+  // Safe against hydration mismatch because nothing here is in the server markup: the panel
+  // is closed until opened, and the settings are applied to <html> by the effect below. The
+  // guard is for SSR, where there is no localStorage at all.
+  const [state, setState] = useState<A11yState>(() => {
+    if (typeof window === 'undefined') return DEFAULT_STATE;
     try {
       const saved = localStorage.getItem('a11y-settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setState(prev => ({ ...prev, ...parsed }));
-      }
+      return saved ? { ...DEFAULT_STATE, ...JSON.parse(saved) } : DEFAULT_STATE;
     } catch {
-      // Ignore parse errors
+      return DEFAULT_STATE; // unparseable or storage blocked
     }
-  }, []);
+  });
+  const panelRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   // Apply state to DOM and persist
   useEffect(() => {
@@ -155,9 +159,8 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
         aria-label={t('toggleBtn')}
         aria-expanded={open}
         aria-controls="a11y-panel"
-        className={`fixed bottom-6 start-6 z-[9999] flex items-center gap-2 rounded-full shadow-lg px-4 py-3 text-white font-bold text-sm transition-all duration-300 hover:scale-105 focus-visible:ring-4 focus-visible:ring-blue-300 ${
-          isActive ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
-        }`}
+        data-active={isActive ? 'true' : 'false'}
+        className="chrome-launcher fixed bottom-6 start-6 z-[9999] flex items-center gap-2 rounded-full px-4 py-3 font-medium text-sm hover:scale-[1.04]"
       >
         <Accessibility size={22} aria-hidden="true" />
         <span className="hidden sm:inline">{t('toggleBtn')}</span>
@@ -171,19 +174,19 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
           role="dialog"
           aria-label={t('title')}
           aria-modal="false"
-          className={`fixed bottom-20 ${side} z-[9999] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden animate-fadeIn`}
+          className={`chrome-surface fixed bottom-20 ${side} z-[9999] rounded-2xl overflow-hidden animate-fadeIn`}
           style={{ width: 'min(90vw, 18rem)' }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(255,201,120,0.28)]">
             <div className="flex items-center gap-2">
-              <Accessibility size={18} aria-hidden="true" />
-              <span className="font-bold text-sm">{t('title')}</span>
+              <Accessibility size={18} aria-hidden="true" className="text-[var(--color-core-gold)]" />
+              <span className="font-semibold text-sm text-[var(--color-star-white)]">{t('title')}</span>
             </div>
             <button
               onClick={() => setOpen(false)}
               aria-label={t('close')}
-              className="p-1 rounded-lg hover:bg-blue-500 transition-colors focus-visible:ring-2 focus-visible:ring-white"
+              className="chrome-btn p-1 rounded-lg"
             >
               <X size={18} aria-hidden="true" />
             </button>
@@ -198,21 +201,17 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
                   key={item.key}
                   onClick={item.action}
                   aria-pressed={item.active}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                    item.active
-                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                      : 'text-gray-700 hover:bg-gray-50 border border-transparent'
-                  }`}
+                  className="chrome-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium"
                 >
-                  <Icon size={18} aria-hidden="true" className={item.active ? 'text-blue-600' : 'text-gray-400'} />
+                  <Icon size={18} aria-hidden="true" className={item.active ? 'text-[var(--color-core-gold)]' : 'text-[var(--color-star-white)]/45'} />
                   <span className="flex-1 text-start">{t(item.key)}</span>
                   {item.badge && (
-                    <span className="bg-blue-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                    <span className="bg-[rgba(255,201,120,0.18)] border border-[rgba(255,201,120,0.5)] text-[var(--color-core-gold)] text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
                       {item.badge}
                     </span>
                   )}
                   {item.active && !item.badge && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500" aria-hidden="true" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-core-gold)]" aria-hidden="true" />
                   )}
                 </button>
               );
@@ -223,7 +222,7 @@ export default function AccessibilityWidget({ locale = 'he' }: AccessibilityWidg
           <div className="px-3 pb-3">
             <button
               onClick={reset}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 border border-gray-200 transition-colors"
+              className="chrome-btn w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border-white/12"
             >
               <RotateCcw size={14} aria-hidden="true" />
               {t('reset')}

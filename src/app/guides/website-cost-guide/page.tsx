@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Calculator, Globe, Bot, Workflow, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Globe, Bot, Workflow, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 
@@ -228,13 +228,13 @@ export default function WebsiteCostGuidePage() {
         </div>
         <div className="flex shrink-0 flex-wrap gap-3">
           <Link
-            href="/services"
+            href="/he/services"
             className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border-default)] px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)] transition-colors"
           >
             כל השירותים <ArrowLeft size={13} />
           </Link>
           <Link
-            href="/#contact"
+            href="/he#contact"
             className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
           >
             קבלו הצעת מחיר

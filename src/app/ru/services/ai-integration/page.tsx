@@ -12,9 +12,10 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://www.eladsaadon.dev/ru/services/ai-integration',
     languages: {
-      'he-IL': 'https://www.eladsaadon.dev/services/ai-integration',
-      'en-US': 'https://www.eladsaadon.dev/en/services/ai-integration',
+      'he-IL': 'https://www.eladsaadon.dev/he/services/ai-integration',
+      'en-US': 'https://www.eladsaadon.dev/services/ai-integration',
       'ru-RU': 'https://www.eladsaadon.dev/ru/services/ai-integration',
+      'x-default': 'https://www.eladsaadon.dev/services/ai-integration',
     },
   },
 };
@@ -144,7 +145,7 @@ export default function AiIntegrationPage() {
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Давайте вместе определим, где ИИ принесёт наибольшую ценность.</p>
         </div>
         <Link
-          href="/#contact"
+          href="/ru#contact"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
           Давайте поговорим <ArrowLeft size={14} />

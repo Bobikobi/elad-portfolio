@@ -1,0 +1,175 @@
+// Locale comes straight from translations, not from i18n: i18n now imports
+// localeForPath from here, and pointing back at i18n would be a cycle (harmless while
+// the import is type-only, but only one edit away from not being).
+import type { Locale } from './translations';
+
+/**
+ * The cosmic sections — each is a real crawlable route AND a planet/target the
+ * camera flies to. Server-safe (no 'use client'): route pages import this to
+ * render SSG content + metadata, and the client SceneBridge maps pathname → focus.
+ *
+ * Planet mapping (spec): About=Earth, Services=Jupiter, Projects=Saturn,
+ * Technologies=asteroid belt, Contact=Mars.
+ */
+export type SectionId = 'about' | 'services' | 'projects' | 'technologies' | 'contact';
+
+export interface Section {
+  id: SectionId;
+  /** camera focus key: a planet in planetPositions, or 'belt' for technologies. */
+  focus: string;
+  navKey: string; // i18n nav.* key
+  slug: string; // he path segment (also the en/ru segment)
+}
+
+export const SECTIONS: Section[] = [
+  { id: 'about', focus: 'earth', navKey: 'nav.about', slug: 'about' },
+  { id: 'services', focus: 'jupiter', navKey: 'nav.services', slug: 'services' },
+  { id: 'projects', focus: 'saturn', navKey: 'nav.projects', slug: 'projects' },
+  { id: 'technologies', focus: 'belt', navKey: 'nav.tech', slug: 'technologies' },
+  { id: 'contact', focus: 'mars', navKey: 'nav.contact', slug: 'contact' },
+];
+
+const BY_SLUG = new Map(SECTIONS.map((s) => [s.slug, s]));
+
+/** Reverse map: which section route a clicked planet opens. */
+export const PLANET_SECTION: Record<string, SectionId> = {
+  earth: 'about',
+  jupiter: 'services',
+  saturn: 'projects',
+  mars: 'contact',
+};
+
+/**
+ * F3 — English is the default locale and owns the un-prefixed URL space; Hebrew and
+ * Russian are prefixed. Every locale-aware link in the app goes through the three
+ * helpers below rather than re-deriving the rule, because an inline copy of it is
+ * exactly what silently rots when the default changes.
+ */
+const PREFIXED_LOCALES: readonly Locale[] = ['he', 'ru'];
+const isPrefixedLocale = (v: string): v is Locale => (PREFIXED_LOCALES as readonly string[]).includes(v);
+
+/** Locale-aware path for a section ('/about' for en, '/he/about' for he/ru). */
+export function sectionPath(section: SectionId, locale: Locale): string {
+  return locale === 'en' ? `/${section}` : `/${locale}/${section}`;
+}
+
+/** Home path per locale. */
+export function homePath(locale: Locale): string {
+  return locale === 'en' ? '/' : `/${locale}`;
+}
+
+/** Locale-aware path for any slug below the root ('/services/x' or '/he/services/x'). */
+export function localePath(slug: string, locale: Locale): string {
+  const clean = slug.replace(/^\//, '');
+  return locale === 'en' ? `/${clean}` : `/${locale}/${clean}`;
+}
+
+/**
+ * Route roots that exist in all three languages, so an un-prefixed one means English.
+ */
+const LOCALIZED_ROOTS: ReadonlySet<string> = new Set(SECTIONS.map((s) => s.slug));
+
+/**
+ * Hand-written Hebrew-only subtrees: no English or Russian counterpart exists, so they
+ * keep their indexed un-prefixed URLs and are pinned to Hebrew rather than inheriting
+ * the English default. Exported because proxy.ts resolves the same question on the
+ * server and a second copy of this list is a divergence waiting to happen.
+ */
+export const HEBREW_ONLY_PREFIXES = ['/guides'] as const;
+
+/** The same pathname re-pointed at another locale, used by the language switcher. */
+export function switchLocalePath(pathname: string, locale: Locale): string {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length && isPrefixedLocale(parts[0])) parts.shift();
+  if (!parts.length) return homePath(locale);
+  // A single-URL route stays put: pushing /he/privacy would be a 404, and before F3
+  // the same line 404'd on /en/privacy — it was simply invisible while Hebrew, the
+  // primary audience, happened to be the un-prefixed default.
+  if (!LOCALIZED_ROOTS.has(parts[0])) return pathname;
+  return localePath(parts.join('/'), locale);
+}
+
+/**
+ * The locale a pathname PINS, or null when the route serves every language from one URL
+ * and therefore has to follow the visitor's stored preference instead.
+ *
+ * This is the single rule for "what language is this URL", and both the server (proxy.ts)
+ * and the client (i18n resolveLocale, LocaleRouteSync) answer the question through it.
+ *
+ * Two things it has to get right, both learned by measuring rather than reasoning:
+ *
+ * 1. The un-prefixed answer is 'en', not "no answer". A sync that only recognises
+ *    PREFIXED segments can correct the UI toward Hebrew or Russian but never back to the
+ *    default, so choosing English from /ru/about left <html lang="ru"> on English content.
+ *
+ * 2. A pinned route beats a stored preference, because on these routes the CONTENT is not
+ *    negotiable: /about renders <SectionPage locale="en" /> decided by the route file on
+ *    the server. A stored 'ru' could only ever repaint the chrome around it, which is how
+ *    /about came to render a Russian navbar over an English page. Only the URL can decide
+ *    a route whose body the URL already decided.
+ */
+export function localeForPath(pathname: string): Locale | null {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length && isPrefixedLocale(parts[0])) return parts[0];
+  if (HEBREW_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'he';
+  if (!parts.length) return 'en';
+  return LOCALIZED_ROOTS.has(parts[0]) ? 'en' : null;
+}
+
+/** Map a pathname to the focused section (or null for home / unknown routes). */
+export function sectionForPath(pathname: string): Section | null {
+  const parts = pathname.split('/').filter(Boolean);
+  // Drop a leading locale segment.
+  const seg = parts.length && isPrefixedLocale(parts[0]) ? parts[1] : parts[0];
+  if (!seg) return null;
+  return BY_SLUG.get(seg) ?? null;
+}
+
+/** Per-section, per-locale SEO title + description (Hebrew is primary). */
+export const SECTION_META: Record<SectionId, Record<Locale, { title: string; description: string }>> = {
+  about: {
+    he: { title: 'אודות', description: 'מפתח פול-סטאק וארכיטקט מערכות AI מישראל, עם תואר בעבודה סוציאלית ואהבה לבנות מוצרים שימושיים בקוד.' },
+    en: { title: 'About', description: 'Full-stack developer and AI systems architect from Israel, with a B.A. in Social Work and a love for building genuinely useful products.' },
+    ru: { title: 'Обо мне', description: 'Full-stack разработчик и архитектор AI-систем из Израиля с дипломом социальной работы и любовью к созданию полезных продуктов.' },
+  },
+  services: {
+    he: { title: 'שירותי פיתוח Next.js, AI ואוטומציה', description: 'פיתוח Full-Stack, אינטגרציית AI ואוטומציה עסקית. קוד נקי, ביצועים גבוהים ופריסה מאובטחת לפרודקשן.' },
+    en: { title: 'Services — Next.js, AI & Automation', description: 'Full-stack web development, AI integration, and business automation. Clean code, high performance, secure production deployment.' },
+    ru: { title: 'Услуги — Next.js, AI и Автоматизация', description: 'Full-stack разработка, интеграция AI и бизнес-автоматизация. Чистый код, высокая производительность, безопасный деплой.' },
+  },
+  projects: {
+    he: { title: 'פרויקטים', description: 'עבודות נבחרות בפרודקשן: מערכות AI אוטונומיות, ניהול חירום עירוני, כלים אזרחיים ופלטפורמות עסקיות.' },
+    en: { title: 'Projects', description: 'Selected production work: autonomous AI systems, municipal emergency management, civic-tech tools, and business platforms.' },
+    ru: { title: 'Проекты', description: 'Избранные проекты в проде: автономные AI-системы, управление ЧС, civic-tech инструменты и бизнес-платформы.' },
+  },
+  technologies: {
+    he: { title: 'טכנולוגיות', description: 'שפות, ממשקים וכלים בפרודקשן: React, Next.js, TypeScript, Python, Django, Supabase, Gemini, Docker וענן.' },
+    en: { title: 'Tech Stack', description: 'Production languages, frameworks and tools: React, Next.js, TypeScript, Python, Django, Supabase, Gemini, Docker, and cloud.' },
+    ru: { title: 'Технологии', description: 'Языки, фреймворки и инструменты в проде: React, Next.js, TypeScript, Python, Django, Supabase, Gemini, Docker и облако.' },
+  },
+  contact: {
+    he: { title: 'צור קשר', description: 'יש לך פרויקט או רעיון? שלח הודעה ונדבר על פיתוח Web, AI ואוטומציה.' },
+    en: { title: 'Contact', description: 'Have a project or an idea? Send a message and let’s talk about Web, AI, and automation.' },
+    ru: { title: 'Контакт', description: 'Есть проект или идея? Напишите — обсудим Web, AI и автоматизацию.' },
+  },
+};
+
+const BASE = 'https://www.eladsaadon.dev';
+
+/** Full metadata (title, description, canonical + hreflang alternates) for a section. */
+export function sectionMetadata(id: SectionId, locale: Locale) {
+  const m = SECTION_META[id][locale];
+  return {
+    title: m.title,
+    description: m.description,
+    alternates: {
+      canonical: `${BASE}${sectionPath(id, locale)}`,
+      languages: {
+        'he-IL': `${BASE}${sectionPath(id, 'he')}`,
+        'en-US': `${BASE}${sectionPath(id, 'en')}`,
+        'ru-RU': `${BASE}${sectionPath(id, 'ru')}`,
+        'x-default': `${BASE}${sectionPath(id, 'en')}`,
+      },
+    },
+  };
+}

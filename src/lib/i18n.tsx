@@ -1,11 +1,27 @@
 'use client';
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from 'react';
+import { translations, type Locale } from './translations';
+import { localeForPath } from './sections';
+import { LOCALE_COOKIE, localeCookie, parseLocale } from './localePref';
 
-export type Locale = 'he' | 'en' | 'ru';
+/** The preference the SERVER saw, read from the same cookie it read. */
+function cookieLocale(): Locale | null {
+  const hit = document.cookie.match(new RegExp(`(?:^|;\\s*)${LOCALE_COOKIE}=([^;]*)`));
+  return parseLocale(hit?.[1]);
+}
+
+export { translations };
+export type { Locale };
 
 interface I18nContextType {
   locale: Locale;
-  setLocale: (l: Locale) => void;
+  /**
+   * `persist` is false for a change the ROUTE forced rather than the visitor chose.
+   * Navigating onto an English URL must not quietly overwrite someone's saved Hebrew,
+   * or the legal pages — the only ones that still honour the preference — would drift
+   * to whatever language they happened to browse last.
+   */
+  setLocale: (l: Locale, persist?: boolean) => void;
   t: (key: string) => string;
   dir: 'rtl' | 'ltr';
 }
@@ -18,35 +34,116 @@ export function useI18n() {
   return ctx;
 }
 
+const LOCALES: Locale[] = ['he', 'en', 'ru'];
+const isLocale = (v: unknown): v is Locale => typeof v === 'string' && (LOCALES as string[]).includes(v);
+
+/**
+ * The active locale is not component state — it is a value that lives OUTSIDE React, in the
+ * URL and in localStorage, and React is only reading it. Modelling it as `useState` plus a
+ * `setState` in an effect is what produced the `set-state-in-effect` error, and the error was
+ * describing a real cost: every visitor rendered the whole tree once in `initialLocale`, then
+ * the effect fired and rendered it all again, even when the answer was identical.
+ *
+ * As an external store the read is explicit and happens in one place. The server snapshot is
+ * whatever the route said; the client snapshot resolves the same precedence the effect used
+ * (path wins over the saved preference), so behaviour is unchanged — it simply arrives on the
+ * first client render instead of the second.
+ */
+let overrideLocale: Locale | null = null; // set by setLocale, wins over path + storage
+const listeners = new Set<() => void>();
+
+function subscribeLocale(cb: () => void) {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
+/**
+ * F3.1 — the ROUTE wins over the stored preference whenever the route pins a language.
+ *
+ * Reading storage first was the bug: a visitor with a stored 'ru' landing on /about got a
+ * Russian navbar wrapped around an English page, because /about renders
+ * `<SectionPage locale="en" />` chosen by the route file on the server. The preference
+ * could repaint the chrome and nothing else, so it produced a half-translated page.
+ *
+ * Correcting it in an effect afterwards is not good enough either — that is a second
+ * render, and it is what LocaleRouteSync was already trying and failing to do. Resolving
+ * it HERE means the very first client render already agrees with the server.
+ *
+ * `localeForPath` returns null only for the routes that genuinely serve every language
+ * from one URL (/privacy, /terms, /accessibility); there, and only there, the stored
+ * preference decides, and chrome and content move together so nothing is ever mixed.
+ */
+function resolveLocale(fallback: Locale): Locale {
+  if (overrideLocale) return overrideLocale;
+  const routeLocale = localeForPath(window.location.pathname);
+  if (routeLocale) return routeLocale;
+  // F3.2 — the COOKIE before localStorage, because the cookie is what the server just
+  // used to choose the `lang` and `dir` on the HTML being hydrated. Consulting a
+  // different source here is how the client ends up disagreeing with its own markup.
+  const fromCookie = cookieLocale();
+  if (fromCookie) return fromCookie;
+  try {
+    const saved = localStorage.getItem('locale');
+    if (isLocale(saved)) return saved;
+  } catch {
+    /* storage blocked (private mode) — the route's answer stands */
+  }
+  return fallback;
+}
+
 export function I18nProvider({
   children,
-  initialLocale = 'he',
+  initialLocale = 'en',
 }: {
   children: React.ReactNode;
   initialLocale?: Locale;
 }) {
-  const [locale, setLocaleState] = useState<Locale>(initialLocale);
+  // getSnapshot must return a stable value for an unchanged store, so the result is cached and
+  // only recomputed when something actually notifies. Returning a freshly-resolved value on
+  // every call would make React re-render forever.
+  const snapshot = React.useRef<Locale | null>(null);
+  const getSnapshot = useCallback(() => {
+    if (snapshot.current === null) snapshot.current = resolveLocale(initialLocale);
+    return snapshot.current;
+  }, [initialLocale]);
+  const getServerSnapshot = useCallback(() => initialLocale, [initialLocale]);
+  const locale = useSyncExternalStore(
+    useCallback((cb: () => void) => subscribeLocale(() => { snapshot.current = null; cb(); }), []),
+    getSnapshot,
+    getServerSnapshot
+  );
 
+  // The path is authoritative, so visiting /en persists that choice — same as before, but as a
+  // side effect of navigation rather than as part of deciding what to render.
   useEffect(() => {
-    const pathLocale = window.location.pathname.split('/')[1] as Locale | undefined;
-    const saved = localStorage.getItem('locale') as Locale | null;
-
-    if (pathLocale && ['he', 'en', 'ru'].includes(pathLocale)) {
-      setLocaleState(pathLocale);
-      localStorage.setItem('locale', pathLocale);
+    const pathLocale = window.location.pathname.split('/')[1];
+    if (isLocale(pathLocale)) {
+      document.cookie = localeCookie(pathLocale);
+      try { localStorage.setItem('locale', pathLocale); } catch { /* private mode */ }
       return;
     }
-
-    if (saved && ['he', 'en', 'ru'].includes(saved)) {
-      setLocaleState(saved);
-    }
+    // F3.2 migration. Everyone who chose a language before this shipped has it in
+    // localStorage and nowhere else, so the server would keep guessing English for them
+    // and they would keep seeing the flip. Mint the cookie from what they already have,
+    // once, and their next visit is server-correct.
+    if (cookieLocale()) return;
+    try {
+      const saved = localStorage.getItem('locale');
+      if (isLocale(saved)) document.cookie = localeCookie(saved);
+    } catch { /* private mode — nothing to migrate */ }
   }, []);
 
-  const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
-    localStorage.setItem('locale', l);
+  const setLocale = useCallback((l: Locale, persist = true) => {
+    overrideLocale = l;
+    if (persist) {
+      // Cookie first: it is the copy the server reads. localStorage stays as a mirror so
+      // nothing that already depends on it breaks.
+      document.cookie = localeCookie(l);
+      try { localStorage.setItem('locale', l); } catch { /* private mode */ }
+    }
     document.documentElement.lang = l;
     document.documentElement.dir = l === 'he' ? 'rtl' : 'ltr';
+    listeners.forEach((cb) => cb());
   }, []);
 
   useEffect(() => {
@@ -66,110 +163,3 @@ export function I18nProvider({
     </I18nContext.Provider>
   );
 }
-
-export const translations: Record<string, Record<Locale, string>> = {
-  // Nav
-  'nav.about': { he: 'אודות', en: 'About', ru: 'Обо мне' },
-  'nav.services': { he: 'שירותים', en: 'Services', ru: 'Услуги' },
-  'nav.projects': { he: 'פרויקטים', en: 'Projects', ru: 'Проекты' },
-  'nav.tech': { he: 'טכנולוגיות', en: 'Tech Stack', ru: 'Технологии' },
-  'nav.contact': { he: 'צור קשר', en: 'Contact', ru: 'Контакт' },
-
-  // Hero
-  'hero.greeting': { he: 'היי, אני', en: "Hi, I'm", ru: 'Привет, я' },
-  'hero.name': { he: 'אלעד סעדון', en: 'Elad Saadon', ru: 'Элад Саадон' },
-  'hero.available': { he: 'זמין לפרויקטים חדשים', en: 'Available for new projects', ru: 'Открыт для новых проектов' },
-  'hero.subtitle': {
-    he: 'אני בונה מוצרי Web ו-AI מהירים, נגישים ויציבים לפרודקשן, עם דגש על תוצאות עסקיות אמיתיות.',
-    en: 'I build fast, accessible, production-grade Web and AI products with a sharp focus on business outcomes.',
-    ru: 'Я создаю быстрые, доступные и production-ready Web и AI продукты с фокусом на реальный бизнес-результат.',
-  },
-  'hero.cta.work': { he: 'הפרויקטים שלי', en: 'View My Work', ru: 'Мои проекты' },
-  'hero.cta.contact': { he: 'צור קשר', en: 'Get in Touch', ru: 'Связаться' },
-  'hero.links.services': { he: 'שירותי פיתוח', en: 'Development Services', ru: 'Услуги разработки' },
-  'hero.links.ai': { he: 'אינטגרציית AI', en: 'AI Integration', ru: 'Интеграция ИИ' },
-  'hero.links.guide': { he: 'מדריך SEO + GEO 2026', en: 'SEO + GEO Guide 2026', ru: 'Руководство SEO + GEO 2026' },
-  'hero.title.0': { he: 'מפתח פול-סטאק', en: 'Full-Stack Developer', ru: 'Full-Stack Разработчик' },
-  'hero.title.1': { he: 'בונה עם בינה מלאכותית', en: 'Builds with AI', ru: 'Разрабатывает с AI' },
-  'hero.title.2': { he: 'אוטומציה וכלים', en: 'Automation & Tools', ru: 'Автоматизация и Инструменты' },
-  'hero.title.3': { he: 'פרויקטים שעושים הבדל', en: 'Projects That Matter', ru: 'Проекты Которые Важны' },
-
-  // About
-  'about.title': { he: 'אודות', en: 'About Me', ru: 'Обо мне' },
-  'about.bio': {
-    he: 'מפתח פול-סטאק עם רקע קצת שונה - תואר ראשון בעבודה סוציאלית ואהבה אמיתית לבנות דברים עם קוד. נהנה מבניית אפליקציות ווב, אוטומציה של תהליכים וניסויים עם בינה מלאכותית. הרקע החברתי עוזר לי להישאר ממוקד בלבנות דברים שבאמת שימושיים.',
-    en: 'Full-Stack developer with an uncommon background - B.A. in Social Work and a genuine love for building things with code. I enjoy creating web apps, automating workflows, and experimenting with AI. The social work side keeps me grounded in building things that are actually useful.',
-    ru: 'Full-Stack разработчик с нестандартным бэкграундом - бакалавр социальной работы и искренний интерес к программированию. Люблю создавать веб-приложения, автоматизировать процессы и экспериментировать с AI. Социальный фон помогает строить вещи, которые действительно полезны.',
-  },
-  'about.metric.projects': { he: 'פרויקטים', en: 'Projects', ru: 'Проектов' },
-  'about.metric.tech': { he: 'טכנולוגיות', en: 'Technologies', ru: 'Технологий' },
-  'about.metric.languages': { he: 'שפות', en: 'Languages', ru: 'Языков' },
-  'about.metric.cloud': { he: 'פלטפורמות ענן', en: 'Cloud Platforms', ru: 'Облачных платформ' },
-
-  // Services
-  'services.title': { he: 'שירותים', en: 'Services', ru: 'Услуги' },
-  'services.subtitle': { he: 'מה אני מציע', en: 'What I Offer', ru: 'Что я предлагаю' },
-  'services.web.title': { he: 'פיתוח פול-סטאק', en: 'Full-Stack Web Dev', ru: 'Full-Stack Разработка' },
-  'services.web.desc': {
-    he: 'אפליקציות ווב מקצה לקצה - React, Next.js, Tailwind, Supabase, ממשקי API ואימות משתמשים. משלב תכנון ועד פריסה מלאה לפרודקשן.',
-    en: 'End-to-end web apps in HTML, CSS, JavaScript & TypeScript - React, Next.js, Tailwind CSS, Supabase, REST APIs, and OAuth flows. From design to Vercel.',
-    ru: 'Веб-приложения на HTML/CSS/JS/TS - React, Next.js, Tailwind, Supabase, REST API и OAuth. От дизайна до деплоя.',
-  },
-  'services.ai.title': { he: 'בינה מלאכותית ואוטומציה', en: 'AI & Automation', ru: 'ИИ и Автоматизация' },
-  'services.ai.desc': {
-    he: 'פתרונות מותאמים עם Google Gemini, בוטים אוטונומיים ו-pipelines חכמים.',
-    en: 'Custom AI-powered solutions using Google Gemini, autonomous bots, and intelligent pipelines.',
-    ru: 'Решения на базе Google Gemini, автономные боты и интеллектуальные конвейеры.',
-  },
-  'services.desktop.title': { he: 'אפליקציות Desktop', en: 'Desktop Applications', ru: 'Desktop Приложения' },
-  'services.desktop.desc': {
-    he: 'אפליקציות Electron עם Puppeteer, AI Vision ואינטגרציות נייטיב.',
-    en: 'Cross-platform Electron apps with Puppeteer automation, AI vision, and native integrations.',
-    ru: 'Кроссплатформенные Electron приложения с Puppeteer, AI vision и нативными интеграциями.',
-  },
-  'services.civic.title': { he: 'Civic & Community Tech', en: 'Civic & Community Tech', ru: 'Civic & Community Tech' },
-  'services.civic.desc': {
-    he: 'פלטפורמות לסקטור הציבורי: ניהול חירום, כלי מעורבות אזרחית ונגישות.',
-    en: 'Public-sector platforms: emergency management, civic engagement tools, accessibility-first design.',
-    ru: 'Платформы для госсектора: управление ЧС, гражданское участие, доступный дизайн.',
-  },
-
-  // Projects
-  'projects.title': { he: 'פרויקטים', en: 'Projects', ru: 'Проекты' },
-  'projects.subtitle': { he: 'עבודות נבחרות', en: 'Selected Work', ru: 'Избранные работы' },
-  'projects.filter.all': { he: 'הכל', en: 'All', ru: 'Все' },
-  'projects.filter.web': { he: 'אתרים ואפליקציות', en: 'Websites & Apps', ru: 'Сайты и приложения' },
-  'projects.filter.desktop': { he: 'Desktop', en: 'Desktop', ru: 'Desktop' },
-  'projects.filter.ai': { he: 'AI ואוטומציה', en: 'AI & Automation', ru: 'ИИ и Автоматизация' },
-  'projects.filter.civic': { he: 'Civic-Tech', en: 'Civic-Tech', ru: 'Civic-Tech' },
-
-  // Tech
-  'tech.title': { he: 'טכנולוגיות', en: 'Tech Stack', ru: 'Технологии' },
-  'tech.subtitle': { he: 'שפות, ממשקים וכלים שאני עובד איתם', en: 'Languages, interfaces & tools I work with', ru: 'Языки, интерфейсы и инструменты' },
-  'tech.cat.languages': { he: 'שפות תכנות', en: 'Languages', ru: 'Языки' },
-  'tech.cat.frontend': { he: 'Frontend', en: 'Frontend', ru: 'Frontend' },
-  'tech.cat.backend': { he: 'Backend', en: 'Backend', ru: 'Backend' },
-  'tech.cat.ai': { he: 'AI & ML', en: 'AI & ML', ru: 'AI & ML' },
-  'tech.cat.automation': { he: 'Desktop & אוטומציה', en: 'Desktop & Automation', ru: 'Desktop и Автоматизация' },
-  'tech.cat.cloud': { he: 'ענן, DevOps & APIs', en: 'Cloud, DevOps & APIs', ru: 'Облако, DevOps и API' },
-
-  // Contact
-  'contact.title': { he: 'צור קשר', en: 'Get in Touch', ru: 'Связаться' },
-  'contact.subtitle': { he: 'יש לך פרויקט? בוא נדבר.', en: 'Have a project? Let\'s talk.', ru: 'Есть проект? Давайте поговорим.' },
-  'contact.name': { he: 'שם', en: 'Name', ru: 'Имя' },
-  'contact.email': { he: 'אימייל', en: 'Email', ru: 'Эл. почта' },
-  'contact.subject': { he: 'נושא', en: 'Subject', ru: 'Тема' },
-  'contact.subject.general': { he: 'פנייה כללית', en: 'General Inquiry', ru: 'Общий вопрос' },
-  'contact.subject.project': { he: 'בקשת פרויקט', en: 'Project Request', ru: 'Запрос проекта' },
-  'contact.subject.collab': { he: 'שיתוף פעולה', en: 'Collaboration', ru: 'Сотрудничество' },
-  'contact.subject.other': { he: 'אחר', en: 'Other', ru: 'Другое' },
-  'contact.message': { he: 'הודעה', en: 'Message', ru: 'Сообщение' },
-  'contact.send': { he: 'שלח הודעה', en: 'Send Message', ru: 'Отправить' },
-  'contact.sent': { he: 'ההודעה נשלחה!', en: 'Message sent!', ru: 'Сообщение отправлено!' },
-
-  // Footer
-  'footer.rights': { he: 'כל הזכויות שמורות.', en: 'All rights reserved.', ru: 'Все права защищены.' },
-  'footer.accessibility': { he: 'הצהרת נגישות', en: 'Accessibility', ru: 'Доступность' },
-  'footer.privacy': { he: 'פרטיות', en: 'Privacy', ru: 'Конфиденциальность' },
-  'footer.terms': { he: 'תנאי שימוש', en: 'Terms', ru: 'Условия' },
-};
