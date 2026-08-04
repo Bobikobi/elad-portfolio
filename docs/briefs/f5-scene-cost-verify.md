@@ -101,6 +101,70 @@ After the fix the governor does decide (`hz` comes back 60/72/75 across routes) 
 demote (`low` on several). Whether it demotes *correctly* is part of what the unreliable
 frame numbers above cannot yet settle.
 
+## Pass-count round (rulings 1-5), measured @ f95e2ac
+
+Harness: [f5-pass-audit.mjs](../../scripts/harness/f5-pass-audit.mjs). It reads the pass
+list off the composer itself (HUD builds publish it) and counts `renderer.render()` calls
+against real animation frames. `?tier=low|high` pins the tier so a cost knob can be judged
+by eye; ignored in production, like `?hz`.
+
+### Ruling 2 - the reorder: NOTHING TO FIX, and that is the finding
+
+The composer was already merging everything it could:
+
+```text
+RenderPass
+EffectPass [GodRays + Bloom + ExposureToneMap + HueSaturation + Noise + Vignette]
+EffectPass [SMAA]
+```
+
+Six effects in ONE pass. SMAA takes its own because it is the convolution effect in the
+chain, and convolution effects cannot be merged - not an ordering mistake, a property of
+the effect. There is no contiguity to restore and no free win to collect there.
+
+**The cost was one level below the pass list.** Three passes, and yet 21 renders per frame
+on home and 27.7 on a world: `mipmapBlur` runs a downsample AND an upsample per mip LEVEL,
+inside its own EffectPass. No pass list would ever have shown that, which is exactly why
+the audit was worth building before changing anything.
+
+### Renders per frame, before and after
+
+| route | before | after (low) | after (high) |
+|---|---|---|---|
+| `/` | 21.0 | **13.7** | 22.7 |
+| `/about` | 27.7 | **21.0** | 29.1 |
+
+The low tier now costs **35% fewer renders per frame** on home and 24% fewer on a world.
+The high tier is deliberately unchanged - every reduction here is a low-tier knob.
+
+Attribution, from the high/low difference of 9 renders on home: Bloom 9 → 6 levels is ~6 of
+them (two renders per level), SMAA is ~3. **Bloom levels was two thirds of the win.**
+
+### What landed
+
+| ruling | done | note |
+|---|---|---|
+| 1. Bloom levels 9 → 6 on low | yes | **there is no mid tier** — `Quality` is `'high' \| 'low'`, so "7 on mid" has nothing to attach to. Implemented 9 / 6. `levels` is a mount-time option, so the tier is now part of the Bloom `key` or a demotion would never take effect. |
+| 2. Reorder for contiguity | n/a | already optimal, see above |
+| 3. SMAA off on low | yes | **provisional** — see below |
+| 4. God rays 26 → 16 samples on low | yes | presence unchanged in every tier |
+| 5. DRS floor 0.6 → 0.85, keep the DPR cap | yes | it sat at 0.6 across every cosmic route while the frame rate ignored it |
+
+### Ruling 3 is PROVISIONAL - the crop is not frame-locked
+
+The condition was "drop it if a side-by-side crop shows acceptable edges", and an honest
+side-by-side is what could not be produced. The scene animates continuously, so two page
+loads land at different camera phases: the before and after crops of `/about` show the same
+world from slightly different angles, not the same pixels with and without SMAA. Neither
+shows stair-stepping, and Earth's limb is a soft atmospheric gradient — close to the least
+informative edge in the scene for this question.
+
+So: no visible aliasing in what was captured, but **not a controlled comparison**. The cost
+of being wrong is small and known — SMAA is ~3 renders per frame, about 18% of the low
+tier's remaining cost, and Bloom levels already delivered the larger share. If the owner
+would rather not spend the risk, putting SMAA back on the low tier costs ~18% and keeps
+~80% of this round's win.
+
 ## Recommendation
 
 The route gating and the legal-page fix are ready and are worth shipping on their own - they
@@ -110,3 +174,10 @@ The cosmic-route frame rate needs a measurement environment this machine cannot 
 Options, owner's call: measure on the owner's own average machine with the harness pointed
 at the branch alias, or accept the structural evidence and rule on the Bloom `levels`
 question so the pass count comes down before the next measurement.
+
+**Update after the pass-count round.** The `levels` ruling landed and is measured above:
+renders per frame are down 35% on the low tier. What is still true is that the *frame rate*
+consequence cannot be measured here — the render count is a stable, repeatable number on
+this machine and the fps is not. The remaining verification is one run of
+[f5-route-cost.mjs](../../scripts/harness/f5-route-cost.mjs) from the owner's own machine
+against the branch alias, which is also the machine that reported the stutter.
