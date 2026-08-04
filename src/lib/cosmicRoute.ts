@@ -18,7 +18,13 @@ import { localeForPath, sectionForPath } from './sections';
  */
 export function isCosmicRoute(pathname: string): boolean {
   const parts = pathname.split('/').filter(Boolean);
-  const rest = parts.slice(localeForPath(pathname) === null ? 0 : 1);
+  // Is the FIRST SEGMENT a locale prefix? `localeForPath` answers a different question -
+  // which locale the route RENDERS IN - and returns 'en' for an unprefixed English route
+  // like /services/nextjs-development. Reading that as "there is a prefix here" ate the
+  // 'services' segment and put the canvas straight back on the page this exists to clear.
+  // The prefix is there only when the locale it reports IS the first segment.
+  const prefixed = parts.length > 0 && parts[0] === localeForPath(pathname);
+  const rest = parts.slice(prefixed ? 1 : 0);
   if (rest.length === 0) return true; // home, in any locale
   return rest.length === 1 && sectionForPath(pathname) !== null;
 }
