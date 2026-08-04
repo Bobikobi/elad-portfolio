@@ -104,6 +104,29 @@ export function ensureSchema(): Promise<void> {
         created_at        timestamptz NOT NULL DEFAULT now()
       )
     `;
+    // CREATE TABLE IF NOT EXISTS does NOT reconcile a table that already exists with a
+    // different shape - it succeeds and changes nothing, and the first INSERT then fails
+    // on a missing column. That is not hypothetical: this database already carried a
+    // partial `leads` table from an earlier attempt, and the acceptance test hit exactly
+    // that. Every column is therefore added idempotently as well as declared above.
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS message text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS locale varchar(5)`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS interest varchar(50)`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS source_form varchar(50)`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS source_path text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS referrer_host text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_source text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_medium text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_campaign text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS first_touch_path text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS status varchar(30) NOT NULL DEFAULT 'new'`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS priority varchar(20)`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS internal_notes text`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_contacted_at timestamptz`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS consent_at timestamptz`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS unsubscribed_at timestamptz`;
+    await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()`;
     await sql`CREATE INDEX IF NOT EXISTS leads_created_at_idx ON leads (created_at)`;
 
     // Deliberately a separate table, not an ip_hash column on leads: on the lead row the
@@ -117,6 +140,9 @@ export function ensureSchema(): Promise<void> {
         created_at timestamptz NOT NULL DEFAULT now()
       )
     `;
+    await sql`ALTER TABLE rate_limit_hits ADD COLUMN IF NOT EXISTS scope varchar(30) NOT NULL DEFAULT 'chat'`;
+    await sql`ALTER TABLE rate_limit_hits ADD COLUMN IF NOT EXISTS ip_hash char(64)`;
+    await sql`ALTER TABLE rate_limit_hits ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()`;
     await sql`CREATE INDEX IF NOT EXISTS rate_limit_hits_lookup_idx ON rate_limit_hits (scope, ip_hash, created_at)`;
   })();
 
