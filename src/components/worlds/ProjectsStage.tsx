@@ -122,6 +122,7 @@ export default function ProjectsStage({
     // Written by the layout pass, read by the focus handlers below.
     const pitchRef = { current: 1 };
     const hovered = { current: -1 };
+    const axisRef = { current: 'y' as 'x' | 'y' };
     const shownActive = { current: -2 };
     const centreOffsetRef = { current: 0 };
     const spanRef = { current: 0 };
@@ -241,7 +242,11 @@ export default function ProjectsStage({
         hovered.current = i;
         // Keyboard focus must be able to reach a window that is currently off the fan.
         const target = clamp(i * pitchRef.current - centreOffsetRef.current, 0, spanRef.current);
-        list.scrollTo({ top: target, behavior: 'smooth' });
+        list.scrollTo(
+          axisRef.current === 'x'
+            ? { left: (list.scrollLeft < 0 ? -1 : 1) * target, behavior: 'smooth' }
+            : { top: target, behavior: 'smooth' }
+        );
       };
       const onOpen = () => {
         const href = card.dataset.href;
@@ -369,7 +374,11 @@ export default function ProjectsStage({
       const dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0;
       lastT = now;
       const span0 = scrollSpan(n, m);
-      const target = clamp(list.scrollTop, 0, span0);
+      // The fan runs SIDEWAYS in portrait - it spreads left and right below the planet -
+      // so a phone should be swiped sideways, not up and down. `scrollLeft` is negative
+      // in an RTL container in every current engine, hence the abs.
+      const raw = m.portrait ? Math.abs(list.scrollLeft) : list.scrollTop;
+      const target = clamp(raw, 0, span0);
       if (force || reduce) shown = target;
       else {
         shown += (target - shown) * (1 - Math.exp(-dt / SCROLL_TAU));
@@ -383,6 +392,7 @@ export default function ProjectsStage({
       sig = next;
       const t0 = probe ? performance.now() : 0;
       pitchRef.current = m.pitch;
+      axisRef.current = m.portrait ? 'x' : 'y';
       centreOffsetRef.current = arcUp(m) - Math.min(m.pitch / 2, arcUp(m));
 
 
@@ -416,7 +426,17 @@ export default function ProjectsStage({
 
       const span = span0;
       spanRef.current = span;
-      rail.style.height = `${(list.clientHeight + span).toFixed(1)}px`;
+      // The rail is the thing that makes the container scrollable at all, so it has to be
+      // long on the axis the fan uses and neutral on the other.
+      if (m.portrait) {
+        rail.style.width = `${(list.clientWidth + span).toFixed(1)}px`;
+        rail.style.height = '1px';
+      } else {
+        rail.style.height = `${(list.clientHeight + span).toFixed(1)}px`;
+        rail.style.width = '1px';
+      }
+      list.style.overflowX = m.portrait ? 'auto' : 'hidden';
+      list.style.overflowY = m.portrait ? 'hidden' : 'auto';
       const scroll = shown;
 
       const head = headerRef.current;
@@ -460,6 +480,11 @@ export default function ProjectsStage({
           `rotate(${((th * 180) / Math.PI).toFixed(3)}) scale(${k.toFixed(4)})`
         );
         g.style.opacity = opacity.toFixed(3);
+        // The window IS the preview, so the preview has to read as one. This line was
+        // lost when the per-frame block was replaced by the cached one, and the stylesheet
+        // rule underneath it - a 0.32 base from when the image was a texture behind text -
+        // took over: the previews went to a ghost of themselves. Inline, so it wins.
+        photos[i]?.style.setProperty('opacity', (0.94 * Math.min(1, opacity + 0.15)).toFixed(3));
       }
 
       // The rail. It only exists when there is something to scroll, and the thumb's LENGTH
@@ -496,12 +521,19 @@ export default function ProjectsStage({
       }
       // Over the disc, on the side of it the windows are not on, and never under the
       // navbar however the planet drifts.
-      const pw = Math.min(360, Math.max(220, m.R * 1.15));
-      const px = m.cx - m.sweep * (m.R * 0.30) - pw / 2;
-      const py = m.cy - 60;
+      // Sized to the frame it is in, not to a desktop. On a 390px phone the desktop
+      // measurements put a 360px panel at 1.6rem over the planet and it swallowed half
+      // the screen; here it takes the width it can have and sits under the planet's disc.
+      const pw = m.portrait
+        ? Math.min(vw - 32, 330)
+        : Math.min(360, Math.max(220, m.R * 1.15));
+      const px = m.portrait ? (vw - pw) / 2 : m.cx - m.sweep * (m.R * 0.3) - pw / 2;
+      const py = m.portrait ? m.cy + m.R * 0.55 : m.cy - 60;
       panel.style.width = `${pw.toFixed(0)}px`;
-      panel.style.left = `${clamp(px, 12, vw - pw - 12).toFixed(1)}px`;
-      panel.style.top = `${clamp(py, 88, vh - 200).toFixed(1)}px`;
+      panel.style.left = `${clamp(px, 12, Math.max(12, vw - pw - 12)).toFixed(1)}px`;
+      panel.style.top = `${clamp(py, 88, vh - 180).toFixed(1)}px`;
+      panel.style.setProperty('--panel-title', m.portrait ? '1.1rem' : '1.6rem');
+      panel.style.setProperty('--panel-body', m.portrait ? '0.8125rem' : '0.9375rem');
 
       list.dataset.ready = '1';
       if (probe) {
@@ -611,12 +643,12 @@ export default function ProjectsStage({
         <div
           data-panel-title
           className="text-[var(--color-star-white)]"
-          style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-display)', fontSize: '1.6rem', lineHeight: 1.25 }}
+          style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-display)', fontSize: 'var(--panel-title, 1.6rem)', lineHeight: 1.25 }}
         />
         <div
           data-panel-desc
           className="mt-2 text-[var(--color-star-white)]/85"
-          style={{ fontSize: '0.9375rem', lineHeight: 1.7 }}
+          style={{ fontSize: 'var(--panel-body, 0.9375rem)', lineHeight: 1.65 }}
         />
         <div
           data-panel-tech
