@@ -78,6 +78,28 @@ right adjustment is that term, not the ratio.
 - Render count per frame. The ruling for SUN-2 asks for that check; nothing here adds or
   removes a pass, it only reduces samples and resolution within existing ones.
 
+### AFTER MERGING MASTER - the collision, and a reading I nearly reported wrong
+
+The other lane shipped overlapping performance work while this branch was open, and on two
+of the three trims theirs is better, so theirs was taken:
+
+| trim | ruling asked | outcome |
+|---|---|---|
+| Bloom levels | 9 -> 7 | **theirs: 9 -> 6**, with a half-res base and a tier-aware key. `mipmapBlur` costs a downsample and an upsample PER LEVEL, which is the real explanation of the render count |
+| DPR | 1.5 -> 1.25 | **theirs: opens at 1**, owned by a ResolutionScaler that raises it where there is headroom. Strictly better than a static 1.25 |
+| god rays | 60 -> ~32 | **mine, on top of theirs**: they added `resolutionScale 0.5` and 26 -> 16 on low; 60 -> 32 on high applied over it |
+
+What remains genuinely from PERF-2 is the part the ruling named as the defect - the
+assignment - plus the HUD line.
+
+Re-measured after the merge: both runs still **start low, stay low, zero transitions**.
+
+**A reading I nearly reported as a regression:** that run showed a median of 30fps at 1x
+against 63 before the merge. Checked rather than reported: two rounds of a direct frame-
+interval sample against **live production as the control** gave 60.0fps and a p95 frame of
+16.7ms on both the merged branch and production, twice each. The 30 was the HUD's smoothed
+counter during a contended run on this machine, not the page.
+
 ### VERDICT
 
 **PASS** on what is measurable: starts low, stays low under throttle, never flaps, in both
