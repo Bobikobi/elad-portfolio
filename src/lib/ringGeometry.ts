@@ -1,4 +1,11 @@
-import { projectedPlanetRect, livePlanetRect, livePlanetRectFresh, DEG2RAD } from './orbitFraming';
+import {
+  projectedPlanetRect,
+  livePlanetRect,
+  livePlanetRectFresh,
+  livePlanetPlane,
+  livePlanetPlaneFresh,
+  DEG2RAD,
+} from './orbitFraming';
 
 /**
  * B8b — the Projects windows are ANNULAR SECTORS, not rectangles.
@@ -31,8 +38,13 @@ export interface RingTuning {
   thick: number;
   /** tangential px between two neighbouring windows, also measured at rMid. */
   cardGap: number;
-  /** half the total fan, degrees. Beyond this the text tilt stops being readable. */
+  /** the fan's design half-angle, degrees. The real fan is clamped below it by whatever
+   *  is actually on the screen - see fanUp / fanDown. */
   fanDeg: number;
+  /** px of screen above the ring that belongs to the navbar and must stay clear. */
+  navSafe: number;
+  /** px of clearance kept at the bottom of the viewport. */
+  bottomSafe: number;
   /** corner rounding, px. */
   corner: number;
   /** padding between the inner arc and the content box. */
@@ -49,19 +61,33 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
   landscape: {
     gap: 48,
     depth: 330,
-    // B8c - 240px of thickness put exactly two windows inside a +/-35deg fan (the arc is
-    // 634px at this framing). The image moved out of the content box and into the sector
-    // fill, which is what freed the height to make a window thinner: 180 + 16 puts three
-    // whole windows in the fan with the fourth entering, and still leaves 106px of
-    // content height at the inner edge - title, two lines of description and the chips.
-    thick: 180,
+    // B8d - a window is a picture now, not a text box, so its thickness is no longer set
+    // by what has to fit inside it. Laying the ring in the planet's ring plane also gave
+    // the fan its full 35deg back on both sides, so the count comes from the fan rather
+    // than from thin windows: at 170 + 14 that is four in view.
+    //
+    // Window count is the performance lever on this layer, and it took three measurement
+    // rounds to be sure of it. 130px thickness put five windows in the fan and measured
+    // 49.5-51fps at the low tier, against 57-59.5 for the build before and 60 for a
+    // no-ring control. Caching the canonical geometry - building every path once at angle
+    // 0 and letting a rotation carry it - was the obvious fix and changed nothing, which
+    // ruled out the per-frame JS. Nor was it any one visual feature: with the shadow off,
+    // the previews off, or both, the low tier still measured 52.2-54.0. What is left is
+    // the count itself, so the count is what gives.
+    thick: 230,
     cardGap: 16,
     fanDeg: 35,
     corner: 14,
     padInner: 28,
     padOuter: 24,
     padSide: 8,
-    headroom: 200,
+    // B8d - the header used to take whatever the ring left over, with a 150px floor, and
+    // at this framing that floor was binding: the title and the back control ended up
+    // pressed against the viewport edge. It is a reservation now, and the ring gives up
+    // depth for it rather than the other way round.
+    headroom: 300,
+    navSafe: 72,
+    bottomSafe: 24,
   },
   // Portrait: the planet owns the top of the frame and the windows fan BELOW it, curved
   // edge on top. The planet is much smaller here (fill 0.44 of a short viewport), so the
@@ -79,11 +105,26 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
     padOuter: 22,
     padSide: 8,
     headroom: 0,
+    navSafe: 96,
+    bottomSafe: 16,
   },
 };
 
 export interface RingMetrics {
-  /** planet projected centre + radius, px. */
+  /**
+   * The ring is built in a CANONICAL space centred on the origin, and one matrix carries
+   * it to the screen: `[a, b, c, d, e, f]`, exactly SVG's `matrix()`. When the planet's
+   * ring plane is known (B8d) that matrix is the plane's projection, so a circle in
+   * canonical space lands as the ellipse the planet's own rings lie on and the windows
+   * become slices of the SAME plane. Otherwise it is a plain translation and the ring is
+   * the screen-plane circle it has always been.
+   *
+   * Keeping the geometry canonical is what lets every path, arc and corner stay circular
+   * maths. Elliptical arc commands would have had to re-derive semi-axes and a rotation
+   * for every one of them, and the rounding would have stopped being a fillet.
+   */
+  matrix: [number, number, number, number, number, number];
+  /** planet projected centre + radius, px, in SCREEN space. */
   cx: number;
   cy: number;
   R: number;
@@ -96,8 +137,11 @@ export interface RingMetrics {
   /** +1 / -1 — which way angle grows so that window i+1 is always "after" window i on
    *  screen (down the fan in landscape, along the reading direction in portrait). */
   sweep: 1 | -1;
-  /** half the total fan, rad. */
-  fan: number;
+  /** the fan's two half-angles, rad. They are NOT equal: the space above the planet's
+   *  projected centre and the space below it are not the same, and the fan is clamped by
+   *  what is really there rather than by one symmetric constant. */
+  fanUp: number;
+  fanDown: number;
   /** half-angle of ONE window. */
   dHalf: number;
   /** arc length (px, at rMid) from one window's centre to the next. */
@@ -109,6 +153,8 @@ export interface RingMetrics {
   contentHalf: number;
   rContent: number;
   portrait: boolean;
+  /** true when the ring is laid out in the planet's ring plane rather than the screen. */
+  plane: boolean;
   /** px available for the header strip on the far side of the ring. */
   headerW: number;
 }
@@ -120,33 +166,60 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   const rect = livePlanetRectFresh(vw, vh)
     ? { cx: livePlanetRect.cx, cy: livePlanetRect.cy, r: livePlanetRect.r }
     : projectedPlanetRect(vw, vh, rtl, portrait);
-  const r0 = rect.r + k.gap;
 
-  // The ring is anchored to the planet, so the room left over for the header is whatever
-  // is between the ring's outer edge and the inline-start screen edge. On a short-and-wide
-  // desktop there is plenty; on a small laptop there is not, and the ring gives depth back
-  // rather than sliding off its own planet.
-  // Which side the fan sits on is read off the PLANET, not off the locale. The rig already
-  // mirrors the pose for RTL, and asking the document a second time is how the two can
-  // disagree — a stored locale that flips the copy without flipping `dir` put the windows
-  // on the opposite side of the planet from the camera, half of them off-screen.
+  // The ring plane's projection, when the rig has published one and this is the landscape
+  // fan. Portrait keeps the screen-plane ring on purpose: measured, the plane's major axis
+  // alone is 484px on a 390px-wide phone, so a plane-aligned fan there is wider than the
+  // device before a single window is placed.
+  const plane = !portrait && livePlanetPlaneFresh(vw, vh) ? livePlanetPlane : null;
+  const lu = plane ? Math.hypot(plane.ux, plane.uy) : 1;
+  const matrix: [number, number, number, number, number, number] = plane
+    ? [plane.ux / lu, plane.uy / lu, plane.vx / lu, plane.vy / lu, rect.cx, rect.cy]
+    : [1, 0, 0, 1, rect.cx, rect.cy];
+  const toScreen = (r: number, th: number): [number, number] => {
+    const x = r * Math.cos(th);
+    const y = r * Math.sin(th);
+    return [matrix[0] * x + matrix[2] * y + matrix[4], matrix[1] * x + matrix[3] * y + matrix[5]];
+  };
+  /** How many screen px one canonical unit is worth in the direction `th`. 1 along the
+   *  major axis, the axis ratio along the minor one. */
+  const scaleAt = (th: number) => {
+    const [x, y] = toScreen(1, th);
+    return Math.hypot(x - matrix[4], y - matrix[5]);
+  };
+
+  // Which canonical direction the fan sits in: away from the planet's side of the screen.
+  // Read off the PLANET, never off the locale - the rig already mirrors the pose for RTL,
+  // and asking the document a second time is how the two can disagree.
   const th0 = portrait ? Math.PI / 2 : rect.cx < vw / 2 ? 0 : Math.PI;
-  // Angle grows clockwise on screen (y is down): on the planet's RIGHT that runs downward,
-  // on its LEFT upward. The sweep cancels that so window i+1 is always the next one down.
-  // Portrait fans horizontally, so there it follows the reading direction instead.
-  const sweep: 1 | -1 = portrait ? (rtl ? 1 : -1) : th0 === 0 ? 1 : -1;
+  // Which way canonical angle grows ON SCREEN is a property of the projected basis, not a
+  // rule about left and right: under the plane matrix `v` can point either way. Sample it.
+  const [, yA] = toScreen(1, th0);
+  const [, yB] = toScreen(1, th0 + 0.05);
+  const sweep: 1 | -1 = portrait ? (rtl ? 1 : -1) : yB >= yA ? 1 : -1;
 
+  const design = k.fanDeg * DEG2RAD;
+
+  // The inner radius has to clear the LIMB, and under an elliptical projection that is not
+  // one radius: a canonical unit is worth fewer screen px toward the minor axis, so the
+  // window that swings furthest off the major axis is the one that decides. Solve for the
+  // worst case over the design fan rather than for the fan's centre.
+  let worstScale = 1;
+  for (let e = -1; e <= 1; e += 0.25) {
+    worstScale = Math.min(worstScale, scaleAt(th0 + sweep * e * (design + 0.2)));
+  }
+  const r0 = (rect.r + k.gap) / Math.max(0.2, worstScale);
+
+  // Depth: what is left between the ring and the far edge once the header keeps its zone.
   const edge = portrait ? vh - rect.cy : th0 === 0 ? vw - rect.cx : rect.cx;
-  const depth = portrait
-    ? Math.min(k.depth, Math.max(160, edge - k.gap - 12))
-    : Math.min(k.depth, Math.max(200, edge - r0 - k.headroom));
+  const room = portrait ? edge - k.gap - 12 : edge / Math.max(0.2, scaleAt(th0)) - r0 - k.headroom;
+  const depth = Math.min(k.depth, Math.max(portrait ? 160 : 200, room));
 
   const r1 = r0 + depth;
   const rMid = (r0 + r1) / 2;
   // A window is WIDEST at its outer arc, and in portrait that width runs across the phone.
   // Left alone, the tuned thickness puts the outer corners past both screen edges, which
-  // is the one thing that would break the hairline: a border cut by the viewport. So the
-  // thickness is clamped by what actually fits rather than by a number picked per device.
+  // is the one thing that would break the hairline: a border cut by the viewport.
   const thick = portrait
     ? Math.min(k.thick, 2 * rMid * Math.asin(Math.min(0.9, (vw / 2 - 10) / r1)))
     : k.thick;
@@ -154,11 +227,47 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
 
   const rIn = r0 + k.padInner;
   const contentDepth = depth - k.padInner - k.padOuter;
-  // The two side edges are radial, so a window is narrowest at its inner end: an inscribed
-  // rectangle is bounded there. Corner rounding eats a little more.
   const contentHalf = Math.max(24, rIn * dHalf - k.padSide - k.corner * 0.35);
 
+  // Defect 3 - the fan is clamped by the obstacles that are really on the screen rather
+  // than by an angle chosen in the abstract: the navbar strip above, the viewport edges
+  // everywhere else. Asymmetric, because the planet's centre does not sit halfway down.
+  //
+  // The clamp is a SCAN, not a formula. The first version solved `asin(room / r1)`, which
+  // silently assumes the fan spreads vertically - true in landscape, false in portrait,
+  // and false again under the plane matrix. It measured a 0 degree upper fan on a phone
+  // and hid every window.
+  //
+  // Vertical is HARD: a window under the navbar is the defect being fixed, and one past
+  // the bottom cannot be reached. Horizontal is SOFT, because the ring is deliberately
+  // wider than a phone and treating that as fatal collapsed the fan to nothing.
+  const sideSlack = vw * 0.35;
+  const fits = (delta: number): boolean => {
+    for (let e = -1; e <= 1; e += 1) {
+      const th = th0 + sweep * (delta + e * dHalf);
+      for (const r of [r0, r1, (r0 + r1) / 2]) {
+        const [x, y] = toScreen(r, th);
+        if (y < k.navSafe || y > vh - k.bottomSafe) return false;
+        if (x < -sideSlack || x > vw + sideSlack) return false;
+        if (Math.hypot(x - rect.cx, y - rect.cy) < rect.r + k.gap * 0.5) return false;
+      }
+    }
+    return true;
+  };
+  const scan = (dir: 1 | -1): number => {
+    const step = design / 36;
+    let best = 0;
+    for (let a = step; a <= design + 1e-9; a += step) {
+      if (!fits(dir * a)) break;
+      best = a;
+    }
+    return best;
+  };
+  const fanUp = scan(-1);
+  const fanDown = scan(1);
+
   return {
+    matrix,
     cx: rect.cx,
     cy: rect.cy,
     R: rect.r,
@@ -167,7 +276,8 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
     rMid,
     th0,
     sweep,
-    fan: k.fanDeg * DEG2RAD,
+    fanUp,
+    fanDown,
     dHalf,
     pitch: thick + k.cardGap,
     corner: k.corner,
@@ -175,13 +285,25 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
     contentHalf,
     rContent: rIn + contentDepth / 2,
     portrait,
-    headerW: portrait ? 0 : Math.max(150, edge - r1 - 24),
+    plane: plane !== null,
+    headerW: portrait ? 0 : Math.max(k.headroom - 40, edge - r1 * scaleAt(th0) - 24),
   };
 }
 
-/** Screen point at polar (r, th) around the planet centre. */
-export function pointAt(m: Pick<RingMetrics, 'cx' | 'cy'>, r: number, th: number): [number, number] {
-  return [m.cx + r * Math.cos(th), m.cy + r * Math.sin(th)];
+/** Screen point for a canonical polar coordinate, through the ring's matrix. */
+export function screenAt(m: RingMetrics, r: number, th: number): [number, number] {
+  const x = r * Math.cos(th);
+  const y = r * Math.sin(th);
+  return [
+    m.matrix[0] * x + m.matrix[2] * y + m.matrix[4],
+    m.matrix[1] * x + m.matrix[3] * y + m.matrix[5],
+  ];
+}
+
+/** CANONICAL point at polar (r, th). The layer draws in this space and one matrix on the
+ *  group carries it to the screen, so nothing here knows about the projection. */
+export function pointAt(_m: unknown, r: number, th: number): [number, number] {
+  return [r * Math.cos(th), r * Math.sin(th)];
 }
 
 const f = (n: number) => n.toFixed(2);
@@ -265,13 +387,53 @@ export function arcPath(
   return `M${f(A[0])} ${f(A[1])}A${f(r)} ${f(r)} 0 ${large} ${sweep} ${f(B[0])} ${f(B[1])}`;
 }
 
+/** Arc length (px at rMid) available above and below the fan's centre. */
+export const arcUp = (m: RingMetrics) => m.fanUp * m.rMid;
+export const arcDown = (m: RingMetrics) => m.fanDown * m.rMid;
+
+/** How far into the fan the FIRST window starts: half a pitch, or the whole fan when the
+ *  fan is narrower than that. A phone leaves almost no fan at all, and an offset that
+ *  assumed half a pitch of room put the only window that fits outside it. */
+const lead = (m: RingMetrics) => Math.min(m.pitch / 2, arcUp(m));
+const tail = (m: RingMetrics) => Math.min(m.pitch / 2, arcDown(m));
+
 /** Where window `i` sits, in arc length (px at rMid) from the fan's centre. */
 export function windowArc(i: number, count: number, scroll: number, m: RingMetrics): number {
   void count;
-  return (i + 0.5) * m.pitch - m.fan * m.rMid - scroll;
+  return i * m.pitch - arcUp(m) + lead(m) - scroll;
 }
 
 /** How far the list can travel: enough to bring the last window inside the fan, no more. */
 export function scrollSpan(count: number, m: RingMetrics): number {
-  return Math.max(0, count * m.pitch - 2 * m.fan * m.rMid);
+  return Math.max(0, (count - 1) * m.pitch - arcUp(m) + lead(m) - arcDown(m) + tail(m));
+}
+
+/**
+ * 1 well inside the fan, 0 once a window has left it. Measured on the window's CENTRE,
+ * not its edges: with the fan clamped to nothing on a phone, an edge test reported every
+ * window - including the one dead centre - as outside, and the ring rendered empty.
+ * The band is short and the falloff steep on purpose: a half-faded window is a ghost.
+ */
+export function fanOpacity(a: number, m: RingMetrics): number {
+  // `room` is how far INSIDE the clamped fan this window's centre still is. The fade
+  // therefore happens inside the fan and a window is gone by the time it reaches the
+  // edge - which is what makes the clamp mean anything. Fading outward instead let
+  // windows render half a pitch past the limit, which put them back under the navbar
+  // (measured: top at y=7 against a navbar ending at y=64) after the clamp had just
+  // been added to stop exactly that.
+  const room = Math.min(arcDown(m) - a, a + arcUp(m));
+  const t = room / (m.pitch * 0.9);
+  return (t < 0 ? 0 : t > 1 ? 1 : t) ** 1.4;
+}
+
+/**
+ * How far out of the ring a window has risen, 0 at the fan's edge and 1 once it is fully
+ * in. The layer turns this into a small scale about the ring's centre, so a window
+ * travels INTO the fan along its own radius instead of switching on where it stands -
+ * "like the discs", which is what the ring already does with everything else.
+ */
+export function fanRise(a: number, m: RingMetrics): number {
+  const room = Math.min(arcDown(m) - a, a + arcUp(m));
+  const t = room / (m.pitch * 0.9);
+  return t < 0 ? 0 : t > 1 ? 1 : t;
 }

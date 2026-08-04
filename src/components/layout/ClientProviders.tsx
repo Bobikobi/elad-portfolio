@@ -31,6 +31,10 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
   // F2: the mode gates everything else. `cosmic` is only a request - the provider has
   // already demoted it to classic if the browser cannot honour it - so asking the two
   // capability hooks again here would just be a second, drifting copy of that decision.
+  // The same test the canvas uses, from the same place. `sectionForPath` matches by first
+  // segment, so a service DETAIL page reads as the services section and was treated as an
+  // immersive route: no footer, a click-through main, and the scene mounted behind a page
+  // of text.
   const immersive = mode === 'cosmic' && isImmersiveRoute(pathname);
 
   return (

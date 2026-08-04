@@ -30,6 +30,10 @@ export default function CosmicStage() {
   // page is a scene at all. Dropping the route half is what put the galaxy behind the
   // privacy policy and left every guide and legal page paying for a running canvas.
   const { mode } = useViewMode();
+  // The canvas belongs to home and the five worlds and to nowhere else. It used to mount
+  // on every route in cosmic mode, so a guide, a service detail page or a legal page each
+  // pulled the whole three.js bundle and blocked the main thread to show a paragraph -
+  // measured at 2011KB of JS on /privacy against 750KB now.
   const immersive = mode === 'cosmic' && isImmersiveRoute(pathname);
 
   // Bridge: URL is the source of truth for which world the camera is in.

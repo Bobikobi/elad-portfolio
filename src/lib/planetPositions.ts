@@ -25,6 +25,18 @@ export const planetRadii = new Map<string, number>();
 export const planetRingNormal = new Map<string, THREE.Vector3>();
 
 /**
+ * Where a ringed planet's rings END, in units of that planet's own radius (B8d).
+ *
+ * The ring mesh is built as `RingGeometry(size * 1.35, size * 2.5)`, so in planet-radius
+ * units the rings run 1.35 to 2.5 whatever the body's size. The projects world places its
+ * window ring outside that edge, and a second literal 2.5 in the layout would be a
+ * constant that goes stale the moment the ring mesh is retuned - which is the same reason
+ * the normal above is published rather than re-derived.
+ */
+export const RING_INNER_R = 1.35;
+export const RING_OUTER_R = 2.5;
+
+/**
  * B14 — where the belt pill hangs during the mobile tour's belt stop, in world space.
  * The belt has no body to anchor to, so the anchor used to be a hard-coded point that was
  * only correct for the pose that stop happened to use; when the stop learned to ride the

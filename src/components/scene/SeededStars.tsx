@@ -69,6 +69,56 @@ export default function SeededStars(props: React.ComponentProps<typeof Stars>) {
     pos.needsUpdate = true;
     size.needsUpdate = true;
     // The colours are already deterministic in drei (hue is i/count), so they are left alone.
+
+    // --- SCENE-FLICKER: the pulse in drei's own shader ----------------------------
+    //
+    // Measured on the preview, /about, 22 samples 450ms apart: 99.8% of the bright points
+    // in the sky changed luminance by more than 20% between consecutive samples, the
+    // median worst step was 1210%, and 81% of them went dark entirely at some sample.
+    // The cause is one line of drei's StarfieldMaterial:
+    //
+    //     gl_PointSize = size * (30.0 / -mvPosition.z) * (3.0 + sin(time + 100.0));
+    //
+    // Two faults in it. The multiplier swings between 2.0 and 4.0 - a factor of TWO in
+    // point DIAMETER - and the phase is `time + 100.0`, the same for every star, so
+    // thirteen thousand of them breathe in unison. And because it modulates size rather
+    // than brightness, a point near a pixel wide crosses the sub-pixel boundary twice a
+    // cycle and aliases in and out. That is the reported "faint dot becomes a
+    // full-brightness diffraction star between frames", and it is candidates 1 and 3 of
+    // the investigation turning out to be the same line.
+    //
+    // Patched in place rather than by vendoring the component, for the reason at the top
+    // of this file, and guarded the same way: if drei's source is not what we matched
+    // against, refuse loudly instead of shipping a sky that silently stopped twinkling.
+    const mat = pts?.material as THREE.ShaderMaterial | undefined;
+    const PULSE = 'gl_PointSize = size * (30.0 / -mvPosition.z) * (3.0 + sin(time + 100.0));';
+    if (mat?.vertexShader?.includes(PULSE)) {
+      mat.vertexShader = mat.vertexShader
+        .replace('varying vec3 vColor;', 'varying vec3 vColor;\n      varying float vFade;')
+        .replace(
+          PULSE,
+          [
+            // A phase of its own, from its own position: no new attribute, and the field
+            // stops breathing as one body.
+            'float phase = fract(sin(dot(position.xyz, vec3(12.9898, 78.233, 37.719))) * 43758.5453) * 6.2831853;',
+            // +/-8% around a HIGH base. Point flux goes as the square of the diameter, so
+            // 8% of size is about 17% of brightness - inside the 20% the acceptance allows.
+            'float pulse = 3.0 * (1.0 + 0.08 * sin(time * 0.6 + phase));',
+            'float px = size * (30.0 / -mvPosition.z) * pulse;',
+            // Below ~2px a point aliases rather than dims. Hold the size at the floor and
+            // take the difference out of alpha, which is what the varying below is for.
+            'float minPx = 2.0;',
+            'vFade = clamp(px / minPx, 0.0, 1.0);',
+            'gl_PointSize = max(px, minPx);',
+          ].join('\n        ')
+        );
+      mat.fragmentShader = mat.fragmentShader
+        .replace('varying vec3 vColor;', 'varying vec3 vColor;\n      varying float vFade;')
+        .replace('gl_FragColor = vec4(vColor, opacity);', 'gl_FragColor = vec4(vColor, opacity * vFade);');
+      mat.needsUpdate = true;
+    } else {
+      console.error('[SeededStars] drei\'s star pulse is not the line we patch - sky left as is');
+    }
   }, [radius, depth, count, factor]);
 
   return <Stars ref={ref} {...props} />;

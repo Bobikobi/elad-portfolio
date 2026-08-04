@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/app/**/{page,layout,route,error,not-found,sitemap,robots}.{ts,tsx}",
+    "scripts/**/*.mjs"
+  ],
+  "project": ["src/**/*.{ts,tsx,css}", "scripts/**/*.mjs"],
+  "ignoreBinaries": ["gitleaks"]
+}
