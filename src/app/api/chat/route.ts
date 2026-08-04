@@ -65,6 +65,11 @@ const MAX_REQUESTS_PER_WINDOW = 10;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const BLOCK_DURATION_MS = 5 * 60_000;
 const RATE_LIMIT_WINDOW_SECONDS = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
+// A per-minute limit bounds a burst but not a slow grind: 10/min sustained is 14,400
+// upstream calls a day off one address. The daily cap is what actually protects the API
+// key from being drained. 60 messages a day is far past any real visitor's use.
+const MAX_REQUESTS_PER_DAY = 60;
+const DAY_MS = 86_400_000;
 
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -166,8 +171,34 @@ function checkRateLimitInMemory(key: string) {
   };
 }
 
+const dailyStore = new Map<string, { day: number; count: number }>();
+
+/**
+ * Per-address daily budget. Deliberately separate from the per-minute limiter: that one
+ * exists to stop a burst, this one exists to stop the API key being spent. It runs before
+ * the Redis path so the cap holds whether or not Upstash is configured.
+ */
+function checkDailyBudget(key: string, now: number) {
+  const day = Math.floor(now / DAY_MS);
+  const entry = dailyStore.get(key);
+
+  if (!entry || entry.day !== day) {
+    // Cheap ceiling on the map: a new day invalidates every entry anyway.
+    if (dailyStore.size > 5000) dailyStore.clear();
+    dailyStore.set(key, { day, count: 1 });
+    return { allowed: true };
+  }
+
+  entry.count += 1;
+  return { allowed: entry.count <= MAX_REQUESTS_PER_DAY };
+}
+
 async function checkRateLimit(key: string) {
   const now = Date.now();
+
+  if (!checkDailyBudget(key, now).allowed) {
+    return { allowed: false, remaining: 0, resetMs: DAY_MS - (now % DAY_MS) };
+  }
 
   if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
     const bucket = Math.floor(now / RATE_LIMIT_WINDOW_MS);
@@ -231,11 +262,20 @@ function validateRequestSource(req: NextRequest) {
   return matchesAllowedHost(origin) || matchesAllowedHost(referer);
 }
 
+/**
+ * Turnstile is optional infrastructure, not a precondition for the widget existing.
+ * When no secret is configured the captcha stage is skipped entirely and the rate limits
+ * carry the anti-abuse load; when a secret IS configured the check is mandatory and a
+ * missing or bad token is refused. What must never happen is the previous behaviour:
+ * production with no secret rejected every message, so the widget was dead site-wide.
+ */
+function isTurnstileConfigured() {
+  return Boolean(process.env.TURNSTILE_SECRET_KEY);
+}
+
 async function verifyTurnstileToken(token: string, ip: string) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) {
-    return process.env.NODE_ENV !== 'production';
-  }
+  if (!secret) return false;
 
   const formData = new FormData();
   formData.append('secret', secret);
@@ -386,13 +426,15 @@ export async function POST(req: NextRequest) {
       return jsonWithRateHeaders({ error: 'invalid_input' }, { status: 400 }, rateInfo);
     }
 
-    if (typeof turnstileToken !== 'string' || turnstileToken.length < 10) {
-      return jsonWithRateHeaders({ error: 'captcha_missing' }, { status: 400 }, rateInfo);
-    }
+    if (isTurnstileConfigured()) {
+      if (typeof turnstileToken !== 'string' || turnstileToken.length < 10) {
+        return jsonWithRateHeaders({ error: 'captcha_missing' }, { status: 400 }, rateInfo);
+      }
 
-    const turnstileOk = await verifyTurnstileToken(turnstileToken, ip);
-    if (!turnstileOk) {
-      return jsonWithRateHeaders({ error: 'captcha_failed' }, { status: 403 }, rateInfo);
+      const turnstileOk = await verifyTurnstileToken(turnstileToken, ip);
+      if (!turnstileOk) {
+        return jsonWithRateHeaders({ error: 'captcha_failed' }, { status: 403 }, rateInfo);
+      }
     }
 
     const trimmed = (messages as { role?: unknown; text?: unknown }[]).slice(-MAX_MESSAGES);
