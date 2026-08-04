@@ -143,7 +143,14 @@ function GalaxyHome() {
   // which is the intro's first frame, the one thing this arrival must never show.
   useLayoutEffect(() => {
     if (seenIntro !== true) return;
-    const toEnd = () => window.scrollTo(0, document.documentElement.scrollHeight);
+    // `behavior: 'instant'`, and the object form, because `html { scroll-behavior: smooth }`
+    // is set globally in globals.css and the NUMERIC overload of scrollTo inherits it. The
+    // first version of this used that overload and so ANIMATED from the top to the end -
+    // scrolling the returning visitor through the intro's opening frames, which is the one
+    // thing this effect exists to prevent. Caught in review; my own harness could not see
+    // it, because it samples after a delay by which time a smooth scroll has also arrived.
+    const toEnd = () =>
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
     toEnd();
     // Once more after a frame: a browser restores its remembered scroll position after us.
     const raf = requestAnimationFrame(toEnd);
