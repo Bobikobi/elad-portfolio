@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation, SMAA } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -96,6 +96,32 @@ export default function Effects() {
   const vigRef = useRef<VignetteLike | null>(null);
   const hueSatRef = useRef<HueSatLike | null>(null);
   const godRaysRef = useRef<GodRaysLike | null>(null);
+
+  /**
+   * PASS AUDIT (HUD builds only). The scene is pass-bound, not fill-bound — ~15 fullscreen
+   * passes a frame with 76% of CPU samples in GL submission — so the pass LIST is the thing
+   * worth knowing, and it cannot be read off the source: @react-three/postprocessing merges
+   * consecutive effects into one EffectPass, but a CONVOLUTION effect takes a pass of its
+   * own AND breaks the run, so the effects after it start a new pass. Which of ours are
+   * convolution is a fact about the library, not about this file. So: ask the composer.
+   */
+  const composerRef = useRef<{ passes?: unknown[] } | null>(null);
+  useEffect(() => {
+    if (!HUD_AVAILABLE) return;
+    const id = setTimeout(() => {
+      const passes = composerRef.current?.passes;
+      if (!Array.isArray(passes)) return;
+      (window as unknown as Record<string, unknown>).__passes = passes.map((p) => {
+        const pass = p as { constructor: { name: string }; enabled?: boolean; effects?: { name?: string }[] };
+        return {
+          pass: pass.constructor.name,
+          enabled: pass.enabled !== false,
+          merged: pass.effects?.map((e) => e?.name ?? '?') ?? null,
+        };
+      });
+    }, 300); // the layout effect that builds the passes runs after this one
+    return () => clearTimeout(id);
+  }, [godRays, solar, focused, high]);
   const curSat = useRef(OVERVIEW_SAT);
   const curHue = useRef(0);
   const curWeight = useRef(0);
@@ -160,7 +186,10 @@ export default function Effects() {
   });
 
   return (
-    <EffectComposer multisampling={0}>
+    <EffectComposer
+      ref={(c: { passes?: unknown[] } | null) => { composerRef.current = c ?? null; }}
+      multisampling={0}
+    >
       {godRays ? (
         /* weight starts at 0 and is driven per-frame (RULING 2) — so the frame in which the
            effect mounts is identical to the frame before it, and the rebuild is invisible. */

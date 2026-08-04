@@ -1,5 +1,5 @@
 'use client';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useScene, type Quality } from '@/lib/sceneStore';
 import { isIdle } from './PerfPacer';
@@ -73,6 +73,21 @@ function forcedHz(): number | null {
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
+/**
+ * `?tier=low` pins the quality tier. Ignored in production builds, like `?hz`.
+ *
+ * Without this a low-tier decision cannot be inspected on purpose: the tier is whatever
+ * the governor concluded about the machine that happened to be looking, so "does the low
+ * tier still look right" was a question nobody could answer with a screenshot. Judging a
+ * cost knob by eye requires being able to hold the tier still.
+ */
+function forcedTier(): Quality | null {
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV === 'production') return null;
+  if (typeof window === 'undefined') return null;
+  const v = new URLSearchParams(window.location.search).get('tier');
+  return v === 'low' || v === 'high' ? v : null;
+}
+
 export default function QualityGovernor() {
   const setQuality = useScene((s) => s.setQuality);
   const setDisplayHz = useScene((s) => s.setDisplayHz);
@@ -86,6 +101,13 @@ export default function QualityGovernor() {
   const belowFor = useRef(0);
   const aboveFor = useRef(0);
   const downgrades = useRef(0);
+  const pinned = useRef<Quality | null>(null);
+
+  useEffect(() => {
+    const t = forcedTier();
+    pinned.current = t;
+    if (t) setQuality(t);
+  }, [setQuality]);
 
   // The paced driver used to live here. It now belongs to FramePacer, which also owns the
   // idle throttle — two components calling setFrameloop is how a scene ends up with a loop
@@ -128,6 +150,7 @@ export default function QualityGovernor() {
     if (isIdle(performance.now())) { belowFor.current = 0; aboveFor.current = 0; return; }
     fps.current = fps.current ? fps.current * 0.9 + (1 / dt) * 0.1 : 1 / dt;
 
+    if (pinned.current) return; // an explicitly pinned tier is not up for renegotiation
     const q: Quality = useScene.getState().quality;
     const target = targetFps.current;
     if (fps.current < target * DOWN_RATIO) { belowFor.current += dt; aboveFor.current = 0; }
