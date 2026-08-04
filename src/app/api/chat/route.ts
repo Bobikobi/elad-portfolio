@@ -319,6 +319,10 @@ const KIMI_API_KEY = process.env.KIMI_API_KEY;
 const KIMI_BASE_URL = process.env.KIMI_BASE_URL ?? 'https://api.moonshot.ai/v1';
 const KIMI_MODEL = process.env.KIMI_MODEL ?? 'kimi-k2-0905-preview';
 const UPSTREAM_TIMEOUT_MS = 20_000;
+// 400 was cutting answers off mid-word in production. It is a budget for the WHOLE
+// response, and on a thinking model the reasoning is spent from it first, so a visitor
+// asking an open question got a sentence that simply stopped.
+const MAX_OUTPUT_TOKENS = 900;
 
 type ChatTurn = { role?: unknown; text?: unknown };
 
@@ -333,7 +337,7 @@ async function askKimi(messages: ChatTurn[]): Promise<string> {
       { role: 'system', content: SYSTEM_PROMPT },
       ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: asText(m) })),
     ],
-    max_tokens: 400,
+    max_tokens: MAX_OUTPUT_TOKENS,
     temperature: 0.7,
   };
   try {
@@ -350,6 +354,10 @@ async function askKimi(messages: ChatTurn[]): Promise<string> {
       console.error(`[chat] kimi ${res.status}`, String(data?.error?.message ?? '').slice(0, 120));
       return '';
     }
+    if (data?.choices?.[0]?.finish_reason === 'length') {
+      // Visible in the logs rather than only in a screenshot of a half-finished sentence.
+      console.warn('[chat] kimi hit the token ceiling — answer was truncated');
+    }
     return String(data?.choices?.[0]?.message?.content ?? '').trim();
   } catch (e) {
     console.error('[chat] kimi request failed', e instanceof Error ? e.name : 'unknown');
@@ -357,7 +365,7 @@ async function askKimi(messages: ChatTurn[]): Promise<string> {
   }
 }
 
-/** Gemini fallback — used only when no Kimi key is configured. */
+/** Gemini — the fallback, and the provider actually answering today. */
 async function askGemini(messages: ChatTurn[]): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return '';
@@ -373,7 +381,15 @@ async function askGemini(messages: ChatTurn[]): Promise<string> {
             role: m.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: asText(m) }],
           })),
-          generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
+          generationConfig: {
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+            temperature: 0.7,
+            // gemini-2.5-flash is a thinking model and its reasoning is billed against
+            // maxOutputTokens before a single visible word is produced. A portfolio
+            // widget answering "what does Elad build" needs none of it, and leaving it on
+            // is what starved the reply and cut it off mid-word.
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
         cache: 'no-store',
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
@@ -384,7 +400,16 @@ async function askGemini(messages: ChatTurn[]): Promise<string> {
       console.error(`[chat] gemini ${res.status}`, String(data?.error?.message ?? '').slice(0, 120));
       return '';
     }
-    return String(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim();
+    const candidate = data?.candidates?.[0];
+    if (candidate?.finishReason === 'MAX_TOKENS') {
+      console.warn('[chat] gemini hit the token ceiling — answer was truncated');
+    }
+    // The text can arrive split across several parts; joining them is not optional.
+    const parts = candidate?.content?.parts;
+    if (Array.isArray(parts)) {
+      return parts.map((p: { text?: unknown }) => String(p?.text ?? '')).join('').trim();
+    }
+    return '';
   } catch (e) {
     console.error('[chat] gemini request failed', e instanceof Error ? e.name : 'unknown');
     return '';
@@ -439,14 +464,19 @@ export async function POST(req: NextRequest) {
 
     const trimmed = (messages as { role?: unknown; text?: unknown }[]).slice(-MAX_MESSAGES);
 
-    // Kimi is the primary model; Gemini stays wired as a fallback so the widget keeps
-    // working on any deployment that has not been given a Kimi key yet.
-    const provider = KIMI_API_KEY ? 'kimi' : process.env.GEMINI_API_KEY ? 'gemini' : null;
-    if (!provider) {
+    // Kimi is the primary model and Gemini is the fallback — at RUNTIME, not only at
+    // configuration time. Choosing the provider by which key exists meant a Kimi key that
+    // was expired, revoked, or simply wrong took the whole widget down while a working
+    // Gemini key sat right there unused. A provider that fails must degrade, not decide.
+    if (!KIMI_API_KEY && !process.env.GEMINI_API_KEY) {
       return jsonWithRateHeaders({ error: 'not_configured' }, { status: 503 }, rateInfo);
     }
 
-    const text = provider === 'kimi' ? await askKimi(trimmed) : await askGemini(trimmed);
+    let text = KIMI_API_KEY ? await askKimi(trimmed) : '';
+    if (!text && process.env.GEMINI_API_KEY) {
+      if (KIMI_API_KEY) console.warn('[chat] kimi returned nothing — falling back to gemini');
+      text = await askGemini(trimmed);
+    }
     if (!text) {
       return jsonWithRateHeaders({ error: 'upstream_unavailable' }, { status: 502 }, rateInfo);
     }
