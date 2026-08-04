@@ -56,15 +56,31 @@ export const LEAD_RETENTION = '24 months';
 /** The rate-limit hash window. Privacy policy, section 7 - "deleted once the window has passed". */
 export const RATE_LIMIT_RETENTION = '24 hours';
 
+/**
+ * Preview deployments write to their own Neon branch, never to production data.
+ *
+ * The Neon marketplace integration owns DATABASE_URL and points every environment at the
+ * `main` branch, so a preview submission - or the retention harness, which backdates and
+ * deletes rows - would otherwise land in real leads. `DATABASE_URL_PREVIEW` is set on the
+ * preview target only and holds the connection string for the `preview` branch; choosing
+ * it here keeps the integration's own variable untouched instead of fighting it.
+ */
+function databaseUrl() {
+  if (process.env.VERCEL_ENV === 'preview' && process.env.DATABASE_URL_PREVIEW) {
+    return process.env.DATABASE_URL_PREVIEW;
+  }
+  return process.env.DATABASE_URL;
+}
+
 export function isDbConfigured() {
-  return Boolean(process.env.DATABASE_URL);
+  return Boolean(databaseUrl());
 }
 
 type SqlClient = ReturnType<typeof neon>;
 let client: SqlClient | null = null;
 
 function getSql(): SqlClient {
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (!url) throw new Error('DATABASE_URL is not configured');
   client ??= neon(url);
   return client;
