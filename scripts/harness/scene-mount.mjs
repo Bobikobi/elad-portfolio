@@ -94,3 +94,7 @@ for (const [k, v] of Object.entries(report)) {
   );
 }
 console.log(bad === 0 ? 'all routes as expected' : `${bad} route(s) wrong`);
+// Exit nonzero on failure. Printing "1 route(s) wrong" and then exiting 0 means any shell
+// gate or CI step that runs this accepts a failing report - the harness would report the
+// regression and the pipeline would carry on. Caught in review.
+process.exitCode = bad === 0 ? 0 : 1;
