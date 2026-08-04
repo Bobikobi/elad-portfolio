@@ -5,8 +5,9 @@ Commit: e36b67f (`feat/admin-leads-db`), 2026-08-04
 Harnesses: [m1-lead-capture.mjs](../../scripts/harness/m1-lead-capture.mjs) (browser → server
 action → Neon), plus direct calls against the deployed cron route.
 
-**Verdict: every criterion passes on the alias. NOT MERGEABLE - the database is in the
-wrong region.** See "The blocker" at the end.
+**Verdict: PASS, and mergeable.** The first pass found the database in the wrong region;
+it was re-provisioned in Frankfurt and everything below was re-run against it - see
+"Re-run after the region redo".
 
 ## 1. A real submission lands in the database
 
@@ -82,13 +83,38 @@ deployment and a clean typecheck. Fixed in e36b67f: every column is also applied
 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, for both tables, as the plan originally
 specified. The failure was invisible until a row was actually inserted.
 
-## The blocker
+## Re-run after the region redo (2026-08-04, commit 1cda9e9)
 
-`DATABASE_URL` resolves to Neon project `shy-glitter-96697762` in **us-east-1**, shared by
-Preview and Production. Privacy section 3 names eu-central-1 (Frankfurt) and `vercel.json`
-pins functions to `fra1` to sit beside it. Shipping this way makes the page false on its
-first day and the region pin pointless.
+The us-east-1 resource was deleted and Neon re-provisioned from the project in **fra1**.
+Confirmed at the source, not from the dashboard: the Neon API reports project
+`spring-mode-68745993` in `aws-eu-central-1`, and `DATABASE_URL` in both Preview and
+Production resolves to an `eu-central-1` host. Privacy section 3 and the `fra1` function
+pin are now true statements.
 
-Owner ruling: recreate the Neon project in eu-central-1 with a separate branch for Preview.
-Everything above then needs one re-run against the new database - the same two harnesses,
-same criteria - and M1 can merge.
+Preview no longer shares production data. The first run after the swap proved it did: a
+lead submitted through the preview alias appeared in the same database production reads,
+which also meant the retention harness had been backdating and deleting rows in real lead
+storage. A `preview` branch now exists on the Neon project and `DATABASE_URL_PREVIEW` is
+set on the preview target only.
+
+| check | result |
+|---|---|
+| lead capture, browser → server action → Neon (preview branch) | **PASS** - `locale=he source_path=/he/contact` |
+| production `main` branch after that submission | **0 leads, 0 hashes** - isolated |
+| backdated row present before the cron | STILL PRESENT |
+| unauthenticated + wrong secret | 401, and the row was **still present** afterwards |
+| authorized run | `{"ok":true,"leadsDeleted":1,"hashesPruned":0,"ms":291}` |
+| backdated row after the cron | **DELETED** |
+
+"Refused calls delete nothing" is now shown positively rather than assumed: the row was
+checked between the two 401s and the authorized run.
+
+## The blocker (resolved)
+
+What blocked the merge: `DATABASE_URL` resolved to Neon project `shy-glitter-96697762` in
+**us-east-1**, shared by Preview and Production, while privacy section 3 names
+eu-central-1 (Frankfurt) and `vercel.json` pins functions to `fra1` to sit beside it.
+
+Resolved by the redo above. The old resource was deleted with both tables verified empty
+first (0 leads, 0 hashes) - the region is fixed at creation on the Neon side, so there was
+no in-place fix to prefer. **M1 is mergeable.**
