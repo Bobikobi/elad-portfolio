@@ -89,7 +89,11 @@ export const useScene = create<SceneState>((set) => ({
   tourMode: false,
   tourStop: 0,
   scrollDriven: false,
-  quality: 'high',
+  // PERF-2: everyone STARTS cheap. This was 'high', so every visitor was handed the
+  // expensive profile and only demoted after failing it - which meant a borderline
+  // machine's first experience of the site was the stutter. A promotion is invisible; a
+  // stutter is not, so the burden of proof moved to the promotion.
+  quality: 'low',
   displayHz: 0,
   pacing: 'even',
   hoveredBody: null,

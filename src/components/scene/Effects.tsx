@@ -167,7 +167,7 @@ export default function Effects() {
         <GodRays
           ref={(e: GodRaysLike | null) => { godRaysRef.current = e ?? null; }}
           sun={sunMesh}
-          samples={high ? 60 : 26}
+          samples={high ? 32 : 26}
           density={0.86}
           decay={0.93}
           weight={0}
@@ -188,6 +188,10 @@ export default function Effects() {
       <Bloom
         key={solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}
         mipmapBlur
+        /* PERF-2: 7 rather than the library default. Per-STATE like the rest of these, so
+           every tier sees it - the glow reaches slightly less far everywhere, which keeps
+           the tiers identical to each other and is the owner's eye to confirm. */
+        levels={7}
         intensity={solar ? (focused ? 0.34 : 0.6) : 0.5}
         luminanceThreshold={solar ? (focused ? 0.86 : 0.72) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}

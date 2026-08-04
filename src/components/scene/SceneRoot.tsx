@@ -80,7 +80,9 @@ export default function SceneRoot() {
     <div className="fixed inset-0" style={{ zIndex: 0, pointerEvents: 'auto', touchAction: 'pan-y' }} aria-hidden="true">
       <Canvas
         gl={{ powerPreference: 'high-performance', antialias: true, alpha: false, preserveDrawingBuffer: HUD_AVAILABLE }}
-        dpr={[1, 1.5]}
+        /* PERF-2: 1.25 rather than 1.5. Pixels are the cheapest thing to give back on a
+           machine that is struggling and the least visible on one that is not. */
+        dpr={[1, 1.25]}
         camera={{ position: [0, 2.6, 9], fov: 55, near: 0.1, far: 200 }}
         shadows={false}
         onCreated={({ gl }) => {
