@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation, SMAA } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -96,6 +96,32 @@ export default function Effects() {
   const vigRef = useRef<VignetteLike | null>(null);
   const hueSatRef = useRef<HueSatLike | null>(null);
   const godRaysRef = useRef<GodRaysLike | null>(null);
+
+  /**
+   * PASS AUDIT (HUD builds only). The scene is pass-bound, not fill-bound — ~15 fullscreen
+   * passes a frame with 76% of CPU samples in GL submission — so the pass LIST is the thing
+   * worth knowing, and it cannot be read off the source: @react-three/postprocessing merges
+   * consecutive effects into one EffectPass, but a CONVOLUTION effect takes a pass of its
+   * own AND breaks the run, so the effects after it start a new pass. Which of ours are
+   * convolution is a fact about the library, not about this file. So: ask the composer.
+   */
+  const composerRef = useRef<{ passes?: unknown[] } | null>(null);
+  useEffect(() => {
+    if (!HUD_AVAILABLE) return;
+    const id = setTimeout(() => {
+      const passes = composerRef.current?.passes;
+      if (!Array.isArray(passes)) return;
+      (window as unknown as Record<string, unknown>).__passes = passes.map((p) => {
+        const pass = p as { constructor: { name: string }; enabled?: boolean; effects?: { name?: string }[] };
+        return {
+          pass: pass.constructor.name,
+          enabled: pass.enabled !== false,
+          merged: pass.effects?.map((e) => e?.name ?? '?') ?? null,
+        };
+      });
+    }, 300); // the layout effect that builds the passes runs after this one
+    return () => clearTimeout(id);
+  }, [godRays, solar, focused, high]);
   const curSat = useRef(OVERVIEW_SAT);
   const curHue = useRef(0);
   const curWeight = useRef(0);
@@ -160,14 +186,26 @@ export default function Effects() {
   });
 
   return (
-    <EffectComposer multisampling={0}>
+    <EffectComposer
+      ref={(c: { passes?: unknown[] } | null) => { composerRef.current = c ?? null; }}
+      multisampling={0}
+    >
       {godRays ? (
         /* weight starts at 0 and is driven per-frame (RULING 2) — so the frame in which the
            effect mounts is identical to the frame before it, and the rebuild is invisible. */
         <GodRays
           ref={(e: GodRaysLike | null) => { godRaysRef.current = e ?? null; }}
           sun={sunMesh}
-          samples={high ? 32 : 26}
+          // Explicit rather than relying on the effect's default: the rays are blurred and
+          // mip-based, so half resolution is close to free visually and is a quarter of
+          // the fragments in the pass that samples 26-60 times per pixel.
+          resolutionScale={0.5}
+          // Presence is composition and stays in every tier (owner ruling); only the
+          // sample count is cost. 26 -> 16 on the low tier, and PERF-2 takes the high tier
+          // 60 -> 32: the machines that wrongly landed in high are the ones this pass
+          // costs the most on, and at half resolution behind a blur the difference between
+          // 32 and 60 samples is not one anybody finds.
+          samples={high ? 32 : 16}
           density={0.86}
           decay={0.93}
           weight={0}
@@ -186,12 +224,25 @@ export default function Effects() {
           genuinely burning limb blooms. This is a per-STATE change, not per-tier: every
           tier sees the identical values. */}
       <Bloom
-        key={solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}
+        key={`${solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}-${high ? 'hi' : 'lo'}`}
         mipmapBlur
-        /* PERF-2: 7 rather than the library default. Per-STATE like the rest of these, so
-           every tier sees it - the glow reaches slightly less far everywhere, which keeps
-           the tiers identical to each other and is the owner's eye to confirm. */
-        levels={7}
+        // Half-res base for the same reason as the rays: the blur is a mip chain, so the
+        // pass cannot resolve detail this buffer would have carried anyway.
+        resolutionScale={0.5}
+        // THE lever, and the audit is what identified it. The composer builds only three
+        // passes, yet the frame costs 21-28 renderer.render() calls: mipmapBlur runs a
+        // downsample and an upsample per mip LEVEL, so the level count - not the pass
+        // list - is what the frame is actually paying for. 9 -> 6 removes ~6 renders a
+        // frame, roughly 29% of them on the home route.
+        //
+        // The widest levels are a 1-2px buffer stretched across the screen: the faintest,
+        // broadest part of the glow. A slightly tighter halo against no stutter is the
+        // owner's ruling, and it is the same family as the god-ray sample count.
+        //
+        // NOTE: `levels` is a MOUNT-TIME option in postprocessing, not a live setter, so
+        // it belongs in the key below - a tier change has to rebuild this effect for the
+        // number to take. That is why `high` is part of the key.
+        levels={high ? 9 : 6}
         intensity={solar ? (focused ? 0.34 : 0.6) : 0.5}
         luminanceThreshold={solar ? (focused ? 0.86 : 0.72) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
@@ -216,9 +267,13 @@ export default function Effects() {
       {/* B13: the composer runs with multisampling 0, so nothing was anti-aliasing the
           planet limbs — a lit rim against near-black space is the worst case for a
           stair-stepped edge, and at DPR 1 it was visible on every world. SMAA is one
-          cheap fullscreen pass and it goes last, on the finished frame. Both tiers: a
-          jagged edge is a defect, not a quality setting. */}
-      <SMAA />
+          cheap fullscreen pass and it goes last, on the finished frame.
+          F5: it is also the ONLY effect the composer could not merge — the audit shows
+          every other effect collapsing into a single EffectPass while SMAA takes one of
+          its own, because it is the convolution effect in the chain. On the low tier it
+          now comes off, on the owner's ruling and against a side-by-side crop. High tier
+          keeps it: there, a jagged edge is still a defect rather than a setting. */}
+      {high ? <SMAA /> : <></>}
     </EffectComposer>
   );
 }
