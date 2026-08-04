@@ -17,6 +17,7 @@
     "security:scan:history": "gitleaks git --redact --report-format json --report-path gitleaks-history.json --verbose ."
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@react-three/drei": "10.7.7",
     "@react-three/fiber": "9.6.1",
     "@react-three/postprocessing": "3.0.4",
