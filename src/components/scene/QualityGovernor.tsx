@@ -52,6 +52,14 @@ const EVEN_TARGET = 60;        // the even-paced lock
 /** Real-world refresh rates we snap the estimate to. */
 const KNOWN_RATES = [30, 48, 50, 60, 72, 75, 90, 100, 120, 144, 165, 240];
 
+/**
+ * What the governor is currently thinking, for the debug HUD (PERF-2). A plain mutable
+ * value object, never React state - it changes every frame and nothing should re-render
+ * for it. `hold` is how many of the required seconds of clean headroom have accumulated,
+ * which is the one number that answers "why has this machine not been promoted".
+ */
+export const governorState = { tier: 'low', hold: 0, need: 0, target: 0, promotions: 0 };
+
 function snapRate(hz: number): number {
   let best = KNOWN_RATES[0];
   let bestErr = Infinity;
@@ -157,6 +165,12 @@ export default function QualityGovernor() {
     if (dt * 1000 > (1000 / target) * UP_STALL_X) aboveFor.current = 0;
     else if (fps.current > target * UP_RATIO) aboveFor.current += dt;
     else aboveFor.current = 0;
+
+    governorState.tier = q;
+    governorState.hold = aboveFor.current;
+    governorState.need = UP_HOLD_S;
+    governorState.target = target;
+    governorState.promotions = promotions.current;
 
     if (q === 'high' && belowFor.current > DOWN_HOLD_S && downgrades.current < MAX_DOWNGRADES) {
       downgrades.current += 1;

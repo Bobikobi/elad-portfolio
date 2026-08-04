@@ -44,6 +44,11 @@ for (const rate of [1, 4]) {
   if (BYPASS) await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': BYPASS });
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await page.goto(`${BASE}${ROUTE}?hud=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  // Wait for the store to exist before sampling. Sampling from the navigation reads null
+  // for however long hydration takes, and a run of nulls is indistinguishable from a run
+  // that never decided - the first version of this reported exactly that.
+  await page.waitForFunction(() => !!(window.__scene && window.__scene.getState), { timeout: 40000 })
+    .catch(() => console.log('  (store never appeared)'));
   const cdp = await page.createCDPSession();
   if (rate > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate });
 

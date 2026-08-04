@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
+import { governorState } from './QualityGovernor';
 import { planetPositions, planetRadii } from '@/lib/planetPositions';
 
 /**
@@ -209,6 +210,7 @@ export function DebugHudOverlay() {
       const el = ref.current;
       if (el) {
         const d = hudData;
+        const g = governorState;
         const c = d.corners;
         const cornerFlag = (v: number) => (v < 10 ? '' : ' ⚠');
         const planetLines = d.planets.length
@@ -216,6 +218,11 @@ export function DebugHudOverlay() {
           : '  —';
         el.textContent =
           `HUD ${d.solar ? 'SOLAR' : 'galaxy'}  ${fmt(d.fps, 0)} fps  fov ${fmt(d.fov, 1)}°  ${d.vw}×${d.vh}\n` +
+          // PERF-2: the tier, and how much of the required clean headroom has accrued.
+          // "why am I still on low" is otherwise unanswerable from the outside, and the
+          // acceptance for that change is someone looking at their own machine.
+          `tier ${g.tier.toUpperCase()}  headroom ${fmt(g.hold, 1)}/${fmt(g.need, 0)}s` +
+          `  target ${fmt(g.target, 0)} fps  promoted ${g.promotions}×\n` +
           `swap  scroll ${fmt(d.scroll, 3)}  cov ${fmt(d.cov, 3)}${d.cov > 0.95 ? ' [SWAP-OK]' : ''}\n` +
           `sun disc  ${fmt(d.sunPct, 1)}% h   (${fmt(d.sunPx, 0)} px)  camDist ${fmt(d.camDist, 2)}\n` +
           `planets (diameter):\n${planetLines}\n` +
