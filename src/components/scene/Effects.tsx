@@ -200,7 +200,9 @@ export default function Effects() {
           // mip-based, so half resolution is close to free visually and is a quarter of
           // the fragments in the pass that samples 26-60 times per pixel.
           resolutionScale={0.5}
-          samples={high ? 60 : 26}
+          // Presence is composition and stays in every tier (owner ruling); only the
+          // sample count is cost. 26 -> 16 on the low tier.
+          samples={high ? 60 : 16}
           density={0.86}
           decay={0.93}
           weight={0}
@@ -219,11 +221,25 @@ export default function Effects() {
           genuinely burning limb blooms. This is a per-STATE change, not per-tier: every
           tier sees the identical values. */}
       <Bloom
-        key={solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}
+        key={`${solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}-${high ? 'hi' : 'lo'}`}
         mipmapBlur
         // Half-res base for the same reason as the rays: the blur is a mip chain, so the
         // pass cannot resolve detail this buffer would have carried anyway.
         resolutionScale={0.5}
+        // THE lever, and the audit is what identified it. The composer builds only three
+        // passes, yet the frame costs 21-28 renderer.render() calls: mipmapBlur runs a
+        // downsample and an upsample per mip LEVEL, so the level count - not the pass
+        // list - is what the frame is actually paying for. 9 -> 6 removes ~6 renders a
+        // frame, roughly 29% of them on the home route.
+        //
+        // The widest levels are a 1-2px buffer stretched across the screen: the faintest,
+        // broadest part of the glow. A slightly tighter halo against no stutter is the
+        // owner's ruling, and it is the same family as the god-ray sample count.
+        //
+        // NOTE: `levels` is a MOUNT-TIME option in postprocessing, not a live setter, so
+        // it belongs in the key below - a tier change has to rebuild this effect for the
+        // number to take. That is why `high` is part of the key.
+        levels={high ? 9 : 6}
         intensity={solar ? (focused ? 0.34 : 0.6) : 0.5}
         luminanceThreshold={solar ? (focused ? 0.86 : 0.72) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
@@ -248,9 +264,13 @@ export default function Effects() {
       {/* B13: the composer runs with multisampling 0, so nothing was anti-aliasing the
           planet limbs — a lit rim against near-black space is the worst case for a
           stair-stepped edge, and at DPR 1 it was visible on every world. SMAA is one
-          cheap fullscreen pass and it goes last, on the finished frame. Both tiers: a
-          jagged edge is a defect, not a quality setting. */}
-      <SMAA />
+          cheap fullscreen pass and it goes last, on the finished frame.
+          F5: it is also the ONLY effect the composer could not merge — the audit shows
+          every other effect collapsing into a single EffectPass while SMAA takes one of
+          its own, because it is the convolution effect in the chain. On the low tier it
+          now comes off, on the owner's ruling and against a side-by-side crop. High tier
+          keeps it: there, a jagged edge is still a defect rather than a setting. */}
+      {high ? <SMAA /> : <></>}
     </EffectComposer>
   );
 }

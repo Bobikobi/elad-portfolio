@@ -122,7 +122,13 @@ export function FramePacer() {
 }
 
 // --- dynamic resolution -------------------------------------------------------------------
-const MIN_SCALE = 0.6;
+// 0.85, not 0.6. The floor was 0.6 and the scaler sat on it across every cosmic route
+// while the frame rate did not move: this scene is pass-bound, not fill-bound, so the
+// pixels were being spent for nothing. Sharpness is not a currency to spend for zero
+// return (owner ruling). The mechanism stays for a genuinely fill-bound machine — a dense
+// display on the high tier, where the base ratio is 1.5 — but it can no longer blur the
+// scene into softness chasing frames it will not get back.
+const MIN_SCALE = 0.85;
 const MAX_SCALE = 1;
 const STEP_DOWN = 0.1;
 const STEP_UP = 0.05;
