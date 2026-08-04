@@ -107,14 +107,16 @@ await browser.close();
 
 let pass = true;
 console.log(`\nBASE=${BASE}  CPU throttle=${THROTTLE}x  sample=${SAMPLE_MS}ms\n`);
-console.log('route                          http  canvas  expect  fps    tier   dpr   verdict');
+console.log('route                          http  canvas  expect  rAF/s  r3f/s  tier   dpr   hz    verdict');
 for (const r of rows) {
   const ok = r.scene ? r.canvases > 0 : r.canvases === 0;
   if (!ok) pass = false;
   console.log(
     `${r.path.padEnd(30)} ${String(r.status).padEnd(5)} ${String(r.canvases).padEnd(7)} ` +
       `${(r.scene ? 'yes' : 'no').padEnd(7)} ${String(r.fps).padEnd(6)} ` +
-      `${String(r.perf?.quality ?? '-').padEnd(6)} ${String(r.perf?.dpr ?? '-').padEnd(5)} ${ok ? 'ok' : 'WRONG'}`
+      `${String(r.perf?.fps ?? '-').padEnd(6)} ` +
+      `${String(r.perf?.quality ?? '-').padEnd(6)} ${String(r.perf?.dpr ?? '-').padEnd(5)} ` +
+      `${String(r.perf?.displayHz ?? '-').padEnd(5)} ${ok ? 'ok' : 'WRONG'}`
   );
 }
 console.log(`\ncanvas gating: ${pass ? 'PASS' : 'FAIL'}`);

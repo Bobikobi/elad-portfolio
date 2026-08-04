@@ -46,8 +46,16 @@ function useActivityListeners() {
   }, []);
 }
 
-/** Idle = no input recently AND nothing is animating itself. */
-function isIdle(now: number) {
+/**
+ * Idle = no input recently AND nothing is animating itself.
+ *
+ * Exported because the quality governor MUST NOT judge a throttled frame. It measures
+ * fps from the frame delta, and an idle page deliberately delivering 30fps looks exactly
+ * like a machine failing to hold 60 — which demoted the tier on a perfectly capable
+ * machine within seconds of the page settling. The idle throttle and the tier decision
+ * have to agree on when the clock is running.
+ */
+export function isIdle(now: number) {
   if (now - lastInput < IDLE_AFTER_MS) return false;
   const s = useScene.getState();
   // A flight between worlds has no pointer motion but is the most cinematic moment in the

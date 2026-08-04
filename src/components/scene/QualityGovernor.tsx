@@ -2,6 +2,7 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useScene, type Quality } from '@/lib/sceneStore';
+import { isIdle } from './PerfPacer';
 
 /**
  * Quality governor v2 (R5.9). Replaces drei's raw `PerformanceMonitor onDecline`, which
@@ -32,6 +33,16 @@ import { useScene, type Quality } from '@/lib/sceneStore';
 
 const WARMUP_S = 3.5;          // no judging while shaders compile / textures upload
 const SAMPLE_TARGET = 96;      // frame deltas collected for the refresh-rate estimate
+// ...but never wait longer than this for them. Measured on the branch alias under a 4x CPU
+// throttle: the scene delivered 7-12fps, so 96 samples would have taken 8-14 SECONDS, and
+// until the estimate lands the governor returns early and governs nothing at all. The
+// machines that most need a demotion were the ones guaranteed not to get one.
+const DECIDE_BY_S = 4;
+// When the deadline fires with a starved sample set, assume the ordinary display rather
+// than trusting the estimate. A struggling machine's FASTEST frames are still slow, so the
+// estimate would come back "30Hz display" — and a 30fps target is one a stuttering machine
+// meets, which is exactly how a governor talks itself out of ever demoting.
+const ASSUMED_HZ = 60;
 const DOWN_RATIO = 0.62;       // below this share of target fps = struggling
 const UP_RATIO = 0.86;         // above this share = comfortable
 const DOWN_HOLD_S = 1.2;       // sustained shortfall before a downgrade
@@ -89,12 +100,14 @@ export default function QualityGovernor() {
     // --- refresh-rate estimate ---------------------------------------------------------
     if (!decided.current) {
       samples.current.push(dt);
-      if (samples.current.length >= SAMPLE_TARGET) {
+      const enough = samples.current.length >= SAMPLE_TARGET;
+      const tooLong = now - started.current > DECIDE_BY_S;
+      if (enough || tooLong) {
         const sorted = [...samples.current].sort((a, b) => a - b);
         // 10th percentile: the fastest honest frames. Load lengthens frames, never
         // shortens them, so the low tail is the closest thing to the display period.
         const p10 = sorted[Math.floor(sorted.length * 0.1)];
-        const measured = forcedHz() ?? snapRate(1 / p10);
+        const measured = forcedHz() ?? (enough ? snapRate(1 / p10) : ASSUMED_HZ);
         const pacing = measured >= SMOOTH_HZ_MIN ? 'smooth' : 'even';
         targetFps.current = pacing === 'smooth' ? measured : EVEN_TARGET;
         decided.current = true;
@@ -107,6 +120,12 @@ export default function QualityGovernor() {
 
     // --- steady-state tier governance --------------------------------------------------
     if (now - started.current < WARMUP_S) return;
+    // An idle page is being paced to 30fps on purpose. Measuring it here reads as a
+    // machine that cannot hold the target and demotes the tier for a scene nobody was
+    // even interacting with — measured on the branch alias, where six of eight cosmic
+    // routes came back `low` purely because they had been left alone for 2.5 seconds.
+    // Frames only count while the loop is running free.
+    if (isIdle(performance.now())) { belowFor.current = 0; aboveFor.current = 0; return; }
     fps.current = fps.current ? fps.current * 0.9 + (1 / dt) * 0.1 : 1 / dt;
 
     const q: Quality = useScene.getState().quality;
