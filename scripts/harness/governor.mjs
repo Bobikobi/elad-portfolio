@@ -69,12 +69,16 @@ for (const rate of [1, 4]) {
     }
   }
   const first = samples.find((s) => s.q);
+  // The refresh estimate needs 96 frames, so the FIRST sample is taken before it lands and
+  // reports hz 0 with the default pacing. Reading the run's identity from it made the
+  // report say the estimate never happened at all. Take the first SETTLED sample instead.
+  const settled = samples.find((s) => s.hz) ?? first;
   report[`${rate}x`] = {
     startedOn: first ? first.q : null,
     endedOn: samples[samples.length - 1].q,
     transitions,
-    displayHz: first ? first.hz : null,
-    pacing: first ? first.pacing : null,
+    displayHz: settled ? settled.hz : null,
+    pacing: settled ? settled.pacing : null,
     fpsMedian: (() => {
       const f = samples.map((s) => s.fps).filter((x) => typeof x === 'number').sort((a, b) => a - b);
       return f.length ? f[Math.floor(f.length / 2)] : null;
