@@ -242,9 +242,13 @@ export default function ProjectsStage({
         hovered.current = i;
         // Keyboard focus must be able to reach a window that is currently off the fan.
         const target = clamp(i * pitchRef.current - centreOffsetRef.current, 0, spanRef.current);
+        // Horizontal scroll runs NEGATIVE in an RTL container. Reading the current
+        // scrollLeft to work out which way is wrong at rest, where it is 0 in both - so
+        // ask the container which direction it is in.
+        const rtlBox = getComputedStyle(list).direction === 'rtl';
         list.scrollTo(
           axisRef.current === 'x'
-            ? { left: (list.scrollLeft < 0 ? -1 : 1) * target, behavior: 'smooth' }
+            ? { left: (rtlBox ? -1 : 1) * target, behavior: 'smooth' }
             : { top: target, behavior: 'smooth' }
         );
       };
