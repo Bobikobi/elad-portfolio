@@ -47,17 +47,15 @@
 
 ### שלב 0 — תשתית (חסם לכל השאר)
 
-סטטוס 2026-08-04: **חלקית.** ה-CLI מותקן (58.4.4) והפרויקט מקושר (`bobikobis-projects` / `elad-portfolio`). Neon חובר — אבל דרך חשבון Vercel שגוי, ולכן `DATABASE_URL` טרם אומת. ראה "חסם פתוח" למטה.
+סטטוס 2026-08-04: **הושלם.** ה-CLI מותקן (58.4.4), הפרויקט מקושר (`bobikobis-projects` / `elad-portfolio`), ו-Neon פרוס מחדש ב-`fra1`. M1 מוזג ל-master ב-PR #25 ואומת בפרודקשן.
 
-1. ~~התקנת Vercel CLI~~ ✅ `vercel 58.4.4`. **אין credentials מקומיים** — `vercel whoami` פותח device-login. חייב `vercel login` ידני של הבעלים, בחשבון הנכון.
-2. `vercel link` ✅ (`.vercel/project.json`: `team_QnwoArVgWTT3HNfv41Rt8oPc` / `prj_yBdre0rqnnOmPb7XdeVM6vjJ1RbM`) → `vercel integration add neon` — **צריך חזרה**, ראה החסם.
-3. `pnpm add @neondatabase/serverless`
-4. `vercel env pull .env.local --yes`
-5. עדכון `.env.example` בשמות (בלי ערכים) + הוספת `/admin` ל-`disallow` ב-`robots.ts`.
+1. ~~התקנת Vercel CLI~~ ✅ `vercel 58.4.4`. **אין credentials מקומיים** — `vercel whoami` פותח device-login. העבודה מול הפלטפורמה נעשית עם הטוקן השמור (`VERCEL_TOKEN` / REST), לא עם התחברות אינטראקטיבית.
+2. ~~`vercel link` + `vercel integration add neon`~~ ✅ המשאב הראשון נוצר ב-`iad1` (us-east-1) ולכן **נמחק ונוצר מחדש** ב-`fra1`: `elad-portfolio-db-eu`, פרויקט Neon `spring-mode-68745993`, מחובר לשלוש הסביבות. האזור נקבע ביצירה ואינו ניתן לשינוי בדיעבד.
+3. ~~`pnpm add @neondatabase/serverless`~~ ✅ 1.1.0
+4. ~~`vercel env pull`~~ ✅
+5. ~~`.env.example` + `/admin` ב-`robots.ts`~~ ✅
 
-**חסם פתוח — Neon חובר בחשבון הלא נכון.** אינטגרציה שנוספת בחשבון/טים אחר לא מזריקה `DATABASE_URL` לפרויקט הזה, וגם אם ידחפו מחרוזת חיבור ידנית — מסד הנתונים יישב תחת חשבון שאינו הבעלים של האתר. הרצף הנכון: להסיר את החיבור מהחשבון השגוי, להתחבר כ-`bobikobis-projects`, ולהוסיף את Neon **מתוך הפרויקט `elad-portfolio`** דרך ה-Marketplace (לא `vercel env add` ידני — רק אינטגרציה מזריקה אוטומטית לשלוש הסביבות).
-
-**שער חובה לפני מיזוג M1:** `vercel env ls` מראה `DATABASE_URL` גם ב-Preview וגם ב-Production, וה-host במחרוזת מכיל `eu-central-1`. אזור אחר = סעיף 3 בדף הפרטיות שקרי, והפונקציות מוצמדות ל-`fra1` לחינם.
+**ענף Preview נפרד.** האינטגרציה מפנה את שלוש הסביבות לאותו branch (`main`), מה שהוכח בפועל: ליד שנשלח דרך ה-preview נחת במסד שהפרודקשן קורא. לכן נוצר branch בשם `preview` ב-Neon, מחרוזת החיבור שלו יושבת ב-`DATABASE_URL_PREVIEW` על טירגט preview בלבד, ו-`src/lib/db.ts` בוחר אותה כש-`VERCEL_ENV=preview`. אימות: הגשה דרך preview נכנסה ל-branch של preview, וב-`main` נשארו 0 שורות.
 
 **קבצים:** `.env.example`, [src/app/robots.ts](src/app/robots.ts), `package.json`
 
@@ -277,6 +275,7 @@ if (pathname === '/admin' || pathname.startsWith('/admin/') || pathname.startsWi
 | שם | מקור | חוסם מה |
 |---|---|---|
 | `DATABASE_URL` | Neon (אוטומטי מה-Marketplace) | M1, M2 |
+| `DATABASE_URL_PREVIEW` | ה-branch `preview` ב-Neon; **טירגט preview בלבד** | בידוד ה-preview מנתוני אמת |
 | `CRON_SECRET` | `openssl rand -hex 32` | M1 (נתיב מחיקת ההיסטוריה — fail-closed בלעדיו) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | ידני | M3 |
 | `PAGEVIEW_SALT` | `openssl rand -hex 32` | M2 (יציבות ה-hash בין deployments) |
@@ -292,7 +291,7 @@ if (pathname === '/admin' || pathname.startsWith('/admin/') || pathname.startsWi
 | 0 | Vercel CLI + Neon + env | — | — (הגדרות) |
 | S1/S2 | GSC + Bing API keys | — | — (ידני, אפשר במקביל) |
 | S3/S4 | תיקוני robots + sitemap | — | `fix/seo-robots-sitemap` |
-| M1 | `db.ts` + לידים מהטופס | 0 | `feat/admin-leads-db` |
+| M1 | ~~`db.ts` + לידים מהטופס~~ ✅ **מוזג** (PR #25), אומת בפרודקשן | 0 | `feat/admin-leads-db` |
 | M2 | pageviews + tracker | M1 | `feat/self-hosted-analytics` |
 | M3 | `/admin` + auth + פאנל לידים | M1, M2 | `feat/admin-area` |
 | M4 | פאנל GSC + Bing | M3, S1, S2 | `feat/admin-seo-panel` |
