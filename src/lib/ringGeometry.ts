@@ -290,17 +290,14 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   };
 }
 
-/** Canonical (x, y) mapped to the screen through the ring's matrix. */
-export function toScreen(m: RingMetrics, x: number, y: number): [number, number] {
+/** Screen point for a canonical polar coordinate, through the ring's matrix. */
+export function screenAt(m: RingMetrics, r: number, th: number): [number, number] {
+  const x = r * Math.cos(th);
+  const y = r * Math.sin(th);
   return [
     m.matrix[0] * x + m.matrix[2] * y + m.matrix[4],
     m.matrix[1] * x + m.matrix[3] * y + m.matrix[5],
   ];
-}
-
-/** Screen point for a canonical polar coordinate. */
-export function screenAt(m: RingMetrics, r: number, th: number): [number, number] {
-  return toScreen(m, r * Math.cos(th), r * Math.sin(th));
 }
 
 /** CANONICAL point at polar (r, th). The layer draws in this space and one matrix on the
