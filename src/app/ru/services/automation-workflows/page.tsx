@@ -12,9 +12,10 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://www.eladsaadon.dev/ru/services/automation-workflows',
     languages: {
-      'he-IL': 'https://www.eladsaadon.dev/services/automation-workflows',
-      'en-US': 'https://www.eladsaadon.dev/en/services/automation-workflows',
+      'he-IL': 'https://www.eladsaadon.dev/he/services/automation-workflows',
+      'en-US': 'https://www.eladsaadon.dev/services/automation-workflows',
       'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
+      'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
     },
   },
 };
@@ -144,7 +145,7 @@ export default function AutomationWorkflowsPage() {
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Расскажите о нём, и мы проверим, можно ли его автоматизировать.</p>
         </div>
         <Link
-          href="/#contact"
+          href="/ru#contact"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
           Давайте поговорим <ArrowLeft size={14} />

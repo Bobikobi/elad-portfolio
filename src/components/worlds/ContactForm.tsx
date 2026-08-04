@@ -1,5 +1,6 @@
 'use client';
 import { useActionState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
 import { submitContact, type ContactState } from '@/app/actions/contact';
 
@@ -11,7 +12,8 @@ const field =
 /** Contact form — real server action (validation + honeypot + rate-limit). Fields
  *  are underline-only; the underline turns core-gold on focus (spec). */
 export default function ContactForm() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const pathname = usePathname();
   const [state, action, pending] = useActionState(submitContact, initial);
 
   if (state.status === 'success') {
@@ -24,6 +26,10 @@ export default function ContactForm() {
 
   return (
     <form action={action} className="space-y-4">
+      {/* Context for the enquiry, disclosed in section 1 of the privacy policy: the page it
+          was sent from and the language it was written in. Nothing about the visitor. */}
+      <input type="hidden" name="locale" value={locale} />
+      <input type="hidden" name="sourcePath" value={pathname} />
       {/* honeypot */}
       <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute h-0 w-0 opacity-0" style={{ left: '-9999px' }} />
       <input name="name" required minLength={2} maxLength={80} placeholder={t('contact.name')} className={field} />

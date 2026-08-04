@@ -1,11 +1,5 @@
 @import "tailwindcss";
 
-@font-face {
-  font-family: 'Glamora';
-  src: url('/fonts/GLAMORA.otf') format('opentype');
-  font-display: swap;
-}
-
 @theme inline {
   --color-bg-primary: #0A0612;
   --color-bg-secondary: #1A1024;

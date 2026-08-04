@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import type { Locale } from '@/lib/translations';
 import { translations as tr } from '@/lib/translations';
+import { localePath } from '@/lib/sections';
 
 const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
 
@@ -15,7 +16,7 @@ const SERVICES = [
 ] as const;
 
 export default function ServicesWorld({ locale }: { locale: Locale }) {
-  const path = (s: string) => (locale === 'he' ? `/${s}` : `/${locale}/${s}`);
+  const path = (s: string) => localePath(s, locale);
   const more = { he: 'פרטים נוספים', en: 'Learn more', ru: 'Подробнее' }[locale];
   return (
     <div className="text-start">

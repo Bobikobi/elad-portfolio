@@ -8,10 +8,16 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://www.eladsaadon.dev/ru',
     languages: {
-      'he-IL': 'https://www.eladsaadon.dev',
-      'en-US': 'https://www.eladsaadon.dev/en',
+      'he-IL': 'https://www.eladsaadon.dev/he',
+      'en-US': 'https://www.eladsaadon.dev',
       'ru-RU': 'https://www.eladsaadon.dev/ru',
+      'x-default': 'https://www.eladsaadon.dev',
     },
+  },
+  openGraph: {
+    locale: 'ru_RU',
+    alternateLocale: ['en_US', 'he_IL'],
+    url: 'https://www.eladsaadon.dev/ru',
   },
 };
 

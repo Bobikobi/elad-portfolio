@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import { useScene, type Quality } from '@/lib/sceneStore';
+import { isIdle } from './PerfPacer';
 
 /**
  * Quality governor v2 (R5.9). Replaces drei's raw `PerformanceMonitor onDecline`, which
@@ -32,6 +33,16 @@ import { useScene, type Quality } from '@/lib/sceneStore';
 
 const WARMUP_S = 3.5;          // no judging while shaders compile / textures upload
 const SAMPLE_TARGET = 96;      // frame deltas collected for the refresh-rate estimate
+// ...but never wait longer than this for them. Measured on the branch alias under a 4x CPU
+// throttle: the scene delivered 7-12fps, so 96 samples would have taken 8-14 SECONDS, and
+// until the estimate lands the governor returns early and governs nothing at all. The
+// machines that most need a demotion were the ones guaranteed not to get one.
+const DECIDE_BY_S = 4;
+// When the deadline fires with a starved sample set, assume the ordinary display rather
+// than trusting the estimate. A struggling machine's FASTEST frames are still slow, so the
+// estimate would come back "30Hz display" — and a 30fps target is one a stuttering machine
+// meets, which is exactly how a governor talks itself out of ever demoting.
+const ASSUMED_HZ = 60;
 const DOWN_RATIO = 0.62;       // below this share of target fps = struggling
 const UP_RATIO = 0.86;         // above this share = comfortable
 const DOWN_HOLD_S = 1.2;       // sustained shortfall before a downgrade
@@ -62,14 +73,25 @@ function forcedHz(): number | null {
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
+/**
+ * `?tier=low` pins the quality tier. Ignored in production builds, like `?hz`.
+ *
+ * Without this a low-tier decision cannot be inspected on purpose: the tier is whatever
+ * the governor concluded about the machine that happened to be looking, so "does the low
+ * tier still look right" was a question nobody could answer with a screenshot. Judging a
+ * cost knob by eye requires being able to hold the tier still.
+ */
+function forcedTier(): Quality | null {
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV === 'production') return null;
+  if (typeof window === 'undefined') return null;
+  const v = new URLSearchParams(window.location.search).get('tier');
+  return v === 'low' || v === 'high' ? v : null;
+}
+
 export default function QualityGovernor() {
   const setQuality = useScene((s) => s.setQuality);
   const setDisplayHz = useScene((s) => s.setDisplayHz);
   const setPacing = useScene((s) => s.setPacing);
-  const invalidate = useThree((s) => s.invalidate);
-  const setFrameloop = useThree((s) => s.setFrameloop);
-  // 0 until the estimate lands; the flip from 0 → measured is what starts the paced loop.
-  const displayHz = useScene((s) => s.displayHz);
 
   const started = useRef(0);
   const samples = useRef<number[]>([]);
@@ -79,29 +101,18 @@ export default function QualityGovernor() {
   const belowFor = useRef(0);
   const aboveFor = useRef(0);
   const downgrades = useRef(0);
-  const pacedRef = useRef(false);
+  const pinned = useRef<Quality | null>(null);
 
-  // Paced driver for the even-60 lock: R3F is switched to on-demand and we ask for one
-  // frame per 1/60s slot. Frames are still real frames (same delta-driven easing), we
-  // simply stop asking for the ones the design does not need.
   useEffect(() => {
-    if (!displayHz || !pacedRef.current) return;
-    // Switch to on-demand HERE, in the same tick that starts the driver, so there is
-    // never a window where the loop is off and nothing is asking for frames.
-    setFrameloop('demand');
-    let raf = 0;
-    let last = 0;
-    const period = 1000 / EVEN_TARGET;
-    const tick = (ts: number) => {
-      raf = requestAnimationFrame(tick);
-      if (ts - last >= period - 1) {
-        last = ts;
-        invalidate();
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); setFrameloop('always'); };
-  }, [invalidate, setFrameloop, displayHz]);
+    const t = forcedTier();
+    pinned.current = t;
+    if (t) setQuality(t);
+  }, [setQuality]);
+
+  // The paced driver used to live here. It now belongs to FramePacer, which also owns the
+  // idle throttle — two components calling setFrameloop is how a scene ends up with a loop
+  // that neither of them thinks it turned off. This file governs the TIER and the pacing
+  // PROFILE; it no longer touches the loop.
 
   useFrame((_, delta) => {
     const now = performance.now() / 1000;
@@ -111,29 +122,35 @@ export default function QualityGovernor() {
     // --- refresh-rate estimate ---------------------------------------------------------
     if (!decided.current) {
       samples.current.push(dt);
-      if (samples.current.length >= SAMPLE_TARGET) {
+      const enough = samples.current.length >= SAMPLE_TARGET;
+      const tooLong = now - started.current > DECIDE_BY_S;
+      if (enough || tooLong) {
         const sorted = [...samples.current].sort((a, b) => a - b);
         // 10th percentile: the fastest honest frames. Load lengthens frames, never
         // shortens them, so the low tail is the closest thing to the display period.
         const p10 = sorted[Math.floor(sorted.length * 0.1)];
-        const measured = forcedHz() ?? snapRate(1 / p10);
+        const measured = forcedHz() ?? (enough ? snapRate(1 / p10) : ASSUMED_HZ);
         const pacing = measured >= SMOOTH_HZ_MIN ? 'smooth' : 'even';
         targetFps.current = pacing === 'smooth' ? measured : EVEN_TARGET;
         decided.current = true;
         samples.current.length = 0;
         setDisplayHz(measured);
         setPacing(pacing);
-        // Only engage the paced loop where it actually buys something: a panel faster
-        // than 60 but below the smooth threshold, whose uncapped cadence is uneven.
-        if (pacing === 'even' && measured > EVEN_TARGET + 6) pacedRef.current = true;
       }
       return;
     }
 
     // --- steady-state tier governance --------------------------------------------------
     if (now - started.current < WARMUP_S) return;
+    // An idle page is being paced to 30fps on purpose. Measuring it here reads as a
+    // machine that cannot hold the target and demotes the tier for a scene nobody was
+    // even interacting with — measured on the branch alias, where six of eight cosmic
+    // routes came back `low` purely because they had been left alone for 2.5 seconds.
+    // Frames only count while the loop is running free.
+    if (isIdle(performance.now())) { belowFor.current = 0; aboveFor.current = 0; return; }
     fps.current = fps.current ? fps.current * 0.9 + (1 / dt) * 0.1 : 1 / dt;
 
+    if (pinned.current) return; // an explicitly pinned tier is not up for renegotiation
     const q: Quality = useScene.getState().quality;
     const target = targetFps.current;
     if (fps.current < target * DOWN_RATIO) { belowFor.current += dt; aboveFor.current = 0; }
