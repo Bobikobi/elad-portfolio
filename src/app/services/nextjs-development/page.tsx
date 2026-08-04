@@ -1,19 +1,19 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Globe, ShieldCheck, Gauge, Database, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Globe, ShieldCheck, Gauge, Database, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 export const metadata: Metadata = {
-  title: 'פיתוח Next.js לעסקים וסטארטאפים',
+  title: 'Next.js Development for Businesses & Startups',
   description:
-    'פיתוח מערכות Next.js מקצה לקצה: ארכיטקטורה, ביצועים, SEO, אינטגרציות API ופריסה מאובטחת לפרודקשן עם TypeScript ו-Supabase.',
+    'End-to-end Next.js development: architecture, performance, SEO, API integrations, and secure production deployment with TypeScript and Supabase.',
   alternates: {
     canonical: 'https://www.eladsaadon.dev/services/nextjs-development',
     languages: {
-      'he-IL': 'https://www.eladsaadon.dev/services/nextjs-development',
-      'en-US': 'https://www.eladsaadon.dev/en/services/nextjs-development',
+      'he-IL': 'https://www.eladsaadon.dev/he/services/nextjs-development',
+      'en-US': 'https://www.eladsaadon.dev/services/nextjs-development',
       'ru-RU': 'https://www.eladsaadon.dev/ru/services/nextjs-development',
       'x-default': 'https://www.eladsaadon.dev/services/nextjs-development',
     },
@@ -41,18 +41,18 @@ const schemas = [
     mainEntity: [
       {
         '@type': 'Question',
-        name: 'מה כולל שירות פיתוח Next.js?',
+        name: 'What does Next.js development service include?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'תכנון ארכיטקטורה, פיתוח צד שרת וצד לקוח, אינטגרציות API, שיפור ביצועים, SEO טכני ופריסה מלאה לפרודקשן.',
+          text: 'Architecture planning, server-side and client-side development, API integrations, performance optimization, technical SEO, and full production deployment.',
         },
       },
       {
         '@type': 'Question',
-        name: 'האם אפשר לשדרג מערכת Next.js קיימת?',
+        name: 'Can you upgrade an existing Next.js system?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'כן. מאבחנים צווארי בקבוק בביצועים, ארכיטקטורה או SEO, ומשפרים בשלבים — בלי לשבור מה שעובד.',
+          text: 'Yes. We diagnose bottlenecks in performance, architecture, or SEO, and improve incrementally — without breaking what works.',
         },
       },
     ],
@@ -62,57 +62,31 @@ const schemas = [
 const features = [
   {
     icon: Globe,
-    title: 'ביצועים ו-SEO',
-    desc: 'Core Web Vitals ירוקים, SSR/ISR לפי הצורך, metadata מדויק ו-schema שגוגל מבין.',
+    title: 'Performance & SEO',
+    desc: 'Green Core Web Vitals, SSR/ISR as needed, precise metadata, and schema that Google understands.',
   },
   {
     icon: ShieldCheck,
-    title: 'אבטחה מובנית',
-    desc: 'הרשאות, headers, rate-limiting ו-OWASP Top 10 כחלק מהארכיטקטורה — לא תוספת אחרי.',
+    title: 'Built-in Security',
+    desc: 'Permissions, headers, rate-limiting, and OWASP Top 10 as part of the architecture — not an afterthought.',
   },
   {
     icon: Database,
-    title: 'שכבת נתונים',
-    desc: 'Supabase, APIs חיצוניים, ניהול cache ומסד נתונים שמחזיק עומס ומסנכרן נכון.',
+    title: 'Data Layer',
+    desc: 'Supabase, external APIs, cache management, and a database that handles load and syncs correctly.',
   },
   {
     icon: Gauge,
-    title: 'מוכן לגדול',
-    desc: 'קוד נקי, מתועד ומבודק — כדי שפיצ׳ר הבא יהיה מהיר להוסיף ולא כאב ראש.',
-  },
-];
-
-const deliverables = [
-  'אפליקציית Next.js מלאה — מוכנה לפרודקשן',
-  'ארכיטקטורה מתועדת עם תרשימי זרימה',
-  'מערכת ניהול תוכן (CMS) מותאמת אישית',
-  'אינטגרציות API — Supabase, Stripe, OpenAI ועוד',
-  'SEO טכני מלא: metadata, sitemap, schema, hreflang',
-  'בדיקות אוטומטיות (Unit + E2E)',
-  'פריסה מאובטחת עם CI/CD, ניטור ולוגים',
-  'קוד מקור מלא + גישה לריפוזיטורי פרטי',
-];
-
-const faqExtra = [
-  {
-    q: 'כמה זמן לוקח פרויקט Next.js טיפוסי?',
-    a: 'פרויקט ראשוני (MVP או אתר תדמית) לוקח 2–4 שבועות. מערכת מורכבת עם דשבורד, אינטגרציות והרשאות — 4–8 שבועות. תמיד מתחילים באבחון מהיר ומתעדפים לפי ערך.',
-  },
-  {
-    q: 'מה קורה אחרי שהפרויקט עולה לאוויר?',
-    a: 'אתם מקבלים גישה מלאה לקוד,文档 ותיעוד טכני. אני זמין לתחזוקה שוטפת, שדרוגים ותיקונים לפי צורך — בלי חוזים סגורים, בלי התחייבות מיותרת.',
-  },
-  {
-    q: 'האם אתם עובדים עם טכנולוגיות נוספות חוץ מ-Next.js?',
-    a: 'כן. הסטACK העיקרי הוא Next.js + TypeScript + Supabase + Tailwind CSS, אבל אני משלב גם Python לאוטומציות, Node.js ל-microservices, ו-React Native לאפליקציות מובייל לפי הצורך.',
+    title: 'Ready to Scale',
+    desc: 'Clean, documented, and tested code — so the next feature is quick to add and not a headache.',
   },
 ];
 
 export default function NextJsDevelopmentPage() {
   const breadcrumbs = [
-    { label: 'דף הבית', href: '/' },
-    { label: 'שירותים', href: '/services' },
-    { label: 'פיתוח Next.js', href: '/services/nextjs-development' },
+    { label: 'Home', href: '/' },
+    { label: 'Services', href: '/services' },
+    { label: 'Next.js Development', href: '/services/nextjs-development' },
   ];
 
   return (
@@ -120,21 +94,13 @@ export default function NextJsDevelopmentPage() {
       <JsonLd data={schemas} />
 
       <GradientBar />
-      <Breadcrumbs items={breadcrumbs} locale="he" />
+      <Breadcrumbs items={breadcrumbs} locale="en" />
       <h1 className="text-3xl font-bold text-[var(--color-text-primary)] sm:text-4xl">
-        פיתוח Next.js לעסקים וסטארטאפים
+        Next.js Development for Businesses & Startups
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
-        מוצר Next.js שנבנה נכון — מהיר למשתמש, ידידותי לגוגל, בטוח בפרודקשן ונוח לתחזוקה. מאפס ועד פריסה מלאה.
+        A Next.js product built right — fast for users, friendly to Google, secure in production, and easy to maintain. From scratch to full deployment.
       </p>
-
-      {/* Direct answer for featured snippet */}
-      <div className="mt-8 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
-        <p className="text-sm leading-7 text-[var(--color-text-secondary)]">
-          <strong className="text-[var(--color-text-primary)]">תשובה קצרה:</strong>{' '}
-          פיתוח Next.js מקצה לקצה — מתכנון ארכיטקטורה ועד פריסה מאובטחת לפרודקשן. כולל ממשק משתמש, שרת, בסיס נתונים, אינטגרציות API, SEO טכני, נגישות ותחזוקה שוטפת. מתאים לעסקים שצריכים מוצר דיגיטלי מהיר, מאובטח וידידותי לגוגל.
-        </p>
-      </div>
 
       {/* Feature cards */}
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
@@ -155,47 +121,34 @@ export default function NextJsDevelopmentPage() {
         })}
       </div>
 
-      {/* Deliverables */}
-      <section className="mt-14">
-        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">מה אתם מקבלים</h2>
-        <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-          {deliverables.map((item) => (
-            <li
-              key={item}
-              className="flex items-start gap-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-4 text-sm text-[var(--color-text-secondary)]"
-            >
-              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[var(--color-accent)]" />
-              {item}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Expanded FAQ */}
+      {/* FAQ */}
       <section className="mt-14 space-y-4">
-        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">שאלות נפוצות</h2>
-        {faqExtra.map((item) => (
-          <article
-            key={item.q}
-            className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5"
-          >
-            <h3 className="text-base font-medium text-[var(--color-text-primary)]">{item.q}</h3>
-            <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">{item.a}</p>
-          </article>
-        ))}
+        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">Frequently Asked Questions</h2>
+        <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
+          <h3 className="text-base font-medium text-[var(--color-text-primary)]">What does Next.js development service include?</h3>
+          <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
+            Architecture planning, UI development, server logic, database setup, API integrations, technical SEO, and full production deployment.
+          </p>
+        </article>
+        <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
+          <h3 className="text-base font-medium text-[var(--color-text-primary)]">Can you upgrade what I have without rebuilding?</h3>
+          <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
+            Yes. We diagnose first: performance, architecture, SEO. Then improve in focused stages that don’t break what works.
+          </p>
+        </article>
       </section>
 
       {/* CTA */}
       <section className="mt-14 flex flex-col gap-4 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-lg font-semibold text-[var(--color-text-primary)]">יש לכם פרויקט Next.js?</p>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">שתפו אותי בפרטים ונראה יחד מה אפשר לעשות.</p>
+          <p className="text-lg font-semibold text-[var(--color-text-primary)]">Have a Next.js project?</p>
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Share the details and let’s see what we can do together.</p>
         </div>
         <Link
-          href="/#contact"
+          href="#contact"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
-          בואו נדבר <ArrowLeft size={14} />
+          Let’s Talk <ArrowLeft size={14} />
         </Link>
       </section>
     </main>

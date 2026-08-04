@@ -12,8 +12,14 @@ import {
   windowArc,
   scrollSpan,
   arcPath,
+  arcUp,
+  arcDown,
+  fanOpacity,
+  fanRise,
+  screenAt,
   type RingMetrics,
 } from '@/lib/ringGeometry';
+import { livePlanetPlane } from '@/lib/orbitFraming';
 import { useWorldExit } from '@/hooks/useWorldExit';
 import DepartureMeter from './DepartureMeter';
 
@@ -56,6 +62,7 @@ export default function ProjectsStage({
   const railRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const headerRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [portrait, setPortrait] = useState(false);
   // Escape / scroll-away / back — the shared world exit (R5.1, R5.10). Scrolling inside
   // the ring stays native content scroll; anywhere else builds the departure meter.
@@ -75,7 +82,11 @@ export default function ProjectsStage({
     const deck = deckRef.current;
     const rail = railRef.current;
     const svg = svgRef.current;
-    if (!list || !deck || !rail || !svg) return;
+    const panel = panelRef.current;
+    if (!list || !deck || !rail || !svg || !panel) return;
+    const panelTitle = panel.querySelector<HTMLElement>('[data-panel-title]')!;
+    const panelDesc = panel.querySelector<HTMLElement>('[data-panel-desc]')!;
+    const panelTech = panel.querySelector<HTMLElement>('[data-panel-tech]')!;
 
     const rtl = document.documentElement.dir === 'rtl';
     // `?ringprobe=1` publishes the frame the layer actually used, so the acceptance
@@ -83,23 +94,55 @@ export default function ProjectsStage({
     // re-deriving them. Off by default — nothing extra reaches a normal render.
     const probe = new URLSearchParams(window.location.search).has('ringprobe');
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // The owner wants the words only while the pointer is on a window. A phone has no
+    // pointer, so there the panel falls back to naming whichever window is at the centre
+    // of the fan - otherwise a touch device would show twelve pictures and no way to
+    // learn what any of them is.
+    //
+    // Which of the two applies is decided by a mouse ACTUALLY MOVING, not by a media
+    // query. `(hover: hover) and (pointer: fine)` is false in a headless browser, which
+    // has no input device at all, and it is famously wrong on hybrid laptops; the first
+    // version of this shipped the touch behaviour to every desktop that ran the check
+    // before a mouse was plugged in. Starting in the fallback and leaving it on the first
+    // real mouse movement is right in both directions: nobody is ever left with no text.
+    const unbind: Array<() => void> = [];
+    let mouseSeen = false;
+    const onMouse = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') {
+        mouseSeen = true;
+        window.removeEventListener('pointermove', onMouse);
+      }
+    };
+    window.addEventListener('pointermove', onMouse, { passive: true });
+    unbind.push(() => window.removeEventListener('pointermove', onMouse));
     const cards = Array.from(deck.querySelectorAll<HTMLElement>('[data-window]'));
     const n = cards.length;
 
     // One <path> for the window, one for the gold inner-arc accent, one gradient each.
     // Written by the layout pass, read by the focus handlers below.
     const pitchRef = { current: 1 };
+    const hovered = { current: -1 };
+    const axisRef = { current: 'y' as 'x' | 'y' };
+    const shownActive = { current: -2 };
     const centreOffsetRef = { current: 0 };
     const spanRef = { current: 0 };
 
     const defs = document.createElementNS(SVG_NS, 'defs');
     svg.appendChild(defs);
+    // Every path below is built in CANONICAL space around the origin; this group carries
+    // it to the screen. When the planet's ring plane is known that matrix is the plane's
+    // projection, so the windows become slices of the same plane the rings lie in - and
+    // the arcs, the corner joins and the rail stay circular maths in a file that never
+    // learns what an ellipse is.
+    const space = document.createElementNS(SVG_NS, 'g');
+    svg.appendChild(space);
     const bodies: SVGPathElement[] = [];
     const accents: SVGPathElement[] = [];
     const grads: SVGLinearGradientElement[] = [];
     const photos: Array<SVGImageElement | null> = [];
+    const hits: SVGGElement[] = [];
     const clips: Array<SVGPathElement | null> = [];
-    const unbind: Array<() => void> = [];
+    const marks: Array<SVGTextElement | null> = [];
     cards.forEach((card, i) => {
       const grad = document.createElementNS(SVG_NS, 'linearGradient');
       grad.setAttribute('id', `ring-accent-${i}`);
@@ -133,14 +176,46 @@ export default function ProjectsStage({
         photo.setAttribute('href', src);
         photo.setAttribute('preserveAspectRatio', 'xMidYMid slice');
         photo.setAttribute('clip-path', `url(#ring-clip-${i})`);
-        svg.appendChild(photo);
       }
       photos.push(photo);
       clips.push(clipPath);
 
+      // No screenshot to show: four of the twelve are tools and private work with no
+      // site to photograph. A drawn monogram beats an empty pane, and it needs no asset.
+      let mark: SVGTextElement | null = null;
+      if (!src && card.dataset.mark) {
+        mark = document.createElementNS(SVG_NS, 'text');
+        mark.setAttribute('class', 'ring-mark');
+        mark.setAttribute('text-anchor', 'middle');
+        mark.setAttribute('dominant-baseline', 'central');
+        mark.setAttribute('fill', 'rgba(255,201,120,0.42)');
+        mark.setAttribute('style', 'font-family: var(--font-display); font-weight: 300; letter-spacing: 0.08em');
+        mark.textContent = card.dataset.mark;
+      }
+      marks.push(mark);
+
+      // B8d - the SHAPE is the control. The accessible copy of this project is a real
+      // link in the DOM (off-screen, see ProjectsWorld); this group is its painted face,
+      // so it is aria-hidden and the pointer is what it answers to. Hit-testing then
+      // follows the sector exactly instead of a rectangle drawn around it.
+      const hitG = document.createElementNS(SVG_NS, 'g');
+      hitG.setAttribute('aria-hidden', 'true');
+      hitG.setAttribute('style', 'pointer-events: auto; cursor: pointer');
+      space.appendChild(hitG);
+      hits.push(hitG);
+      if (photo) hitG.appendChild(photo);
+
       const body = document.createElementNS(SVG_NS, 'path');
       body.setAttribute('class', 'ring-window');
-      svg.appendChild(body);
+      // The plane matrix scales the two axes differently, so a stroke would come out
+      // thicker one way than the other. This keeps the hairline a hairline.
+      body.setAttribute('vector-effect', 'non-scaling-stroke');
+      // B8d - the window IS the preview now, so the glass over it is a tint rather than a
+      // surface: at the panel weight (0.78) under a 0.32 photo the screenshot was a dark
+      // smudge. Set inline, not in the stylesheet, because `app/**` belongs to the other
+      // session this round.
+      if (src) body.style.fill = 'rgba(5, 7, 20, 0.30)';
+      hitG.appendChild(body);
       bodies.push(body);
 
       const accent = document.createElementNS(SVG_NS, 'path');
@@ -148,8 +223,10 @@ export default function ProjectsStage({
       accent.setAttribute('fill', 'none');
       accent.setAttribute('stroke', `url(#ring-accent-${i})`);
       accent.setAttribute('stroke-width', '1.5');
-      svg.appendChild(accent);
+      accent.setAttribute('vector-effect', 'non-scaling-stroke');
+      hitG.appendChild(accent);
       accents.push(accent);
+      if (mark) hitG.appendChild(mark);
 
       // Hover and focus light the window's own path — the shape is not an ancestor of the
       // content, so the usual CSS hover has nothing to hang off.
@@ -158,21 +235,36 @@ export default function ProjectsStage({
         accent.classList.toggle('is-hot', on);
         photo?.classList.toggle('is-hot', on);
       };
-      const onEnter = () => hot(true);
-      const onLeave = () => hot(false);
+      const onEnter = () => { hot(true); hovered.current = i; };
+      const onLeave = () => { hot(false); if (hovered.current === i) hovered.current = -1; };
       const onFocus = () => {
         hot(true);
+        hovered.current = i;
         // Keyboard focus must be able to reach a window that is currently off the fan.
         const target = clamp(i * pitchRef.current - centreOffsetRef.current, 0, spanRef.current);
-        list.scrollTo({ top: target, behavior: 'smooth' });
+        // Horizontal scroll runs NEGATIVE in an RTL container. Reading the current
+        // scrollLeft to work out which way is wrong at rest, where it is 0 in both - so
+        // ask the container which direction it is in.
+        const rtlBox = getComputedStyle(list).direction === 'rtl';
+        list.scrollTo(
+          axisRef.current === 'x'
+            ? { left: (rtlBox ? -1 : 1) * target, behavior: 'smooth' }
+            : { top: target, behavior: 'smooth' }
+        );
       };
-      card.addEventListener('pointerenter', onEnter);
-      card.addEventListener('pointerleave', onLeave);
+      const onOpen = () => {
+        const href = card.dataset.href;
+        if (href) window.open(href, '_blank', 'noopener,noreferrer');
+      };
+      hitG.addEventListener('pointerenter', onEnter);
+      hitG.addEventListener('pointerleave', onLeave);
+      hitG.addEventListener('click', onOpen);
       card.addEventListener('focusin', onFocus);
       card.addEventListener('focusout', onLeave);
       unbind.push(() => {
-        card.removeEventListener('pointerenter', onEnter);
-        card.removeEventListener('pointerleave', onLeave);
+        hitG.removeEventListener('pointerenter', onEnter);
+        hitG.removeEventListener('pointerleave', onLeave);
+        hitG.removeEventListener('click', onOpen);
         card.removeEventListener('focusin', onFocus);
         card.removeEventListener('focusout', onLeave);
       });
@@ -182,20 +274,23 @@ export default function ProjectsStage({
     // "there are more of these" is said in the same geometry as the thing it describes.
     const railArc = document.createElementNS(SVG_NS, 'path');
     railArc.setAttribute('class', 'ring-rail');
-    svg.appendChild(railArc);
+    railArc.setAttribute('vector-effect', 'non-scaling-stroke');
+    space.appendChild(railArc);
     const thumbArc = document.createElementNS(SVG_NS, 'path');
     thumbArc.setAttribute('class', 'ring-thumb');
-    svg.appendChild(thumbArc);
+    thumbArc.setAttribute('vector-effect', 'non-scaling-stroke');
+    space.appendChild(thumbArc);
 
     /** Bounding box of the whole fan, sampled off the sector boundary so it is right for
      *  every locale and both orientations without four hand-written cases. */
     const fanBox = (m: RingMetrics) => {
-      const reach = m.fan + m.dHalf;
+      const up = m.fanUp + m.dHalf;
+      const down = m.fanDown + m.dHalf;
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (let s = 0; s <= 24; s++) {
-        const th = m.th0 - reach + (2 * reach * s) / 24;
+        const th = m.th0 + m.sweep * (-up + ((up + down) * s) / 24);
         for (const r of [m.r0, m.r1]) {
-          const [x, y] = pointAt(m, r, th);
+          const [x, y] = screenAt(m, r, th);
           if (x < x0) x0 = x;
           if (y < y0) y0 = y;
           if (x > x1) x1 = x;
@@ -203,6 +298,65 @@ export default function ProjectsStage({
         }
       }
       return { x: x0 - 12, y: y0 - 12, w: x1 - x0 + 24, h: y1 - y0 + 24 };
+    };
+
+    // The ruling: the canonical paths do not change as the ring turns, so they must not be
+    // rebuilt as it turns. A window at angle th is the window at angle 0 rotated by th, so
+    // the sector path, its clip, the photo's box and the accent's gradient are all built
+    // ONCE at angle 0, and the only per-frame writes are a rotation and an opacity. They
+    // are rebuilt only when the ring's SHAPE changes - r0, r1 or the half-angle - which
+    // happens on a resize, not on a scroll.
+    let shapeSig = '';
+    const rebuildShape = (m: RingMetrics) => {
+      const next = `${m.r0.toFixed(1)}|${m.r1.toFixed(1)}|${m.dHalf.toFixed(4)}|${m.corner}`;
+      if (next === shapeSig) return;
+      shapeSig = next;
+      const d = sectorPath(m, m.r0, m.r1, -m.dHalf, m.dHalf);
+      const acc = innerArcPath(m, m.r0, -m.dHalf, m.dHalf);
+      // The photo's box: the sector's bounding box at angle 0, in canonical space.
+      let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+      for (let k = 0; k <= 8; k++) {
+        const a2 = -m.dHalf + (2 * m.dHalf * k) / 8;
+        for (const r of [m.r0, m.r1]) {
+          const [px, py] = pointAt(m, r, a2);
+          if (px < bx0) bx0 = px;
+          if (py < by0) by0 = py;
+          if (px > bx1) bx1 = px;
+          if (py > by1) by1 = py;
+        }
+      }
+      const [gx0, gy0] = pointAt(m, m.r0, -m.dHalf);
+      const [gx1, gy1] = pointAt(m, m.r0, m.dHalf);
+      for (let i = 0; i < n; i++) {
+        bodies[i].setAttribute('d', d);
+        accents[i].setAttribute('d', acc);
+        clips[i]?.setAttribute('d', d);
+        const photo = photos[i];
+        if (photo) {
+          photo.setAttribute('x', bx0.toFixed(1));
+          photo.setAttribute('y', by0.toFixed(1));
+          photo.setAttribute('width', (bx1 - bx0).toFixed(1));
+          photo.setAttribute('height', (by1 - by0).toFixed(1));
+        }
+        const mark = marks[i];
+        if (mark) {
+          mark.setAttribute('x', m.rContent.toFixed(1));
+          mark.setAttribute('y', '0');
+          mark.setAttribute('font-size', Math.max(22, Math.min(64, m.contentHalf * 1.5)).toFixed(0));
+          // The ring-plane matrix can have a NEGATIVE determinant - here it does, because
+          // the plane is seen from below and its `v` points up the screen. Shapes and
+          // photographs survive being mirrored without anyone noticing; letters do not,
+          // and the monograms rendered back to front. Flipping about the text's own
+          // baseline undoes it without moving it.
+          const det = m.matrix[0] * m.matrix[3] - m.matrix[1] * m.matrix[2];
+          mark.setAttribute('transform', det < 0 ? `translate(0,0) scale(1,-1)` : '');
+        }
+        const g = grads[i];
+        g.setAttribute('x1', gx0.toFixed(1));
+        g.setAttribute('y1', gy0.toFixed(1));
+        g.setAttribute('x2', gx1.toFixed(1));
+        g.setAttribute('y2', gy1.toFixed(1));
+      }
     };
 
     let raf = 0;
@@ -224,7 +378,11 @@ export default function ProjectsStage({
       const dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0;
       lastT = now;
       const span0 = scrollSpan(n, m);
-      const target = clamp(list.scrollTop, 0, span0);
+      // The fan runs SIDEWAYS in portrait - it spreads left and right below the planet -
+      // so a phone should be swiped sideways, not up and down. `scrollLeft` is negative
+      // in an RTL container in every current engine, hence the abs.
+      const raw = m.portrait ? Math.abs(list.scrollLeft) : list.scrollTop;
+      const target = clamp(raw, 0, span0);
       if (force || reduce) shown = target;
       else {
         shown += (target - shown) * (1 - Math.exp(-dt / SCROLL_TAU));
@@ -238,10 +396,9 @@ export default function ProjectsStage({
       sig = next;
       const t0 = probe ? performance.now() : 0;
       pitchRef.current = m.pitch;
-      centreOffsetRef.current = m.fan * m.rMid - m.pitch / 2;
+      axisRef.current = m.portrait ? 'x' : 'y';
+      centreOffsetRef.current = arcUp(m) - Math.min(m.pitch / 2, arcUp(m));
 
-      svg.setAttribute('width', String(vw));
-      svg.setAttribute('height', String(vh));
 
       const box = fanBox(m);
       const L = clamp(box.x, 0, vw);
@@ -252,9 +409,38 @@ export default function ProjectsStage({
       list.style.width = `${Math.min(box.w, vw - L).toFixed(1)}px`;
       list.style.height = `${Math.min(box.h, vh - T).toFixed(1)}px`;
 
+      // The SVG box is the FAN's box, not the viewport's. A full-viewport vector layer
+      // sitting over a live WebGL canvas is rasterized and composited at that size every
+      // frame whatever is drawn in it; the ring only ever occupies a fraction of it.
+      // The padding covers the rail outside r1 and the windows' shadow.
+      const pad = 56;
+      const sx = clamp(box.x - pad, 0, vw);
+      const sy = clamp(box.y - pad, 0, vh);
+      const sw = Math.min(box.w + pad * 2, vw - sx);
+      const sh = Math.min(box.h + pad * 2, vh - sy);
+      svg.style.left = `${sx.toFixed(1)}px`;
+      svg.style.top = `${sy.toFixed(1)}px`;
+      svg.setAttribute('width', sw.toFixed(1));
+      svg.setAttribute('height', sh.toFixed(1));
+      // ...which means the ring's own coordinates are now relative to that box.
+      const mx = [...m.matrix] as typeof m.matrix;
+      mx[4] -= sx;
+      mx[5] -= sy;
+      space.setAttribute('transform', `matrix(${mx.map((v) => v.toFixed(4)).join(' ')})`);
+
       const span = span0;
       spanRef.current = span;
-      rail.style.height = `${(list.clientHeight + span).toFixed(1)}px`;
+      // The rail is the thing that makes the container scrollable at all, so it has to be
+      // long on the axis the fan uses and neutral on the other.
+      if (m.portrait) {
+        rail.style.width = `${(list.clientWidth + span).toFixed(1)}px`;
+        rail.style.height = '1px';
+      } else {
+        rail.style.height = `${(list.clientHeight + span).toFixed(1)}px`;
+        rail.style.width = '1px';
+      }
+      list.style.overflowX = m.portrait ? 'auto' : 'hidden';
+      list.style.overflowY = m.portrait ? 'hidden' : 'auto';
       const scroll = shown;
 
       const head = headerRef.current;
@@ -267,74 +453,42 @@ export default function ProjectsStage({
         head.style.right = m.th0 === 0 ? '0' : 'auto';
       }
 
+      // Which window is nearest the fan's centre, computed before anything is drawn: it
+      // is both what the panel describes when nothing is hovered and the guarantee that
+      // SOMETHING is on screen when the clamp has left almost no fan at all.
+      let centred = -1;
+      let bestA = Infinity;
+      for (let i = 0; i < n; i++) {
+        const a = windowArc(i, n, scroll, m);
+        if (Math.abs(a) < Math.abs(bestA)) { bestA = a; centred = i; }
+      }
+      rebuildShape(m);
       for (let i = 0; i < n; i++) {
         const a = windowArc(i, n, scroll, m);
         const th = m.th0 + (m.sweep * a) / m.rMid;
-        const off = Math.abs(th - m.th0);
-        // Windows dissolve as they leave the readable part of the fan instead of popping.
-        // The band is deliberately short and the falloff steep: a half-faded window is a
-        // ghost with legible text in it, and the ring looked like it had a rendering bug
-        // when one sat there at 30% for the whole length of the fan.
-        const over = off + m.dHalf - m.fan;
-        const opacity = clamp(1 - over / (m.dHalf * 0.75), 0, 1) ** 2;
-        const card = cards[i];
-        const body = bodies[i];
-        const accent = accents[i];
-
-        if (opacity <= 0.012) {
-          card.style.visibility = 'hidden';
-          body.setAttribute('d', '');
-          accent.setAttribute('d', '');
-          photos[i]?.setAttribute('width', '0');
+        const opacity = i === centred ? Math.max(fanOpacity(a, m), 1) : fanOpacity(a, m);
+        const g = hits[i];
+        if (opacity <= 0.004) {
+          if (g.style.display !== 'none') g.style.display = 'none';
           continue;
         }
-        card.style.visibility = '';
-        body.setAttribute('d', sectorPath(m, m.r0, m.r1, th - m.dHalf, th + m.dHalf));
-        body.setAttribute('opacity', opacity.toFixed(3));
-        accent.setAttribute('d', innerArcPath(m, m.r0, th - m.dHalf, th + m.dHalf));
-        accent.setAttribute('opacity', opacity.toFixed(3));
-
-        // The photo is a plain rect covering the sector's bounding box, clipped to the
-        // sector. `slice` crops it rather than letterboxing, so the aspect ratio of the
-        // source never shows up as bars inside the shape.
-        const photo = photos[i];
-        const clip = clips[i];
-        if (photo && clip) {
-          clip.setAttribute('d', body.getAttribute('d') as string);
-          let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
-          for (let k = 0; k <= 8; k++) {
-            const a2 = th - m.dHalf + (2 * m.dHalf * k) / 8;
-            for (const r of [m.r0, m.r1]) {
-              const [px, py] = pointAt(m, r, a2);
-              if (px < bx0) bx0 = px;
-              if (py < by0) by0 = py;
-              if (px > bx1) bx1 = px;
-              if (py > by1) by1 = py;
-            }
-          }
-          photo.setAttribute('x', bx0.toFixed(1));
-          photo.setAttribute('y', by0.toFixed(1));
-          photo.setAttribute('width', (bx1 - bx0).toFixed(1));
-          photo.setAttribute('height', (by1 - by0).toFixed(1));
-          photo.setAttribute('opacity', opacity.toFixed(3));
-        }
-
-        const [gx0, gy0] = pointAt(m, m.r0, th - m.dHalf);
-        const [gx1, gy1] = pointAt(m, m.r0, th + m.dHalf);
-        const g = grads[i];
-        g.setAttribute('x1', gx0.toFixed(1));
-        g.setAttribute('y1', gy0.toFixed(1));
-        g.setAttribute('x2', gx1.toFixed(1));
-        g.setAttribute('y2', gy1.toFixed(1));
-
-        const [cxp, cyp] = pointAt(m, m.rContent, th);
-        const rot = ((th - m.th0) * 180) / Math.PI;
-        card.style.width = `${(m.portrait ? m.contentHalf * 2 : m.contentDepth).toFixed(1)}px`;
-        card.style.height = `${(m.portrait ? m.contentDepth : m.contentHalf * 2).toFixed(1)}px`;
-        card.style.opacity = opacity.toFixed(3);
-        card.style.transform =
-          `translate(${(cxp - L).toFixed(1)}px, ${(cyp - T).toFixed(1)}px)` +
-          ` rotate(${rot.toFixed(2)}deg) translate(-50%, -50%)`;
+        if (g.style.display) g.style.display = '';
+        // The only per-frame writes on a window: where it is on the ring, and how present
+        // it is. Everything else was built at angle 0 and is carried by these two.
+        // A window rises out of the ring rather than switching on where it stands: the
+        // scale is about the ring's centre, so it travels along its own radius.
+        const rise = i === centred ? 1 : fanRise(a, m);
+        const k = 0.93 + 0.07 * rise;
+        g.setAttribute(
+          'transform',
+          `rotate(${((th * 180) / Math.PI).toFixed(3)}) scale(${k.toFixed(4)})`
+        );
+        g.style.opacity = opacity.toFixed(3);
+        // The window IS the preview, so the preview has to read as one. This line was
+        // lost when the per-frame block was replaced by the cached one, and the stylesheet
+        // rule underneath it - a 0.32 base from when the image was a texture behind text -
+        // took over: the previews went to a ghost of themselves. Inline, so it wins.
+        photos[i]?.style.setProperty('opacity', (0.94 * Math.min(1, opacity + 0.15)).toFixed(3));
       }
 
       // The rail. It only exists when there is something to scroll, and the thumb's LENGTH
@@ -342,11 +496,11 @@ export default function ProjectsStage({
       // gives, said as an arc.
       const rTrack = m.r1 + 16;
       if (span > 1) {
-        const visible = 2 * m.fan * m.rMid;
+        const visible = arcUp(m) + arcDown(m);
         const frac = clamp(visible / (visible + span), 0.08, 1);
         const at = span > 0 ? clamp(shown / span, 0, 1) : 0;
-        const a0 = m.th0 - m.sweep * m.fan;
-        const a1 = m.th0 + m.sweep * m.fan;
+        const a0 = m.th0 - m.sweep * m.fanUp;
+        const a1 = m.th0 + m.sweep * m.fanDown;
         const t0a = a0 + (a1 - a0) * (at * (1 - frac));
         const t1a = a0 + (a1 - a0) * (at * (1 - frac) + frac);
         railArc.setAttribute('d', arcPath(m, rTrack, Math.min(a0, a1), Math.max(a0, a1)));
@@ -356,13 +510,44 @@ export default function ProjectsStage({
         thumbArc.setAttribute('d', '');
       }
 
+      // B8d - the words live on the planet. Which project they describe is the hovered or
+      // focused one when there is a pointer, and otherwise the one at the centre of the
+      // fan: a phone has no hover, and twelve pictures with no way to learn what any of
+      // them is would be the whole design's failure mode.
+      const active = hovered.current >= 0 ? hovered.current : mouseSeen ? -1 : centred;
+      if (active !== shownActive.current) {
+        shownActive.current = active;
+        const src = active >= 0 ? cards[active] : null;
+        panelTitle.textContent = src?.dataset.title ?? '';
+        panelDesc.textContent = src?.dataset.desc ?? '';
+        panelTech.textContent = src?.dataset.tech ?? '';
+        panel.style.opacity = src ? '1' : '0';
+      }
+      // Over the disc, on the side of it the windows are not on, and never under the
+      // navbar however the planet drifts.
+      // Sized to the frame it is in, not to a desktop. On a 390px phone the desktop
+      // measurements put a 360px panel at 1.6rem over the planet and it swallowed half
+      // the screen; here it takes the width it can have and sits under the planet's disc.
+      const pw = m.portrait
+        ? Math.min(vw - 32, 330)
+        : Math.min(360, Math.max(220, m.R * 1.15));
+      const px = m.portrait ? (vw - pw) / 2 : m.cx - m.sweep * (m.R * 0.3) - pw / 2;
+      const py = m.portrait ? m.cy + m.R * 0.55 : m.cy - 60;
+      panel.style.width = `${pw.toFixed(0)}px`;
+      panel.style.left = `${clamp(px, 12, Math.max(12, vw - pw - 12)).toFixed(1)}px`;
+      panel.style.top = `${clamp(py, 88, vh - 180).toFixed(1)}px`;
+      panel.style.setProperty('--panel-title', m.portrait ? '1.1rem' : '1.6rem');
+      panel.style.setProperty('--panel-body', m.portrait ? '0.8125rem' : '0.9375rem');
+
       list.dataset.ready = '1';
       if (probe) {
         svg.dataset.ring = JSON.stringify({
           cx: m.cx, cy: m.cy, R: m.R, r0: m.r0, r1: m.r1,
-          rMid: m.rMid, dHalf: m.dHalf, fan: m.fan, th0: m.th0, sweep: m.sweep,
+          rMid: m.rMid, dHalf: m.dHalf, fanUp: m.fanUp, fanDown: m.fanDown,
+          th0: m.th0, sweep: m.sweep,
           contentDepth: m.contentDepth, contentHalf: m.contentHalf, scroll, span,
           costMs: +(performance.now() - t0).toFixed(3),
+          plane: { ...livePlanetPlane },
         });
       }
     };
@@ -379,12 +564,11 @@ export default function ProjectsStage({
     return () => {
       cancelAnimationFrame(raf);
       unbind.forEach((fn) => fn());
+      space.remove();
       defs.remove();
       railArc.remove();
       thumbArc.remove();
-      bodies.forEach((p) => p.remove());
-      accents.forEach((p) => p.remove());
-      photos.forEach((p) => p?.remove());
+
       for (const card of cards) card.style.cssText = '';
       delete list.dataset.ready;
     };
@@ -421,7 +605,7 @@ export default function ProjectsStage({
       </header>
 
       {/* The shapes. Screen-space px (no viewBox), under the content, never interactive. */}
-      <svg ref={svgRef} className="ring-layer pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
+      <svg ref={svgRef} className="ring-layer pointer-events-none absolute" aria-hidden />
 
       {/* The list: a real scroll container over the fan. The rail gives it something to
           scroll; the deck is sticky and zero-height so the windows stay put in screen
@@ -437,6 +621,44 @@ export default function ProjectsStage({
           {children}
         </div>
         <div ref={railRef} aria-hidden />
+      </div>
+
+      {/* The project's words, on the planet. Styles are inline rather than in a class
+          because globals.css belongs to the other session's lane this round. */}
+      <div
+        ref={panelRef}
+        aria-hidden
+        className="pointer-events-none absolute"
+        style={{
+          opacity: 0,
+          transition: 'opacity 0.25s ease',
+          // A soft well of shadow rather than a panel: the words are meant to be ON the
+          // planet, and the planet's lit half is bright enough that a text-shadow alone
+          // left them barely legible in LTR, where the pose puts the copy over the disc's
+          // brightest part. No edge, no border - it reads as the world darkening under
+          // the text.
+          padding: '22px 26px',
+          margin: '-22px -26px',
+          background:
+            'radial-gradient(ellipse at 50% 45%, rgba(5,7,20,0.82) 0%, rgba(5,7,20,0.62) 48%, rgba(5,7,20,0.24) 72%, rgba(5,7,20,0) 100%)',
+          textShadow: '0 2px 18px rgba(5,7,20,0.95), 0 0 40px rgba(5,7,20,0.8)',
+        }}
+      >
+        <div
+          data-panel-title
+          className="text-[var(--color-star-white)]"
+          style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-display)', fontSize: 'var(--panel-title, 1.6rem)', lineHeight: 1.25 }}
+        />
+        <div
+          data-panel-desc
+          className="mt-2 text-[var(--color-star-white)]/85"
+          style={{ fontSize: 'var(--panel-body, 0.9375rem)', lineHeight: 1.65 }}
+        />
+        <div
+          data-panel-tech
+          className="mt-2.5 text-[var(--color-core-gold)]/85"
+          style={{ fontSize: '0.75rem', letterSpacing: '0.04em' }}
+        />
       </div>
 
       <DepartureMeter value={meter} label={departureLabel} />

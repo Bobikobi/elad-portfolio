@@ -144,7 +144,7 @@ for (const [k, v] of Object.entries(report)) {
 for (const [hi, lo] of [['desktop-high', 'desktop-low'], ['mobile-high', 'mobile-low']]) {
   const a = report[hi] && report[hi].ring, b = report[lo] && report[lo].ring;
   if (!a || !b) continue;
-  const keys = ['r0', 'r1', 'rMid', 'dHalf', 'fan', 'th0', 'contentDepth', 'contentHalf'];
+  const keys = ['r0', 'r1', 'rMid', 'dHalf', 'fanUp', 'fanDown', 'th0', 'contentDepth', 'contentHalf'];
   const worst = Math.max(...keys.map((k) => Math.abs(a[k] - b[k])));
   console.log(`tier-law ${hi} vs ${lo}: worst geometry delta = ${worst.toFixed(3)} (R differs by ${Math.abs(a.R - b.R).toFixed(2)}px, the live limb breathing)`);
 }

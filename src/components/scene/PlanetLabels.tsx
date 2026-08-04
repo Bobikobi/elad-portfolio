@@ -1,12 +1,12 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, PLANET_PAGES, beltTourAnchor } from '@/lib/planetPositions';
 import { PLANET_SECTION, SECTIONS, sectionPath } from '@/lib/sections';
-import { BODY_FACTS, CV_HREF, DECORATIVE_BODIES } from '@/lib/bodyFacts';
+import { BODY_FACTS, DECORATIVE_BODIES } from '@/lib/bodyFacts';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useI18n } from '@/lib/i18n';
 
@@ -393,16 +393,6 @@ export default function PlanetLabelsOverlay() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const hovered = useScene((s) => s.hoveredBody);
-  // A CV link that is not actually published would be a broken download, so probe once
-  // and degrade Mercury to the same "coming soon" affordance Venus uses.
-  const [cvOk, setCvOk] = useState<boolean | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch(CV_HREF, { method: 'HEAD' })
-      .then((r) => { if (!cancelled) setCvOk(r.ok); })
-      .catch(() => { if (!cancelled) setCvOk(false); });
-    return () => { cancelled = true; };
-  }, []);
 
   const open = (key: string) => {
     if (useScene.getState().dragMoved) return; // a rotate-drag / swipe ended here
@@ -411,9 +401,7 @@ export default function PlanetLabelsOverlay() {
   };
 
   const fact = hovered ? BODY_FACTS[hovered] : null;
-  const action = fact?.action ?? null;
-  const cvMissing = action?.kind === 'cv' && cvOk === false;
-  const showSoon = action?.kind === 'soon' || cvMissing;
+  const showSoon = fact?.action?.kind === 'soon';
 
   return (
     <div className="pointer-events-none fixed inset-0 z-20 overflow-hidden">
@@ -470,18 +458,9 @@ export default function PlanetLabelsOverlay() {
             </p>
             <p className="mt-2 text-[12.5px] leading-relaxed text-[var(--color-star-white)]/80">{fact.fact[locale]}</p>
             <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--color-star-white)]/55">{fact.tie[locale]}</p>
-            {action?.kind === 'cv' && !cvMissing && (
-              <a
-                href={action.href}
-                download
-                className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--color-core-gold)]/50 px-3 py-1 text-[12px] text-[var(--color-core-gold)] transition-colors hover:border-[var(--color-core-gold)] hover:bg-[var(--color-core-gold)]/10"
-              >
-                {fact.cta?.[locale]}
-              </a>
-            )}
             {showSoon && (
               <span className="mt-3 inline-flex items-center rounded-full border border-white/15 px-3 py-1 text-[12px] text-[var(--color-star-white)]/55">
-                {(cvMissing ? BODY_FACTS.venus.cta : fact.cta)?.[locale]}
+                {fact.cta?.[locale]}
               </span>
             )}
           </>

@@ -12,9 +12,10 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://www.eladsaadon.dev/ru/services/growth-marketing',
     languages: {
-      'he-IL': 'https://www.eladsaadon.dev/services/growth-marketing',
-      'en-US': 'https://www.eladsaadon.dev/en/services/growth-marketing',
+      'he-IL': 'https://www.eladsaadon.dev/he/services/growth-marketing',
+      'en-US': 'https://www.eladsaadon.dev/services/growth-marketing',
       'ru-RU': 'https://www.eladsaadon.dev/ru/services/growth-marketing',
+      'x-default': 'https://www.eladsaadon.dev/services/growth-marketing',
     },
   },
 };
@@ -144,7 +145,7 @@ export default function GrowthMarketingPage() {
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Расскажите о ваших каналах, и мы спланируем вместе.</p>
         </div>
         <Link
-          href="/#contact"
+          href="/ru#contact"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
           Давайте поговорим <ArrowLeft size={14} />

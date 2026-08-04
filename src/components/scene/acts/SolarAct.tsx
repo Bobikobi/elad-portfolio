@@ -5,7 +5,7 @@ import { useCursor } from '@react-three/drei';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
-import { planetPositions, planetRadii, planetRingNormal, PLANET_PAGES } from '@/lib/planetPositions';
+import { planetPositions, planetRadii, planetRingNormal, PLANET_PAGES, RING_INNER_R, RING_OUTER_R } from '@/lib/planetPositions';
 import { PLANET_SECTION, sectionPath } from '@/lib/sections';
 import { BODY_FACTS } from '@/lib/bodyFacts';
 import { useI18n } from '@/lib/i18n';
@@ -656,8 +656,8 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   // Rebuild the ring UVs so U runs radially (inner→outer edge) to match the strip.
   const ringGeo = useMemo(() => {
     if (!spec.rings) return null;
-    const inner = spec.size * 1.35;
-    const outer = spec.size * 2.5;
+    const inner = spec.size * RING_INNER_R;
+    const outer = spec.size * RING_OUTER_R;
     const g = new THREE.RingGeometry(inner, outer, 128, 1);
     const pos = g.attributes.position;
     const uv = g.attributes.uv;
