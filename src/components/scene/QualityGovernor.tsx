@@ -22,9 +22,21 @@ import { isIdle } from './PerfPacer';
  *     Everything else locks to an even-paced 60: on a 75/90Hz panel an uncapped scene
  *     produces a repeating long/short frame pattern that reads as micro-stutter even at
  *     "good" FPS. Pacing is COST ONLY; it never changes what is in the frame.
- *  4. HYSTERESIS. A downgrade needs a sustained shortfall, an upgrade needs a longer
- *     sustained surplus, and after {@link MAX_DOWNGRADES} downgrades the tier is latched
- *     low so a borderline machine cannot oscillate.
+ *  4. HYSTERESIS. A downgrade needs a sustained shortfall; a promotion needs sustained
+ *     REAL headroom (see {@link UP_RATIO}); and one demotion latches the tier low for the
+ *     rest of the session, so a borderline machine cannot oscillate.
+ *
+ * PERF-2 — THE DEFAULT IS LOW, AND PROMOTION IS THE MECHANISM.
+ *
+ * This used to start every visitor on the high tier and demote on evidence, which meant an
+ * integrated-GPU desktop was handed a profile built for a gaming GPU and stuttered its way
+ * through the first seconds — while a phone, correctly classified low, ran fine. The defect
+ * was never the cost of the high tier; it was who got assigned to it.
+ *
+ * So the burden of proof is inverted. Everyone starts cheap. A machine is promoted only
+ * after it has held sustained headroom AT the cheap cost, which is the only evidence that
+ * means anything about what it can afford. A promotion nobody notices is a much better
+ * failure mode than a stutter everybody does.
  *
  * TIER COMPOSITION LAW: the governor only ever writes `quality` (particle counts, God
  * Rays samples, hi-res texture tier) and the frame pacing. Camera framing, poses, easing
@@ -44,10 +56,20 @@ const DECIDE_BY_S = 4;
 // meets, which is exactly how a governor talks itself out of ever demoting.
 const ASSUMED_HZ = 60;
 const DOWN_RATIO = 0.62;       // below this share of target fps = struggling
-const UP_RATIO = 0.86;         // above this share = comfortable
+// PERF-2 raised this from 0.86. Promotion is now THE mechanism rather than a rarely-taken
+// path, so the bar is what a machine with genuine headroom clears and a borderline one does
+// not: at a 60fps target, sustained 55fps+. The machines this defect is about sit at 40-55
+// and stay exactly where they are.
+const UP_RATIO = 0.92;         // above this share = real headroom, not "coping"
 const DOWN_HOLD_S = 1.2;       // sustained shortfall before a downgrade
-const UP_HOLD_S = 6;           // (longer) sustained surplus before an upgrade
-const MAX_DOWNGRADES = 2;      // then latch low
+// Shortened from 6s. The promotion changes particle counts, so it is visible; landing it
+// early, while a visitor is still orienting in the scene, is much less noticeable than
+// six seconds in. Still long enough that a burst of easy frames cannot trigger it.
+const UP_HOLD_S = 3;
+// A promotion this late is a surprise, not an improvement: a machine that has not proven
+// headroom in the first half-minute is not about to, and changing the sky under someone
+// who has settled in is worse than leaving it alone.
+const PROMOTE_WINDOW_S = 25;
 const SMOOTH_HZ_MIN = 100;     // display rates at or above this get the `smooth` profile
 const EVEN_TARGET = 60;        // the even-paced lock
 
@@ -100,7 +122,7 @@ export default function QualityGovernor() {
   const fps = useRef(0);
   const belowFor = useRef(0);
   const aboveFor = useRef(0);
-  const downgrades = useRef(0);
+  const latchedLow = useRef(false);
   const pinned = useRef<Quality | null>(null);
 
   useEffect(() => {
@@ -157,11 +179,21 @@ export default function QualityGovernor() {
     else if (fps.current > target * UP_RATIO) { aboveFor.current += dt; belowFor.current = 0; }
     else { belowFor.current = 0; aboveFor.current = 0; }
 
-    if (q === 'high' && belowFor.current > DOWN_HOLD_S && downgrades.current < MAX_DOWNGRADES) {
-      downgrades.current += 1;
+    if (q === 'high' && belowFor.current > DOWN_HOLD_S) {
+      // One demotion is final. The old code allowed two against a BINARY tier, so the
+      // second spent budget and changed nothing — a counter guarding a door that was
+      // already shut. What actually matters is that a machine which has proven it cannot
+      // hold the high tier is never offered it again, or the two rules take turns and the
+      // visitor watches the sky flap.
+      latchedLow.current = true;
       belowFor.current = 0;
       setQuality('low');
-    } else if (q === 'low' && aboveFor.current > UP_HOLD_S && downgrades.current < MAX_DOWNGRADES) {
+    } else if (
+      q === 'low' &&
+      !latchedLow.current &&
+      aboveFor.current > UP_HOLD_S &&
+      now - started.current < PROMOTE_WINDOW_S
+    ) {
       aboveFor.current = 0;
       setQuality('high');
     }

@@ -201,8 +201,10 @@ export default function Effects() {
           // the fragments in the pass that samples 26-60 times per pixel.
           resolutionScale={0.5}
           // Presence is composition and stays in every tier (owner ruling); only the
-          // sample count is cost. 26 -> 16 on the low tier.
-          samples={high ? 60 : 16}
+          // sample count is cost. Low 26 -> 16, and PERF-2 brings high 60 -> 32: the high
+          // tier had grown while nobody was checking what it cost the borderline machines
+          // that were being assigned to it.
+          samples={high ? 32 : 16}
           density={0.86}
           decay={0.93}
           weight={0}
@@ -239,7 +241,14 @@ export default function Effects() {
         // NOTE: `levels` is a MOUNT-TIME option in postprocessing, not a live setter, so
         // it belongs in the key below - a tier change has to rebuild this effect for the
         // number to take. That is why `high` is part of the key.
-        levels={high ? 9 : 6}
+        //
+        // PERF-2: high goes 9 -> 7. The widest two levels are a 1-2px buffer stretched
+        // across the frame — the faintest, broadest part of the halo — and on a machine
+        // with genuine headroom their absence is imperceptible, while on the borderline
+        // machines that were wrongly living in the high tier it is four fewer renders a
+        // frame. The high tier had drifted UP during the pass round (21.0 -> 22.7 on
+        // home); this is the correction.
+        levels={high ? 7 : 6}
         intensity={solar ? (focused ? 0.34 : 0.6) : 0.5}
         luminanceThreshold={solar ? (focused ? 0.86 : 0.72) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
