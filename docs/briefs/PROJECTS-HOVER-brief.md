@@ -128,3 +128,50 @@ move with the pointer. Three readings, and I am not guessing between them:
 I recommend **(b)**. It satisfies "following the hovered window" without discarding the
 corrections that put the panel where it is. **Not implementing any of them until the owner
 rules** - the touch gap below is independent and does not wait on this.
+
+---
+
+## ADDENDUM, added after implementation began - a live defect the audit above missed
+
+Everything above was written from the source. Building the harness turned up something the
+reading did not: **the windows do not receive pointer input at all.**
+
+Measured at 1440x900 on **production** (`www.eladsaadon.dev/projects?ringprobe=1`) and on a
+local build of the same commit, hovering the centre of a drawn window and then clicking it:
+
+| | measured |
+|---|---|
+| element under the window's centre | `div.ring-scroll` - the scroll container, every sample |
+| panel text after hovering a window | `""` (the panel is hidden - `mouseSeen` is true and nothing is hovered) |
+| `window.open` calls after clicking a window | **0** |
+| pointer events reaching a hit group | **0** of 4 (`pointerover`, `pointerdown`, `click`, `pointerup` all landed on the container) |
+
+The scroll container is sized to the fan's bounding box and comes after the `<svg>` in the
+DOM, so it covers every window and takes the events. B8b and B8c verified "the whole window
+is clickable" while the clickable thing was still the `.ring-card` anchor positioned over
+the sector; B8d moved those anchors off-screen and made the SVG group the hit target, and
+nothing re-checked that events still arrived. It has been live since PR #24 merged.
+
+So on the live site today: a desktop visitor sees twelve pictures, **no description at all**,
+and clicking one does nothing. That is a larger defect than the missing tap gate, and it
+sits in this lane's file.
+
+**Fix, in `ProjectsStage.tsx` only:** the container keeps receiving pointer events - that is
+how the ring scrolls, and taking that away to un-cover the shapes would break the scroll -
+so it hit-tests the shapes itself with `document.elementsFromPoint`, which returns the whole
+stack rather than the top element. The sector remains the exact hit area it was drawn as.
+A press that moves more than 10px before release is a scroll, not a choice, and is ignored.
+
+**This also invalidates the "current state" table above** on two rows: "description appears
+on hover" and "with no pointer, the centred window's text shows" were read from the source
+and are true of the code, but were **not** true of the running page for a visitor with a
+mouse. The table stands as a reading of the source; the numbers here are what the browser
+did.
+
+Added to the acceptance:
+
+8. Hovering a window at 1440x900 puts **that project's** title in the panel. This is the
+   check that would have caught it.
+9. `elementsFromPoint` at a window's centre contains an element whose parent is that
+   window's `<g>`. Asserting the panel alone would pass on a page where the hit-test is
+   right and the panel is broken, and vice versa.
