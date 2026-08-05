@@ -52,7 +52,7 @@ const R_MAX = JUPITER_REACH - 0.2; // 5.46
 // (2) BRIGHTNESS. See ROCK_COLORS.
 const R0 = 0.0016; // smallest grain
 const R_SPAN = 0.03; // largest chunk = R0 + R_SPAN
-const R_POW = 18; // power law — overwhelmingly dust
+const R_POW = 18; // power law - overwhelmingly dust
 /** At or above this radius a body is worth a lit, shaded mesh; below it, it is dust. */
 const MESH_MIN = 0.007;
 

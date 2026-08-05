@@ -25,8 +25,8 @@ export const BODY_FACTS: Record<string, BodyFact> = {
   mercury: {
     name: { he: 'כוכב חמה', en: 'Mercury', ru: 'Меркурий' },
     fact: {
-      he: 'הקטן במערכת השמש — שנה שלמה שם אורכת 88 ימי-ארץ בלבד.',
-      en: 'The smallest planet in the system — a whole year here lasts just 88 Earth days.',
+      he: 'הקטן במערכת השמש - שנה שלמה שם אורכת 88 ימי-ארץ בלבד.',
+      en: 'The smallest planet in the system - a whole year here lasts just 88 Earth days.',
       ru: 'Самая маленькая планета системы — год здесь длится всего 88 земных суток.',
     },
     tie: {
@@ -39,8 +39,8 @@ export const BODY_FACTS: Record<string, BodyFact> = {
   venus: {
     name: { he: 'נוגה', en: 'Venus', ru: 'Венера' },
     fact: {
-      he: 'מסתובבת לאחור — על נוגה השמש זורחת במערב ושוקעת במזרח.',
-      en: 'It spins backwards — on Venus the sun rises in the west and sets in the east.',
+      he: 'מסתובבת לאחור - על נוגה השמש זורחת במערב ושוקעת במזרח.',
+      en: 'It spins backwards - on Venus the sun rises in the west and sets in the east.',
       ru: 'Вращается в обратную сторону — на Венере солнце восходит на западе.',
     },
     tie: {
@@ -54,8 +54,8 @@ export const BODY_FACTS: Record<string, BodyFact> = {
   uranus: {
     name: { he: 'אורנוס', en: 'Uranus', ru: 'Уран' },
     fact: {
-      he: 'שוכב על הצד — הקטבים שלו, ולא קו המשווה, הם שפונים אל השמש.',
-      en: 'It lies on its side — its poles, not its equator, are what face the sun.',
+      he: 'שוכב על הצד - הקטבים שלו, ולא קו המשווה, הם שפונים אל השמש.',
+      en: 'It lies on its side - its poles, not its equator, are what face the sun.',
       ru: 'Лежит на боку — к Солнцу обращены его полюса, а не экватор.',
     },
     tie: {
@@ -68,8 +68,8 @@ export const BODY_FACTS: Record<string, BodyFact> = {
   neptune: {
     name: { he: 'נפטון', en: 'Neptune', ru: 'Нептун' },
     fact: {
-      he: 'הרוחות המהירות במערכת השמש נושבות כאן — עד 2,000 קמ״ש.',
-      en: 'The fastest winds in the solar system blow here — up to 2,000 km/h.',
+      he: 'הרוחות המהירות במערכת השמש נושבות כאן - עד 2,000 קמ״ש.',
+      en: 'The fastest winds in the solar system blow here - up to 2,000 km/h.',
       ru: 'Здесь дуют самые быстрые ветры системы — до 2000 км/ч.',
     },
     tie: {

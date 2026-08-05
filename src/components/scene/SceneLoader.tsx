@@ -60,7 +60,7 @@ export default function SceneLoader() {
       style={{ background: '#050714', opacity: ready ? 0 : 1, pointerEvents: ready ? 'none' : 'auto' }}
       aria-hidden="true"
     >
-      {/* Shooting stars — three staggered diagonal streaks, one crossing every ~2.5s. */}
+      {/* Shooting stars - three staggered diagonal streaks, one crossing every ~2.5s. */}
       <span className="loader-meteor" style={{ animationDelay: '0s' }} />
       <span className="loader-meteor loader-meteor--b" style={{ animationDelay: '2.5s' }} />
       <span className="loader-meteor loader-meteor--c" style={{ animationDelay: '5s' }} />

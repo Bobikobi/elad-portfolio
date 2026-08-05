@@ -42,7 +42,7 @@ export default function SeededStars(props: React.ComponentProps<typeof Stars>) {
     // than silently ship a different sky — this is exactly the silent-failure shape that let the
     // unseeded field survive a whole round unnoticed.
     if (pos.count !== count || size.count !== count) {
-      console.error(`[SeededStars] drei generated ${pos.count} positions / ${size.count} sizes for count=${count} — not overwriting`);
+      console.error(`[SeededStars] drei generated ${pos.count} positions / ${size.count} sizes for count=${count} - not overwriting`);
       return;
     }
 

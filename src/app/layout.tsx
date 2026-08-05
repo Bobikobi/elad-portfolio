@@ -342,7 +342,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link rel="icon" href="/favicon-48.png" sizes="48x48" type="image/png" />
         <link rel="icon" href="/favicon-192.png" sizes="192x192" type="image/png" />
         <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-        {/* Digital identity links — help search engines & AI connect social profiles to this entity */}
+        {/* Digital identity links - help search engines & AI connect social profiles to this entity */}
         <link rel="me" href="https://github.com/Bobikobi" />
         <link rel="me" href="https://www.linkedin.com/in/elad-saadon-184809281/" />
         <meta name="author" content="Elad Saadon" />

@@ -81,7 +81,7 @@ export function FramePacer() {
   const displayHz = useScene((s) => s.displayHz);
 
   useEffect(() => {
-    if (!displayHz) return; // nothing measured yet — leave the loop alone
+    if (!displayHz) return; // nothing measured yet - leave the loop alone
     // A pace is only worth driving where it buys something: a panel between 60 and the
     // smooth threshold, whose uncapped cadence is uneven. A 60Hz display already paces
     // itself, so there the driver only ever engages when the page goes idle.
@@ -132,7 +132,7 @@ const MIN_SCALE = 0.85;
 const MAX_SCALE = 1;
 const STEP_DOWN = 0.1;
 const STEP_UP = 0.05;
-const EVAL_MS = 1000;      // one decision per second — a buffer resize is not free
+const EVAL_MS = 1000;      // one decision per second - a buffer resize is not free
 const WARMUP_MS = 4000;    // same reason as the governor's grace: compiles are not steady state
 const LOW_RATIO = 0.85;    // below this share of target = scale down
 const HIGH_RATIO = 0.95;   // above this share = room to scale back up
@@ -161,9 +161,13 @@ export function ResolutionScaler() {
   const elapsed = useRef(0);
   const since = useRef(0);
 
+  // PERF-2: the high-tier ceiling comes down 1.5 -> 1.25. A dense display still gets more
+  // pixels than the low tier, but 1.5 was 2.25x the fragments of 1.0 and it was being
+  // handed to every machine that started high — which, before the inversion, was all of
+  // them. 1.25 is 1.56x: still visibly crisper, materially cheaper.
   const base =
     quality === 'high'
-      ? Math.min(typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1, 1.5)
+      ? Math.min(typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1, 1.25)
       : 1;
 
   const apply = (next: number) => {

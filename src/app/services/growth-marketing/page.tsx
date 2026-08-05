@@ -63,22 +63,22 @@ const components = [
   {
     icon: Filter,
     title: 'Lead Capture & Filtering',
-    desc: 'Every incoming lead is automatically classified by source, quality, and behavior — the team talks only to those worth talking to.',
+    desc: 'Every incoming lead is automatically classified by source, quality, and behavior - the team talks only to those worth talking to.',
   },
   {
     icon: Mail,
     title: 'Timely Messaging',
-    desc: 'A sequence of messages that adapts to each lead\'s stage in the funnel — not a one-time blast, but communication that builds trust.',
+    desc: 'A sequence of messages that adapts to each lead\'s stage in the funnel - not a one-time blast, but communication that builds trust.',
   },
   {
     icon: BarChart2,
     title: 'Performance Dashboard',
-    desc: 'Weekly metrics at the campaign, channel, and content level — understand what works and improve based on data, not feelings.',
+    desc: 'Weekly metrics at the campaign, channel, and content level - understand what works and improve based on data, not feelings.',
   },
   {
     icon: Sparkles,
     title: 'AI-Powered Marketing',
-    desc: 'AI that scores leads, generates message variations, and summarizes conversations — less manual work, more time for strategy.',
+    desc: 'AI that scores leads, generates message variations, and summarizes conversations - less manual work, more time for strategy.',
   },
 ];
 
@@ -99,7 +99,7 @@ export default function GrowthMarketingPage() {
         Growth Marketing Automation
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
-        Instead of manually tracking every lead, build an engine that does it automatically — from the moment someone arrives at your site to the moment they become a customer.
+        Instead of manually tracking every lead, build an engine that does it automatically - from the moment someone arrives at your site to the moment they become a customer.
       </p>
 
       {/* Component cards */}

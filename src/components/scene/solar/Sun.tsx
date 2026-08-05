@@ -68,9 +68,9 @@ const PROM_COUNT = 7;
 // corona SHELL (scale 1.28) being amplified by Bloom into a large pale disc, with the soft
 // outer halo SPRITE (scale 4.4) secondary. Both off: Bloom alone gives a tight natural
 // glow and the system sits in dark space (corners <10% lum, measured).
-const SHOW_HALO_SPRITE = false;  // big soft gold disc (scale 4.4) — milky-halo contributor
-const SHOW_CORONA_SHELL = false; // corona backside shell (scale 1.28) — primary milky-halo source
-const SHOW_ANAMORPHIC = true;    // short horizontal gold streak — kept (subtle, not a wash)
+const SHOW_HALO_SPRITE = false;  // big soft gold disc (scale 4.4) - milky-halo contributor
+const SHOW_CORONA_SHELL = false; // corona backside shell (scale 1.28) - primary milky-halo source
+const SHOW_ANAMORPHIC = true;    // short horizontal gold streak - kept (subtle, not a wash)
 
 /**
  * Solar prominences — flame arcs licking off the limb, each on its own irregular cycle so
@@ -129,7 +129,7 @@ function Prominences() {
     <group ref={group}>
       {proms.map((_, i) => (
         <sprite key={i}>
-          {/* Close to the sun's own hot rim, not a separate orange — the arcs must read as
+          {/* Close to the sun's own hot rim, not a separate orange - the arcs must read as
               the star's edge coming apart, never as decoration laid on top of it. */}
           <spriteMaterial map={tex} color={'#ffb469'} transparent opacity={0.1} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </sprite>
@@ -185,7 +185,7 @@ export default function Sun() {
 
   return (
     <group name="sun">
-      {/* B3: the starlight was #ffd9a0 — linear (1.00, 0.69, 0.35), i.e. it delivers
+      {/* B3: the starlight was #ffd9a0 - linear (1.00, 0.69, 0.35), i.e. it delivers
           three times as much red as blue. On a body that is already red, Mars, the red
           channel saturated while blue never got off the floor: that is what "neon
           yellow" was made of. A G star is close to white; the gold identity of this
@@ -205,7 +205,7 @@ export default function Sun() {
           <meshBasicMaterial color={CORE_GOLD} transparent opacity={0.12} side={THREE.BackSide} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </mesh>
       )}
-      {/* Soft outer halo sprite — hugs the corona. Kept tight + low opacity so it reads
+      {/* Soft outer halo sprite - hugs the corona. Kept tight + low opacity so it reads
           as corona bloom, not a milky haze washing the frame (F3, worst on small/mobile
           viewports where the same sprite covers more of the frame). */}
       {SHOW_HALO_SPRITE && (
@@ -213,7 +213,7 @@ export default function Sun() {
           <spriteMaterial map={tex} color={CORE_GOLD} transparent opacity={0.1} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </sprite>
       )}
-      {/* B5: the anamorphic streak. Was the round sprite stretched 8 x 0.28 — an ellipse,
+      {/* B5: the anamorphic streak. Was the round sprite stretched 8 x 0.28 - an ellipse,
           which has a waist, so it read as a bar laid across the sun instead of light
           bleeding sideways out of it. Now a purpose-drawn streak (thickest and brightest
           at the centre, thinning to nothing at both tips) whose length and brightness are

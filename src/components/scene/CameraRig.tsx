@@ -112,7 +112,7 @@ function orbitVantage(
   lit: number,
   planeAngle: number,
   sideSign: number,
-  prevPhi: number | null     // last frame's choice, for branch continuity — see below
+  prevPhi: number | null     // last frame's choice, for branch continuity - see below
 ): number {
   // Phase angle straight from the target: lit = (1 + cos α)/2.
   const alpha = Math.acos(clampUnit(2 * clamp01(lit) - 1));
@@ -238,8 +238,8 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 // The floor cannot be waived: releasing on a clock alone would uncover a frame that has
 // not been drawn, which is the B7 defect with the sign flipped.
 const REVEAL_FRAMES = 8;
-const REVEAL_MIN_FRAMES = 2;   // readiness floor — drawn frames, never wall-clock
-const REVEAL_HOLD_CAP = 0.4;   // s — past this the floor alone governs
+const REVEAL_MIN_FRAMES = 2;   // readiness floor - drawn frames, never wall-clock
+const REVEAL_HOLD_CAP = 0.4;   // s - past this the floor alone governs
 const REVEAL_FADE = 0.35; // s
 const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
@@ -497,8 +497,8 @@ function beltRidePose(pos: THREE.Vector3, look: THREE.Vector3, ride: BeltRide, d
 const EST_DIST = 30;                    // establishing: far enough that the page-planets fit portrait
 const EST_ELEV = 35 * DEG2RAD;          // elevated ~35° so the ecliptic reads as a system, not a line
 const EST_FOV = 64;                     // wide vertical fov so the narrow portrait frame still holds it
-const EST_HOLD = 1.7;                   // s — how long the establishing shot lingers before the tour
-const EST_EASE = 1.4;                   // s — glide from establishing to the first stop
+const EST_HOLD = 1.7;                   // s - how long the establishing shot lingers before the tour
+const EST_EASE = 1.4;                   // s - glide from establishing to the first stop
 const TOUR_FOV = 44;                    // per-stop fov
 const TOUR_FILL = 0.4;                  // planet ≈ 40% of viewport height (huge; leaves room for the label)
 const _tourPos = new THREE.Vector3();
@@ -563,13 +563,13 @@ export default function CameraRig() {
   const vantagePhi = useRef<number | null>(null);
   const vantageFor = useRef<string | null>(null);
   const revealHold = useRef(0);
-  const revealDrawn = useRef(0); // G1: drawn frames since the latch — the readiness floor
-  const revealAge = useRef(0);   // G1: wall-clock seconds since the latch — the slow-client exit
+  const revealDrawn = useRef(0); // G1: drawn frames since the latch - the readiness floor
+  const revealAge = useRef(0);   // G1: wall-clock seconds since the latch - the slow-client exit
   const dtNominal = useRef(1 / 60); // G1b: median estimate of this client's own frame time
   const dtRing = useRef<number[]>(new Array(DT_WINDOW).fill(1 / 60));
   const dtRingAt = useRef(0);
   const fadeAge = useRef(0);        // G1b: seconds the current fade has been running
-  const covOut = useRef(0); // last published coverage — the rate limiter's state
+  const covOut = useRef(0); // last published coverage - the rate limiter's state
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
   // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
   // replaced it (`parent === null` once three has detached the old one).
@@ -768,7 +768,7 @@ export default function CameraRig() {
           store.setAct(desired);
           act = desired;
           swapLatch.current = true;
-          latchReveal(); // B7 — the curtain stays shut until the new act has actually drawn
+          latchReveal(); // B7 - the curtain stays shut until the new act has actually drawn
           arrivedViaDive.current = desired === 'solar'; // scroll-drive the arrival dolly (T7a); cleared on reverse
           if (desired === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
         }
@@ -798,7 +798,7 @@ export default function CameraRig() {
             if (DEV) console.log(`[swap:reconcile] ${act}→${scrollSide}  cov=${recCov.current.toFixed(3)} scroll=${scrollProgress.toFixed(3)}`);
             store.setAct(scrollSide);
             act = scrollSide;
-            latchReveal(); // B7 — same hold on the reconciled swap
+            latchReveal(); // B7 - same hold on the reconciled swap
             pGate.current = scrollProgress;   // sync the gate so the normal machine resumes cleanly
             arrivedViaDive.current = false;   // a teleport, not a dive → time-damped reveal (overview/tour)
             if (scrollSide === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }

@@ -54,7 +54,7 @@ export default function Nebula({ intensity = 1 }: { intensity?: number }) {
     for (let i = 0; i < NEBULAE.length; i++) {
       const child = g.children[i] as THREE.Sprite;
       const base = NEBULAE[i].pos;
-      const per = 47 + i * 13; // 47, 60, 73, … seconds — no two in lockstep
+      const per = 47 + i * 13; // 47, 60, 73, … seconds - no two in lockstep
       child.position.x = base[0] + Math.sin((t / per) * Math.PI * 2 + i) * 2.2;
       child.position.y = base[1] + Math.cos((t / (per * 1.27)) * Math.PI * 2 + i * 1.3) * 1.7;
       const breathe =
@@ -75,7 +75,7 @@ export default function Nebula({ intensity = 1 }: { intensity?: number }) {
           <spriteMaterial map={tex} color={p.color} transparent opacity={p.op * intensity} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
       ))}
-      {/* Galaxy-core anchor — the gold we came from, hanging small + low on the far
+      {/* Galaxy-core anchor - the gold we came from, hanging small + low on the far
           horizon. Same gold + sprite as the sun's halo = the colour bridge between
           acts. Kept distant and dim so it never competes with the real sun. */}
       <sprite position={[-56, -12, -76]} scale={[20, 13, 1]}>

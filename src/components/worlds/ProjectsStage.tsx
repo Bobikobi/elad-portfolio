@@ -367,7 +367,7 @@ export default function ProjectsStage({
     // was. The native scroll still owns the position (so the wheel, the trackpad, touch,
     // the keyboard and the departure gesture all keep working unchanged); only what the
     // ring DRAWS is eased toward it.
-    const SCROLL_TAU = 0.085; // seconds to 1/e — quick enough not to feel like lag
+    const SCROLL_TAU = 0.085; // seconds to 1/e - quick enough not to feel like lag
     let shown = 0;
     let lastT = 0;
     const update = (force = false) => {
@@ -579,7 +579,7 @@ export default function ProjectsStage({
 
   return (
     <div className="pointer-events-none fixed inset-0 z-30">
-      {/* Header — the strip of screen the ring leaves free on the far side of the fan. */}
+      {/* Header - the strip of screen the ring leaves free on the far side of the fan. */}
       <header
         ref={headerRef}
         className="pointer-events-none absolute flex items-start justify-between gap-3"

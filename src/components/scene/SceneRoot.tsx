@@ -93,7 +93,7 @@ export default function SceneRoot() {
         }}
       >
         <color attach="background" args={['#050714']} />
-        {/* R5.9 — the quality governor owns every tier decision now (warm-up grace,
+        {/* R5.9 - the quality governor owns every tier decision now (warm-up grace,
             hysteresis, refresh-rate-aware pacing). A raw PerformanceMonitor.onDecline
             downgraded on the very first frames, while shaders were still compiling. */}
         <QualityGovernor />
@@ -104,7 +104,7 @@ export default function SceneRoot() {
         <ResolutionScaler />
         <Warmup />
         <CameraRig />
-        {/* Shared SKY — lives outside both acts and never swaps, so the universe is
+        {/* Shared SKY - lives outside both acts and never swaps, so the universe is
             continuous through the transition (only the "middle" changes). */}
         <GradientSky solar={act === 'solar'} />
         {/* Seeded (see SeededStars): drei's own Stars rolls this field fresh on every load, which
@@ -113,13 +113,13 @@ export default function SceneRoot() {
         <HeroStars />
         {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
             In the solar act the veils drop to a faint backdrop so they read as distant
-            nebulosity, not the milky haze that used to wash the poster frame — corners
+            nebulosity, not the milky haze that used to wash the poster frame - corners
             stay <10% brightness but never empty (stars + a nebula touch everywhere). */}
         {/* B4: 0.28 left the solar sky effectively empty, which is most of why the worlds
             read as faded. The veils are a BACKDROP, not a rumour of one. */}
         <Nebula intensity={act === 'solar' ? 0.5 : 1} />
         {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
-        {/* In-world swap curtain — persists across the act swap, covers the seam. */}
+        {/* In-world swap curtain - persists across the act swap, covers the seam. */}
         <SwapMask />
         <Effects />
         {/* Priority 2 → the last thing in the frame, after the composer has drawn it, so
@@ -132,7 +132,7 @@ export default function SceneRoot() {
     </div>
     {/* Interactive scene chrome lives OUTSIDE the aria-hidden canvas wrapper: these are
         real buttons a screen-reader user must be able to reach. (They were previously
-        nested inside it — focusable content under aria-hidden.) */}
+        nested inside it - focusable content under aria-hidden.) */}
     <PlanetLabelsOverlay />
     <TourDots />
     </>
