@@ -64,7 +64,7 @@ export interface HudData {
   vw: number;
   vh: number;
   fov: number;
-  camDist: number; // camera distance to sun (overview) — handy while tuning
+  camDist: number; // camera distance to sun (overview) - handy while tuning
   pdb: boolean; // preserveDrawingBuffer actually enabled?
   center: number; // center-screen luminance (sampling sanity check)
   cov: number; // T1 swap mask coverage 0..1 (swap fires only >0.95)
@@ -213,7 +213,7 @@ export function DebugHudOverlay() {
         const cornerFlag = (v: number) => (v < 10 ? '' : ' ⚠');
         const planetLines = d.planets.length
           ? d.planets.map((p) => `  ${p.key.padEnd(8)} ${fmt(p.px, 0).padStart(5)} px (${fmt((p.px / d.vh) * 100, 1)}%)`).join('\n')
-          : '  —';
+          : '  -';
         el.textContent =
           `HUD ${d.solar ? 'SOLAR' : 'galaxy'}  ${fmt(d.fps, 0)} fps  fov ${fmt(d.fov, 1)}°  ${d.vw}×${d.vh}\n` +
           `swap  scroll ${fmt(d.scroll, 3)}  cov ${fmt(d.cov, 3)}${d.cov > 0.95 ? ' [SWAP-OK]' : ''}\n` +

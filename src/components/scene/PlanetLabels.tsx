@@ -410,7 +410,7 @@ export default function PlanetLabelsOverlay() {
       ))}
       <Pill nodeKey="belt" label={t('nav.tech')} onOpen={() => open('belt')} />
 
-      {/* B10 — rim markers. A decorative world that has orbited out of frame leaves this
+      {/* B10 - rim markers. A decorative world that has orbited out of frame leaves this
           behind on the rim: the cue that it is out there, and the target that raises its
           tooltip. Hidden entirely while the body is in frame, so the resting overview is
           unchanged whenever the planets happen to be on the near side. */}
@@ -434,7 +434,7 @@ export default function PlanetLabelsOverlay() {
         </button>
       ))}
 
-      {/* Decorative-body tooltip — one node, re-used for whichever body is hovered. */}
+      {/* Decorative-body tooltip - one node, re-used for whichever body is hovered. */}
       <div
         ref={register('tooltip')}
         role="tooltip"

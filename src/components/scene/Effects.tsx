@@ -49,9 +49,9 @@ const GALAXY_SAT = 0.08; // A6: the same gentle grade enriches the galaxy arms (
 // the edge fades the rays without recompiling the composer mid-gesture.
 const SUN_POS = new THREE.Vector3(0, 0, 0);
 const GODRAY_WEIGHT = 0.16;
-const RAY_FADE_IN = 0.9;   // × half-diagonal fov — full weight inside this
-const RAY_FADE_OUT = 1.7;  // × half-diagonal fov — zero weight beyond this
-const RAY_MOUNT = 2.2;     // × half-diagonal fov — mounted out to here (hysteresis below)
+const RAY_FADE_IN = 0.9;   // × half-diagonal fov - full weight inside this
+const RAY_FADE_OUT = 1.7;  // × half-diagonal fov - zero weight beyond this
+const RAY_MOUNT = 2.2;     // × half-diagonal fov - mounted out to here (hysteresis below)
 const _fwd = new THREE.Vector3();
 const _toSun = new THREE.Vector3();
 
@@ -215,9 +215,9 @@ export default function Effects() {
       ) : (
         <></>
       )}
-      {/* B3: bloom runs AFTER tone mapping, so in a focused world — where a planet fills
+      {/* B3: bloom runs AFTER tone mapping, so in a focused world - where a planet fills
           two thirds of the frame and its whole lit face sits above the overview's 0.72
-          threshold — it was adding a broad glow on top of an image already near the top
+          threshold - it was adding a broad glow on top of an image already near the top
           of the range, and that addition is what clipped. The overview keeps its numbers
           (the sun is the hero there and must burn); a world raises the bar so only the
           genuinely burning limb blooms. This is a per-STATE change, not per-tier: every
@@ -259,22 +259,22 @@ export default function Effects() {
           display-referred one). See ExposureToneMap for why three cannot do this itself
           once a composer owns the render. */}
       <ExposureToneMap />
-      {/* Global grade: a gentle saturation lift — colour on the planets without touching
+      {/* Global grade: a gentle saturation lift - colour on the planets without touching
           any texture. Kept LOW in solar (was 0.14) because the higher lift pushed the dim
           sky violet, which the vignette then framed as a milky "lavender oval" (F1). */}
-      {/* A6: the grade now runs in BOTH acts (driven per-frame above) — same family. */}
+      {/* A6: the grade now runs in BOTH acts (driven per-frame above) - same family. */}
       <HueSaturation ref={(e: HueSatLike | null) => { hueSatRef.current = e ?? null; }} saturation={OVERVIEW_SAT} />
-      {/* Very subtle film grain + vignette — the glue that binds the depth layers. */}
+      {/* Very subtle film grain + vignette - the glue that binds the depth layers. */}
       <Noise premultiply opacity={0.045} />
       {/* Deeper vignette in the solar act pulls the corners to deep space (spec: <10%
           brightness at the edges) while the sun keeps the centre warm. Darkness/offset
-          are driven per-frame (vigRef) to ease across the swap — see above. */}
+          are driven per-frame (vigRef) to ease across the swap - see above. */}
       <Vignette ref={(e: VignetteLike | null) => { vigRef.current = e ?? null; }} offset={0.28} darkness={0.62} />
       {/* B13: the composer runs with multisampling 0, so nothing was anti-aliasing the
-          planet limbs — a lit rim against near-black space is the worst case for a
+          planet limbs - a lit rim against near-black space is the worst case for a
           stair-stepped edge, and at DPR 1 it was visible on every world. SMAA is one
           cheap fullscreen pass and it goes last, on the finished frame.
-          F5: it is also the ONLY effect the composer could not merge — the audit shows
+          F5: it is also the ONLY effect the composer could not merge - the audit shows
           every other effect collapsing into a single EffectPass while SMAA takes one of
           its own, because it is the convolution effect in the chain. On the low tier it
           now comes off, on the owner's ruling and against a side-by-side crop. High tier

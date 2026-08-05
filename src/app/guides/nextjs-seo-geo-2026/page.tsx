@@ -66,7 +66,7 @@ export default function NextJsSeoGeoGuidePage() {
     {
       icon: Search,
       title: 'Metadata מדויק',
-      desc: 'כותרת ותיאור ייחודיים לכל עמוד. גוגל קורא כדי לדרג — המשתמש קורא כדי להחליט אם ללחוץ.',
+      desc: 'כותרת ותיאור ייחודיים לכל עמוד. גוגל קורא כדי לדרג - המשתמש קורא כדי להחליט אם ללחוץ.',
     },
     {
       icon: FileCode2,
@@ -76,7 +76,7 @@ export default function NextJsSeoGeoGuidePage() {
     {
       icon: Bot,
       title: 'תוכן מוכן לציטוט',
-      desc: 'כלי AI מחפשים תשובות ישירות. עמוד שמתחיל בתשובה ברורה — נצוטט יותר ב-ChatGPT, Gemini ו-Perplexity.',
+      desc: 'כלי AI מחפשים תשובות ישירות. עמוד שמתחיל בתשובה ברורה - נצוטט יותר ב-ChatGPT, Gemini ו-Perplexity.',
     },
     {
       icon: Gauge,
@@ -101,7 +101,7 @@ export default function NextJsSeoGeoGuidePage() {
         מדריך Next.js SEO + GEO לשנת 2026
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
-        להופיע גבוה בגוגל זה לא מספיק — כלי AI כמו ChatGPT ו-Gemini הפכו לנקודת כניסה חדשה. המדריך מסביר מה צריך לעשות כדי שהאתר יהיה נראה גם לגוגל וגם ל-AI.
+        להופיע גבוה בגוגל זה לא מספיק - כלי AI כמו ChatGPT ו-Gemini הפכו לנקודת כניסה חדשה. המדריך מסביר מה צריך לעשות כדי שהאתר יהיה נראה גם לגוגל וגם ל-AI.
       </p>
 
       {/* Pillar cards */}
@@ -125,7 +125,7 @@ export default function NextJsSeoGeoGuidePage() {
 
       {/* Summary table */}
       <section className="mt-12">
-        <h2 className="mb-4 text-xl font-semibold text-[var(--color-text-primary)]">סיכום — מה לעשות ולמה</h2>
+        <h2 className="mb-4 text-xl font-semibold text-[var(--color-text-primary)]">סיכום - מה לעשות ולמה</h2>
         <div className="overflow-x-auto rounded-xl border border-[var(--color-border-default)]">
           <table className="min-w-full border-collapse text-right text-sm">
             <thead>

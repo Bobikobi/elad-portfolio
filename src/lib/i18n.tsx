@@ -130,7 +130,7 @@ export function I18nProvider({
     try {
       const saved = localStorage.getItem('locale');
       if (isLocale(saved)) document.cookie = localeCookie(saved);
-    } catch { /* private mode — nothing to migrate */ }
+    } catch { /* private mode - nothing to migrate */ }
   }, []);
 
   const setLocale = useCallback((l: Locale, persist = true) => {

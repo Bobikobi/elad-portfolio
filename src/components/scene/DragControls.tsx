@@ -19,8 +19,8 @@ import { useI18n } from '@/lib/i18n';
 const YAW_SENS = (0.2 * Math.PI) / 180;   // rad per px (≈0.00349)
 const PITCH_SENS = 0.003;
 const PITCH_CLAMP = (25 * Math.PI) / 180;
-const THRESHOLD = 5;      // px — separates a rotate-drag from a navigating tap
-const SWIPE_THRESHOLD = 45; // px — a horizontal swipe that advances the mobile tour (T7b)
+const THRESHOLD = 5;      // px - separates a rotate-drag from a navigating tap
+const SWIPE_THRESHOLD = 45; // px - a horizontal swipe that advances the mobile tour (T7b)
 const clampPitch = (p: number) => Math.max(-PITCH_CLAMP, Math.min(PITCH_CLAMP, p));
 
 // Soft yaw comfort-range (T6.1): free within ±COMFORT, then asymptotically eased toward

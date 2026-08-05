@@ -408,7 +408,7 @@ function EarthLayers({ radius }: { radius: number }) {
   const cloudUniforms = useMemo(() => ({ uMap: { value: cloudTex } }), [cloudTex]);
   const nightUniforms = useMemo(() => ({ uMap: { value: nightTex } }), [nightTex]);
   useFrame((_, dt) => { if (clouds.current) clouds.current.rotation.y += dt * 0.045; });
-  const skip = () => null; // overlays are visual only — never intercept planet taps
+  const skip = () => null; // overlays are visual only - never intercept planet taps
   return (
     <>
       <mesh scale={1.002} raycast={skip}>
@@ -434,7 +434,7 @@ function EarthLayers({ radius }: { radius: number }) {
 const MOON_RATIO = 0.2725; // real Moon/Earth radius ratio
 const MOON_DIST = 2.9; // Earth radii (compressed from 60 so it stays in the ORBIT frame)
 const MOON_INCL = 22 * DEG2RAD; // exaggerated from 5.1° so the inclination reads
-const MOON_PERIOD = 26; // s per revolution — slow enough to feel orbital, not spun
+const MOON_PERIOD = 26; // s per revolution - slow enough to feel orbital, not spun
 
 const _mwp = new THREE.Vector3();
 const _mdir = new THREE.Vector3();
@@ -515,7 +515,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   const hiTex = useRef<THREE.Texture | null>(null);
   const hiTarget = useRef(0); // 0 = show base, 1 = show hi
   const [hovered, setHovered] = useState(false);
-  const eclipse = useRef(0); // damped 0..1 — how much of the sun this body is losing
+  const eclipse = useRef(0); // damped 0..1 - how much of the sun this body is losing
   const page = PLANET_PAGES[spec.key];
   // R5.6 — the four bodies that are NOT section routes still answer the pointer: they
   // raise a glass tooltip (name + a real astronomy fact + the wink). The tooltip's DOM
@@ -582,7 +582,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         // fail quietly: a missed replace here would leave the terminator hard and look exactly
         // like a tuning disagreement rather than a broken patch.
         if (!CHUNK || !CHUNK.includes(HARD)) {
-          throw new Error('G2: three\'s RE_Direct_Physical dotNL line has moved — the soft terminator patch is not applied');
+          throw new Error('G2: three\'s RE_Direct_Physical dotNL line has moved - the soft terminator patch is not applied');
         }
         if (!shader.fragmentShader.includes('#include <lights_physical_pars_fragment>')) {
           throw new Error('G2: meshphysical no longer includes lights_physical_pars_fragment');
@@ -713,7 +713,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       hiTex.current = tex;
       if (hiShader.current) hiShader.current.uniforms.uHiMap.value = tex;
       hiTarget.current = 1;
-      if (DEV) console.log(`[tex] ${spec.key} ${tier} resident — textures=${gl.info.memory.textures}`);
+      if (DEV) console.log(`[tex] ${spec.key} ${tier} resident - textures=${gl.info.memory.textures}`);
     });
     return () => { cancelled = true; hiTarget.current = 0; };
   }, [focused, page, spec.key, gl]);
@@ -754,7 +754,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         hiTex.current.dispose();
         hiTex.current = null;
         hiShader.current.uniforms.uHiMap.value = white1();
-        if (DEV) console.log(`[tex] ${spec.key} disposed — textures=${gl.info.memory.textures}`);
+        if (DEV) console.log(`[tex] ${spec.key} disposed - textures=${gl.info.memory.textures}`);
       }
     }
     if (group.current) {
@@ -845,7 +845,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         )}
         {spec.moons && <Moons count={spec.moons} planetSize={spec.size} />}
       </group>
-      {/* R5.7 — the real Moon, on its own inclined orbit outside Earth's spin group. */}
+      {/* R5.7 - the real Moon, on its own inclined orbit outside Earth's spin group. */}
       {spec.earth && <EarthMoon planetSize={spec.size} />}
     </group>
   );
@@ -882,7 +882,7 @@ export default function SolarAct() {
       {/* A4: per-world nebula backdrop (world-fixed, shows only while a world is focused). */}
       <WorldBackdrop />
       {/* Section pills, the belt marker and the decorative-body tooltips all live in the
-          DOM overlay now (PlanetLabels) — see the note there on frame ordering. */}
+          DOM overlay now (PlanetLabels) - see the note there on frame ordering. */}
     </>
   );
 }

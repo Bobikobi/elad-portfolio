@@ -46,7 +46,7 @@ export default function PlanetWorld({
             {title}
           </h1>
           {/* A real link home (crawlable), driven through returnHome so the departure
-              meter is cleared and the overview — not a re-dive — is what we land in. */}
+              meter is cleared and the overview - not a re-dive - is what we land in. */}
           <Link
             href={homePath(locale)}
             data-world-back=""

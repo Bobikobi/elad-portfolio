@@ -52,7 +52,7 @@ const schemas = [
         name: 'Can you upgrade an existing Next.js system?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Yes. We diagnose bottlenecks in performance, architecture, or SEO, and improve incrementally — without breaking what works.',
+          text: 'Yes. We diagnose bottlenecks in performance, architecture, or SEO, and improve incrementally - without breaking what works.',
         },
       },
     ],
@@ -68,7 +68,7 @@ const features = [
   {
     icon: ShieldCheck,
     title: 'Built-in Security',
-    desc: 'Permissions, headers, rate-limiting, and OWASP Top 10 as part of the architecture — not an afterthought.',
+    desc: 'Permissions, headers, rate-limiting, and OWASP Top 10 as part of the architecture - not an afterthought.',
   },
   {
     icon: Database,
@@ -78,7 +78,7 @@ const features = [
   {
     icon: Gauge,
     title: 'Ready to Scale',
-    desc: 'Clean, documented, and tested code — so the next feature is quick to add and not a headache.',
+    desc: 'Clean, documented, and tested code - so the next feature is quick to add and not a headache.',
   },
 ];
 
@@ -99,7 +99,7 @@ export default function NextJsDevelopmentPage() {
         Next.js Development for Businesses & Startups
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
-        A Next.js product built right — fast for users, friendly to Google, secure in production, and easy to maintain. From scratch to full deployment.
+        A Next.js product built right - fast for users, friendly to Google, secure in production, and easy to maintain. From scratch to full deployment.
       </p>
 
       {/* Feature cards */}
