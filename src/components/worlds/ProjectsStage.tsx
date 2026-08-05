@@ -129,6 +129,8 @@ export default function ProjectsStage({
     const tapped = { current: -1 };
     const axisRef = { current: 'y' as 'x' | 'y' };
     const shownActive = { current: -2 };
+    /** How far the panel has travelled along the disc from its resting place, in px. */
+    const slide = { current: 0 };
     const centreOffsetRef = { current: 0 };
     const spanRef = { current: 0 };
 
@@ -299,6 +301,10 @@ export default function ProjectsStage({
       return -1;
     };
 
+    let mouseX = 0;
+    let mouseY = 0;
+    let mouseIn = false;
+
     const setHover = (i: number) => {
       if (hovered.current === i) return;
       const was = hovered.current;
@@ -335,9 +341,17 @@ export default function ProjectsStage({
     };
     const onListMove = (e: PointerEvent) => {
       if (e.pointerType !== 'mouse') return;
+      // Remembered so the layout loop can re-hit-test the same point when the ring scrolls
+      // under a cursor that has not moved.
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      mouseIn = true;
+      // A mouse that moves takes the panel back from an armed tap. On a hybrid the two
+      // inputs would otherwise both claim it, and the stale one would win by being last.
+      if (tapped.current >= 0) disarm();
       setHover(windowAt(e.clientX, e.clientY));
     };
-    const onListLeave = () => setHover(-1);
+    const onListLeave = () => { mouseIn = false; setHover(-1); };
     const onListClick = (e: MouseEvent) => {
       // A drag that ends on a window is a scroll, not a choice. Chromium suppresses the
       // click after a touch scroll but not after a mouse drag, and 10px is below what a
@@ -456,9 +470,13 @@ export default function ProjectsStage({
     // the keyboard and the departure gesture all keep working unchanged); only what the
     // ring DRAWS is eased toward it.
     const SCROLL_TAU = 0.085; // seconds to 1/e — quick enough not to feel like lag
+    // The panel's travel along the disc is slower than the ring's: the words are being read
+    // while they move, and at the scroll's tau they arrive before the eye has followed them.
+    const SLIDE_TAU = 0.16;
     let shown = 0;
     let lastT = 0;
     let lastRaw = 0;
+    let lastShown = 0;
     const update = (force = false) => {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
@@ -475,17 +493,82 @@ export default function ProjectsStage({
       // Swiping the fan gives up the armed window. Otherwise a tap meant for whatever is
       // under the finger NOW would enter a project that scrolled off the fan three windows
       // ago. The 4px floor is there so the jitter of the tap itself does not disarm it.
-      if (tapped.current >= 0 && Math.abs(raw - lastRaw) > 4) disarm();
+      const scrolled = Math.abs(raw - lastRaw) > 4;
+      if (tapped.current >= 0 && scrolled) disarm();
       lastRaw = raw;
       if (force || reduce) shown = target;
       else {
         shown += (target - shown) * (1 - Math.exp(-dt / SCROLL_TAU));
         if (Math.abs(target - shown) < 0.25) shown = target;
       }
+      // The windows travel under a parked cursor while the wheel turns, so a hover computed
+      // on the last pointermove goes stale: the panel kept naming a project that had rotated
+      // away, or off the fan entirely, until the mouse moved again. Re-hit-test at the last
+      // known cursor position instead of waiting for the pointer to move.
+      //
+      // Against `shown`, not against the raw scrollTop: the ring is DAMPED, so the container's
+      // position jumps in one frame while the windows are still on their way. Testing the raw
+      // value ran the hit test once, before anything had moved, and found the same window.
+      if (mouseIn && Math.abs(shown - lastShown) > 0.5) setHover(windowAt(mouseX, mouseY));
+      lastShown = shown;
+
+      // Which window is nearest the fan's centre. It is what the panel falls back to, and
+      // the guarantee that SOMETHING is named when the clamp has left almost no fan at all.
+      // Computed before the guard below because the panel follows it: a hover changes no
+      // geometry, so a signature made only of geometry would hold the panel a frame behind.
+      let centred = -1;
+      let bestA = Infinity;
+      for (let i = 0; i < n; i++) {
+        const a = windowArc(i, n, shown, m);
+        if (Math.abs(a) < Math.abs(bestA)) { bestA = a; centred = i; }
+      }
+      // The armed tap comes BEFORE the mouse fallback. On a hybrid - a laptop with both a
+      // trackpad and a touchscreen - `mouseSeen` is true the moment the mouse twitches, and
+      // ordering it first meant a touch tap armed a window and then showed nothing at all,
+      // so the first tap gave no feedback and the second opened a project the visitor had
+      // never seen named.
+      const active =
+        hovered.current >= 0
+          ? hovered.current
+          : tapped.current >= 0
+            ? tapped.current
+            : mouseSeen
+              ? -1
+              : centred;
+
+      // Where the panel wants to sit: alongside the window it is describing, ON the disc.
+      // The owner's ruling - the words stay on the planet, and slide along it toward the
+      // hovered window rather than sitting in one place or chasing the cursor off it.
+      const slideTarget = (() => {
+        if (active < 0) return slide.current;
+        const at = (a: number) => screenAt(m, m.rMid, m.th0 + (m.sweep * a) / m.rMid);
+        const axis = m.portrait ? 0 : 1;
+        const here = at(windowArc(active, n, shown, m))[axis];
+        // Where the window sits WITHIN THE FAN, not how far it is from the planet's centre.
+        // Clamping the raw distance saturated: at 1440x900 the whole fan hangs below the
+        // disc's centre, so every window pinned the panel to the same bound and it travelled
+        // 0.8px between two windows 130px apart. Normalising by the fan's own extent keeps
+        // the travel proportional and still inside the disc.
+        const ends = [at(-arcUp(m))[axis], at(arcDown(m))[axis]];
+        const lo = Math.min(ends[0], ends[1]);
+        const hi = Math.max(ends[0], ends[1]);
+        const mid = (lo + hi) / 2;
+        const half = Math.max(1, (hi - lo) / 2);
+        const u = clamp((here - mid) / half, -1, 1);
+        return u * (m.portrait ? Math.min(vw * 0.18, m.R * 0.8) : m.R * 0.45);
+      })();
+      if (force || reduce) slide.current = slideTarget;
+      else {
+        slide.current += (slideTarget - slide.current) * (1 - Math.exp(-dt / SLIDE_TAU));
+        if (Math.abs(slideTarget - slide.current) < 0.25) slide.current = slideTarget;
+      }
+
       // The rig's pose has a live micro-drift, so the ring has to be rebuilt whenever the
       // limb moves — but only then. This guard is what keeps a 60Hz loop from doing 12
       // path rebuilds a frame while the planet is settled and nobody is scrolling.
-      const next = `${vw}|${vh}|${m.cx.toFixed(1)}|${m.cy.toFixed(1)}|${m.R.toFixed(1)}|${shown.toFixed(1)}`;
+      // `active` and the panel's travel are in it because neither moves the limb, and
+      // without them a hover would wait for the next drift to be drawn.
+      const next = `${vw}|${vh}|${m.cx.toFixed(1)}|${m.cy.toFixed(1)}|${m.R.toFixed(1)}|${shown.toFixed(1)}|${active}|${slide.current.toFixed(1)}`;
       if (!force && next === sig) return;
       sig = next;
       const t0 = probe ? performance.now() : 0;
@@ -547,15 +630,6 @@ export default function ProjectsStage({
         head.style.right = m.th0 === 0 ? '0' : 'auto';
       }
 
-      // Which window is nearest the fan's centre, computed before anything is drawn: it
-      // is both what the panel describes when nothing is hovered and the guarantee that
-      // SOMETHING is on screen when the clamp has left almost no fan at all.
-      let centred = -1;
-      let bestA = Infinity;
-      for (let i = 0; i < n; i++) {
-        const a = windowArc(i, n, scroll, m);
-        if (Math.abs(a) < Math.abs(bestA)) { bestA = a; centred = i; }
-      }
       rebuildShape(m);
       for (let i = 0; i < n; i++) {
         const a = windowArc(i, n, scroll, m);
@@ -604,21 +678,10 @@ export default function ProjectsStage({
         thumbArc.setAttribute('d', '');
       }
 
-      // B8d - the words live on the planet. Which project they describe is the hovered or
-      // focused one when there is a pointer, and otherwise the one at the centre of the
-      // fan: a phone has no hover, and twelve pictures with no way to learn what any of
-      // them is would be the whole design's failure mode.
-      // ...or, on a coarse pointer, the window a first tap armed - that tap's whole purpose
-      // is to put its own project in this panel, and the centred fallback would otherwise
-      // describe a different one.
-      const active =
-        hovered.current >= 0
-          ? hovered.current
-          : mouseSeen
-            ? -1
-            : tapped.current >= 0
-              ? tapped.current
-              : centred;
+      // B8d - the words live on the planet. Which project they describe is `active`, decided
+      // above: the hovered or focused window, else the one a first tap armed, else - with no
+      // pointer - the one at the centre of the fan. A phone has no hover, and twelve pictures
+      // with no way to learn what any of them is would be the whole design's failure mode.
       if (active !== shownActive.current) {
         shownActive.current = active;
         const src = active >= 0 ? cards[active] : null;
@@ -635,8 +698,14 @@ export default function ProjectsStage({
       const pw = m.portrait
         ? Math.min(vw - 32, 330)
         : Math.min(360, Math.max(220, m.R * 1.15));
-      const px = m.portrait ? (vw - pw) / 2 : m.cx - m.sweep * (m.R * 0.3) - pw / 2;
-      const py = m.portrait ? m.cy + m.R * 0.55 : m.cy - 60;
+      // ...and it TRAVELS along the disc toward the window it is describing (the owner's
+      // ruling on PROJECTS-HOVER): landscape slides it up and down the disc, portrait slides
+      // it left and right under one. `slide` is damped, so it glides between windows instead
+      // of snapping, and it is bounded so the words never leave the planet.
+      const px = (m.portrait ? (vw - pw) / 2 : m.cx - m.sweep * (m.R * 0.3) - pw / 2)
+        + (m.portrait ? slide.current : 0);
+      const py = (m.portrait ? m.cy + m.R * 0.55 : m.cy - 60)
+        + (m.portrait ? 0 : slide.current);
       panel.style.width = `${pw.toFixed(0)}px`;
       panel.style.left = `${clamp(px, 12, Math.max(12, vw - pw - 12)).toFixed(1)}px`;
       panel.style.top = `${clamp(py, 88, vh - 180).toFixed(1)}px`;

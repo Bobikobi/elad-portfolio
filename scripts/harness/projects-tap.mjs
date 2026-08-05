@@ -96,6 +96,22 @@ const state = () => ({
     if (box && Number(getComputedStyle(box).opacity) < 0.5) return '';
     return el.textContent.trim();
   })(),
+  // Where the panel sits, and where the planet is: the panel is supposed to TRAVEL along
+  // the disc toward the window it describes, bounded to the planet.
+  panelTop: (() => {
+    const el = document.querySelector('[data-panel-title]')?.closest('div[style]');
+    return el ? +el.getBoundingClientRect().top.toFixed(1) : null;
+  })(),
+  panelLeft: (() => {
+    const el = document.querySelector('[data-panel-title]')?.closest('div[style]');
+    return el ? +el.getBoundingClientRect().left.toFixed(1) : null;
+  })(),
+  ring: (() => {
+    const svg = document.querySelector('svg[data-ring]');
+    if (!svg?.dataset.ring) return null;
+    const m = JSON.parse(svg.dataset.ring);
+    return { cx: m.cx, cy: m.cy, R: m.R };
+  })(),
   opened: [...window.__tap.opened],
   types: [...new Set(window.__tap.types)],
   href: location.href,
@@ -160,6 +176,16 @@ for (const c of CASES) {
     return { ...(await page.evaluate(state)), under };
   };
 
+  // A hybrid - a machine with both a mouse and a touchscreen - is the case where ordering
+  // `mouseSeen` ahead of the armed tap silently broke the first tap. Move a real mouse
+  // first so `mouseSeen` is true, THEN tap.
+  const hybrid = Boolean(touch) && c.vp.isMobile !== true;
+  if (hybrid) {
+    await page.mouse.move(8, 8);
+    await page.mouse.move(12, 10);
+    await wait(300);
+  }
+
   // Desktop: the hover must reach the window before anything is clicked. This is the check
   // that would have caught the covering scroll container - the panel was empty here.
   let hover = null;
@@ -174,6 +200,32 @@ for (const c of CASES) {
   // carry into it.
   await page.evaluate(() => { window.__tap.opened.length = 0; });
   const other = t.hits.length > 1 ? await press(B) : null;
+
+  // The ring scrolls under a PARKED cursor. The hover must be recomputed for the window
+  // that is under the pointer now, not left describing the one that has rotated away.
+  let parked = null;
+  if (!touch) {
+    await page.mouse.move(A.x, A.y);
+    await wait(600);
+    const before = await page.evaluate(state);
+    await page.evaluate(() => {
+      const list = document.querySelector('.ring-scroll');
+      if (list.scrollWidth > list.clientWidth) list.scrollLeft += (getComputedStyle(list).direction === 'rtl' ? -220 : 220);
+      else list.scrollTop += 220;
+    });
+    await wait(1200);
+    const under = await page.evaluate(([x, y]) => {
+      const paths = [...document.querySelectorAll('svg[data-ring] path.ring-window')];
+      const cards = document.querySelectorAll('[data-window]');
+      for (const el of document.elementsFromPoint(x, y)) {
+        const k = paths.findIndex((q) => q.parentElement === el.parentElement || q.parentElement === el);
+        if (k >= 0) return { i: k, title: cards[k]?.dataset.title ?? null };
+      }
+      return { i: -1, title: null };
+    }, [A.x, A.y]);
+    const after = await page.evaluate(state);
+    parked = { before: before.panel, after: after.panel, under };
+  }
 
   // Swiping the fan gives up the armed window: the panel returns to the centred one.
   await page.evaluate(() => {
@@ -192,7 +244,7 @@ for (const c of CASES) {
     windowsHit: t.hits.length,
     a: { i: A.i, title: A.title, href: A.href },
     b: { i: B.i, title: B.title, href: B.href },
-    idle, hover, first, second, other, afterScroll,
+    hybrid, idle, hover, first, second, other, afterScroll, parked,
     // The instrument check. Every assertion above is void if this is not what we think.
     pointerTypes: second.types,
   };
@@ -215,10 +267,23 @@ for (const [k, v] of Object.entries(report)) {
   const switchable = v.other && v.touch && v.a.i !== v.b.i;
   const switched = !switchable ? 'n/a' : v.other.opened.length === 0 && v.other.panel === v.b.title;
   const released = !v.touch || v.afterScroll.panel !== null;
+  // The hover survives the ring scrolling under a parked cursor.
+  const reHover = !v.parked ? 'n/a'
+    : v.parked.under.i >= 0 ? v.parked.after === v.parked.under.title : v.parked.after === '';
+  // The panel travels along the disc toward the window it describes, and stays on it.
+  const travel = (() => {
+    if (!v.hover || !v.hover.ring || v.hover.panelTop === null || v.idle.panelTop === null) return 'n/a';
+    const moved = Math.abs(v.hover.panelTop - v.idle.panelTop);
+    const onDisc = Math.abs(v.hover.panelTop - v.hover.ring.cy) <= v.hover.ring.R * 0.45 + 80;
+    return { moved: +moved.toFixed(1), onDisc };
+  })();
   if (!instrumentOk || !armed || !enters || switched === false || !released || !hovers) bad++;
+  if (reHover === false) bad++;
+  if (travel !== 'n/a' && !travel.onDisc) bad++;
   console.log(
     `${k.padEnd(11)} ptr=${v.pointerTypes.join(',')}${instrumentOk ? '' : ' !INSTRUMENT'} ` +
     `hover=${hovers} arm=${armed} enter=${enters} switch=${switched} release=${released} ` +
+    `rehover=${reHover} travel=${JSON.stringify(travel)} hybrid=${v.hybrid} ` +
     `panel "${v.idle.panel}" -> "${v.first.panel}" opened=${JSON.stringify(v.second.opened)}`
   );
 }
