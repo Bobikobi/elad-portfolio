@@ -46,6 +46,13 @@ const page = await browser.newPage();
 if (BYPASS) await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': BYPASS });
 await page.bringToFront();
 
+// A run that produces no readings has to say WHY. The first time this happened it looked
+// like a governor failure and was not one - it was the page, and nothing recorded that.
+const pageErrors = [];
+page.on('pageerror', (e) => pageErrors.push(String(e).slice(0, 200)));
+page.on('console', (m) => { if (m.type() === 'error') pageErrors.push(`console: ${m.text().slice(0, 200)}`); });
+page.on('requestfailed', (r) => pageErrors.push(`net: ${r.failure()?.errorText} ${r.url().slice(0, 90)}`));
+
 const cdp = await page.createCDPSession();
 if (THROTTLE > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
 
@@ -53,8 +60,32 @@ const t0 = Date.now();
 const url = `${BASE}${ROUTE}${FPS_TARGET ? `?fpsTarget=${FPS_TARGET}` : ''}`;
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
+/**
+ * THE LATCH TEST. `SQUEEZE=on` promotes the page first, then throttles hard mid-run to
+ * force a demotion, then releases. A governor whose latch works demotes ONCE and stays
+ * there; one without it climbs straight back and the visitor watches the sky change twice.
+ * Neither behaviour is visible in a run that only ever goes one way.
+ */
+const SQUEEZE = process.env.SQUEEZE === 'on';
+const SQUEEZE_AT = Number(process.env.SQUEEZE_AT || 15000);
+const SQUEEZE_RATE = Number(process.env.SQUEEZE_RATE || 8);
+const RELEASE_AT = Number(process.env.RELEASE_AT || 24000);
+let squeezed = false;
+let released = false;
+
 const samples = [];
 while (Date.now() - t0 < WATCH_MS) {
+  const el = Date.now() - t0;
+  if (SQUEEZE && !squeezed && el > SQUEEZE_AT) {
+    squeezed = true;
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: SQUEEZE_RATE });
+    console.log(`  [${(el / 1000).toFixed(1)}s] squeeze on (${SQUEEZE_RATE}x)`);
+  }
+  if (SQUEEZE && squeezed && !released && el > RELEASE_AT) {
+    released = true;
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    console.log(`  [${(el / 1000).toFixed(1)}s] squeeze released`);
+  }
   const s = await page.evaluate(() => {
     // Keep the page non-idle or the pacer throttles and the governor stops judging.
     window.dispatchEvent(new Event('pointermove'));
@@ -66,6 +97,13 @@ while (Date.now() - t0 < WATCH_MS) {
 }
 
 await page.screenshot({ path: path.join(OUT, `tier-${THROTTLE}x.png`) });
+const post = await page.evaluate(() => ({
+  canvases: document.querySelectorAll('canvas').length,
+  three: Boolean(window.__three),
+  perf: Boolean(window.__perf),
+  poster: Boolean(document.querySelector('[data-scene-poster], img[src*="poster"]')),
+  html: document.documentElement.dataset.view ?? null,
+})).catch((e) => ({ evalFailed: String(e).slice(0, 200) }));
 await browser.close();
 
 // --- verdict ------------------------------------------------------------------------------
@@ -79,7 +117,10 @@ const last = seen[seen.length - 1];
 
 console.log(`\nBASE=${BASE}${ROUTE}  throttle=${THROTTLE}x  watched=${WATCH_MS / 1000}s  samples=${seen.length}`);
 if (!first) {
-  console.log('  NO __perf READINGS - the scaler never evaluated (scene never ran?)');
+  console.log('  NO __perf READINGS. End state of the page:');
+  console.log(`    ${JSON.stringify(post)}`);
+  console.log(`    page errors: ${pageErrors.length ? '' : 'none'}`);
+  for (const e of pageErrors.slice(0, 6)) console.log(`      ${e}`);
   process.exit(1);
 }
 console.log(`  first reading  : ${first.q} @ ${first.t}s  (fps ${first.fps}, dpr ${first.dpr}, ${first.hz}Hz)`);
