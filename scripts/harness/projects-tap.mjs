@@ -68,8 +68,13 @@ const targets = () => {
         // container and the svg share the layer wrapper. Ask for the whole stack and
         // require a sibling of the body path: the photo, body, accent and monogram are the
         // only things that live in a window's own <g>.
-        const stack = document.elementsFromPoint(x, y);
-        if (stack.some((el) => el.parentElement === p.parentElement)) {
+        // The point must be WELL inside the sector, not just inside it: the planet drifts
+        // continuously, so a point on the edge can be off the shape by the time the press
+        // lands - which reads as "the gate refused to open it" when it was a press on empty
+        // space. Require the point and its four neighbours at 8px.
+        const on = (px, py) =>
+          document.elementsFromPoint(px, py).some((el) => el.parentElement === p.parentElement);
+        if (on(x, y) && on(x - 8, y) && on(x + 8, y) && on(x, y - 8) && on(x, y + 8)) {
           const card = document.querySelectorAll('[data-window]')[i];
           out.push({ i, x, y, title: card?.dataset.title ?? null, href: card?.dataset.href ?? null });
           return;
@@ -135,10 +140,24 @@ for (const c of CASES) {
   const idle = await page.evaluate(state);
 
   const press = async (p) => {
+    // Which window is under the point AT THE MOMENT OF THE PRESS. The planet has a live
+    // micro-drift, so a point measured a few seconds ago can be off the sector by now -
+    // and "nothing opened" would then read as a refusal by the gate when it was really a
+    // press on empty space. Recorded so the two are never confused.
+    const under = await page.evaluate(([x, y]) => {
+      const svg = document.querySelector('svg[data-ring]');
+      const paths = [...svg.querySelectorAll('path.ring-window')];
+      const stack = document.elementsFromPoint(x, y);
+      for (const el of stack) {
+        const k = paths.findIndex((q) => q.parentElement === el.parentElement || q.parentElement === el);
+        if (k >= 0) return k;
+      }
+      return -1;
+    }, [p.x, p.y]);
     if (touch) await touch.tap(p.x, p.y);
     else await page.mouse.click(p.x, p.y);
     await wait(700);
-    return page.evaluate(state);
+    return { ...(await page.evaluate(state)), under };
   };
 
   // Desktop: the hover must reach the window before anything is clicked. This is the check

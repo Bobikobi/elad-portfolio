@@ -164,10 +164,31 @@ for (const c of CASES) {
   let panelHover = null;
   if (!base.error) {
     const box = await page.evaluate(() => {
-      const vis = [...document.querySelectorAll('svg[data-ring] path.ring-window')].filter((p) => p.getAttribute('d'));
+      // The bbox CENTRE of an annular sector is usually in the hole, and even when it is
+      // not, the top element there is the scroll container. Hover the shape itself: scan
+      // the bbox for a point whose elementsFromPoint stack contains a sibling of the body
+      // path, and require its neighbours at 8px too, because the planet drifts under the
+      // pointer. Hovering the centre reported an empty panel on a page whose hover works.
+      // A path can carry a `d` and still have no box - the ones scrolled off the fan do.
+      // Picking the middle of THOSE put the sample at (0,0), off the page entirely.
+      const vis = [...document.querySelectorAll('svg[data-ring] path.ring-window')].filter((p) => {
+        const r = p.getBoundingClientRect();
+        return p.getAttribute('d') && r.width && r.height;
+      });
       if (!vis.length) return null;
-      const r = vis[Math.floor(vis.length / 2)].getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      const p = vis[Math.floor(vis.length / 2)];
+      const r = p.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      const on = (x, y) => document.elementsFromPoint(x, y).some((el) => el.parentElement === p.parentElement);
+      for (let a = 1; a < 8; a++) {
+        for (let b = 1; b < 8; b++) {
+          const x = r.left + (r.width * a) / 8;
+          const y = r.top + (r.height * b) / 8;
+          if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
+          if (on(x, y) && on(x - 8, y) && on(x + 8, y) && on(x, y - 8) && on(x, y + 8)) return { x, y };
+        }
+      }
+      return null;
     });
     if (box) {
       await page.mouse.move(box.x, box.y);
