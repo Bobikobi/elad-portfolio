@@ -3,6 +3,7 @@ import { Mail } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import Link from 'next/link';
 import { GithubIcon, LinkedinIcon } from '@/components/ui/SocialIcons';
+import Wordmark from './Wordmark';
 
 const socials = [
   { icon: GithubIcon, href: 'https://github.com/Bobikobi', label: 'GitHub' },
@@ -20,12 +21,7 @@ export default function Footer() {
           mobile), with a small copyright + texture credit beneath. */}
       <div className="mx-auto max-w-[1200px] px-6 py-4">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span
-            className="text-xl font-bold tracking-wide text-[var(--color-text-primary)]"
-            style={{ fontFamily: "'Glamora', serif" }}
-          >
-            E.S
-          </span>
+          <Wordmark className="text-xl text-[var(--color-text-primary)]" />
 
           <div className="flex items-center gap-5 text-[13px] text-[var(--color-text-tertiary)]">
             <Link href="/accessibility" className="hover:text-[var(--color-text-secondary)] transition-colors">

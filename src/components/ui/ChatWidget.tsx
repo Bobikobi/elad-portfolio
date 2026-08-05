@@ -36,6 +36,14 @@ const LABELS = {
     ru: 'Привет! Я виртуальный помощник Элада 👋\nСпросите о проектах, навыках или контактах.',
   },
   error: { he: 'משהו השתבש, נסה שוב', en: 'Something went wrong, try again', ru: 'Что-то пошло не так' },
+  // Disclosure at the point of use, not only in the privacy policy: whatever is typed
+  // here leaves for a third-party model, and someone should be able to know that before
+  // they type it rather than by going looking for a legal page.
+  aiNotice: {
+    he: 'ההודעות מעובדות אצל ספק בינה מלאכותית כדי לייצר תשובה.',
+    en: 'Messages are processed by an AI provider to generate replies.',
+    ru: 'Сообщения обрабатываются провайдером ИИ для формирования ответа.',
+  },
   typing: { he: 'מקליד...', en: 'Typing...', ru: 'Печатает...' },
   // Graceful, specific failure states (R5.5) — a visitor should always know whether to
   // retry, wait, or just email instead.
@@ -127,8 +135,11 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
-    if (!turnstileToken) {
-      setMessages((prev) => [...prev, { role: 'assistant', text: t(turnstileSiteKey ? 'error' : 'errOffline') }]);
+    // The captcha is only a gate where it exists. Without a site key there is no widget to
+    // solve and no token to wait for, and the server carries the abuse load on its rate
+    // limits — blocking here would just make the chat unusable, which is what it did.
+    if (turnstileSiteKey && !turnstileToken) {
+      setMessages((prev) => [...prev, { role: 'assistant', text: t('error') }]);
       return;
     }
 
@@ -142,7 +153,7 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next, turnstileToken }),
+        body: JSON.stringify(turnstileSiteKey ? { messages: next, turnstileToken } : { messages: next }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -253,7 +264,7 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
             />
             <button
               onClick={sendMessage}
-              disabled={loading || !input.trim() || !turnstileToken}
+              disabled={loading || !input.trim() || (Boolean(turnstileSiteKey) && !turnstileToken)}
               aria-label="Send"
               className="chrome-btn p-2 rounded-xl border-[rgba(255,201,120,0.4)] bg-[rgba(255,201,120,0.14)] text-[var(--color-core-gold)] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
@@ -262,11 +273,13 @@ export default function ChatWidget({ locale }: ChatWidgetProps) {
           </div>
 
           <div className="px-3 pb-3">
-            {turnstileSiteKey ? (
-              <div ref={turnstileRef} className="min-h-[65px]" />
-            ) : (
-              <p className="text-xs text-[var(--color-star-white)]/50">{t('errOffline')}</p>
-            )}
+            <p className="mb-2 text-[11px] leading-snug text-[var(--color-star-white)]/45">
+              {t('aiNotice')}
+            </p>
+            {/* No site key, no captcha slot and no "switched off" line: the widget works,
+                the server just rate limits instead. errOffline stays reachable through
+                ERROR_LABEL for the case where the chat really is unconfigured. */}
+            {turnstileSiteKey && <div ref={turnstileRef} className="min-h-[65px]" />}
           </div>
         </div>
       )}

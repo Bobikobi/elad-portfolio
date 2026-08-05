@@ -9,6 +9,7 @@ import { useViewMode } from '@/lib/viewModeContext';
 import { useScene } from '@/lib/sceneStore';
 import { SWAP_V, COVER_PLATEAU, COVER_FALLOFF, coverageFor } from '@/lib/diveEnvelope';
 import { enteredOnAWorld } from '@/lib/entryRoute';
+import { localePath } from '@/lib/sections';
 import About from '@/components/sections/About';
 import Services from '@/components/sections/Services';
 import Projects from '@/components/sections/Projects';
@@ -25,7 +26,7 @@ const GALAXY_POSTER = '/images/galaxy/poster.webp';
  */
 function SeoContent() {
   const { t, locale } = useI18n();
-  const p = (s: string) => (locale === 'he' ? `/${s}` : `/${locale}/${s}`);
+  const p = (s: string) => localePath(s, locale);
   return (
     <div className="sr-only">
       <h1>{t('hero.name')}</h1>

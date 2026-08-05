@@ -65,6 +65,11 @@ const MAX_REQUESTS_PER_WINDOW = 10;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const BLOCK_DURATION_MS = 5 * 60_000;
 const RATE_LIMIT_WINDOW_SECONDS = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
+// A per-minute limit bounds a burst but not a slow grind: 10/min sustained is 14,400
+// upstream calls a day off one address. The daily cap is what actually protects the API
+// key from being drained. 60 messages a day is far past any real visitor's use.
+const MAX_REQUESTS_PER_DAY = 60;
+const DAY_MS = 86_400_000;
 
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -166,8 +171,34 @@ function checkRateLimitInMemory(key: string) {
   };
 }
 
+const dailyStore = new Map<string, { day: number; count: number }>();
+
+/**
+ * Per-address daily budget. Deliberately separate from the per-minute limiter: that one
+ * exists to stop a burst, this one exists to stop the API key being spent. It runs before
+ * the Redis path so the cap holds whether or not Upstash is configured.
+ */
+function checkDailyBudget(key: string, now: number) {
+  const day = Math.floor(now / DAY_MS);
+  const entry = dailyStore.get(key);
+
+  if (!entry || entry.day !== day) {
+    // Cheap ceiling on the map: a new day invalidates every entry anyway.
+    if (dailyStore.size > 5000) dailyStore.clear();
+    dailyStore.set(key, { day, count: 1 });
+    return { allowed: true };
+  }
+
+  entry.count += 1;
+  return { allowed: entry.count <= MAX_REQUESTS_PER_DAY };
+}
+
 async function checkRateLimit(key: string) {
   const now = Date.now();
+
+  if (!checkDailyBudget(key, now).allowed) {
+    return { allowed: false, remaining: 0, resetMs: DAY_MS - (now % DAY_MS) };
+  }
 
   if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
     const bucket = Math.floor(now / RATE_LIMIT_WINDOW_MS);
@@ -231,11 +262,20 @@ function validateRequestSource(req: NextRequest) {
   return matchesAllowedHost(origin) || matchesAllowedHost(referer);
 }
 
+/**
+ * Turnstile is optional infrastructure, not a precondition for the widget existing.
+ * When no secret is configured the captcha stage is skipped entirely and the rate limits
+ * carry the anti-abuse load; when a secret IS configured the check is mandatory and a
+ * missing or bad token is refused. What must never happen is the previous behaviour:
+ * production with no secret rejected every message, so the widget was dead site-wide.
+ */
+function isTurnstileConfigured() {
+  return Boolean(process.env.TURNSTILE_SECRET_KEY);
+}
+
 async function verifyTurnstileToken(token: string, ip: string) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) {
-    return process.env.NODE_ENV !== 'production';
-  }
+  if (!secret) return false;
 
   const formData = new FormData();
   formData.append('secret', secret);
@@ -279,6 +319,10 @@ const KIMI_API_KEY = process.env.KIMI_API_KEY;
 const KIMI_BASE_URL = process.env.KIMI_BASE_URL ?? 'https://api.moonshot.ai/v1';
 const KIMI_MODEL = process.env.KIMI_MODEL ?? 'kimi-k2-0905-preview';
 const UPSTREAM_TIMEOUT_MS = 20_000;
+// 400 was cutting answers off mid-word in production. It is a budget for the WHOLE
+// response, and on a thinking model the reasoning is spent from it first, so a visitor
+// asking an open question got a sentence that simply stopped.
+const MAX_OUTPUT_TOKENS = 900;
 
 type ChatTurn = { role?: unknown; text?: unknown };
 
@@ -293,7 +337,7 @@ async function askKimi(messages: ChatTurn[]): Promise<string> {
       { role: 'system', content: SYSTEM_PROMPT },
       ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: asText(m) })),
     ],
-    max_tokens: 400,
+    max_tokens: MAX_OUTPUT_TOKENS,
     temperature: 0.7,
   };
   try {
@@ -310,6 +354,10 @@ async function askKimi(messages: ChatTurn[]): Promise<string> {
       console.error(`[chat] kimi ${res.status}`, String(data?.error?.message ?? '').slice(0, 120));
       return '';
     }
+    if (data?.choices?.[0]?.finish_reason === 'length') {
+      // Visible in the logs rather than only in a screenshot of a half-finished sentence.
+      console.warn('[chat] kimi hit the token ceiling — answer was truncated');
+    }
     return String(data?.choices?.[0]?.message?.content ?? '').trim();
   } catch (e) {
     console.error('[chat] kimi request failed', e instanceof Error ? e.name : 'unknown');
@@ -317,7 +365,7 @@ async function askKimi(messages: ChatTurn[]): Promise<string> {
   }
 }
 
-/** Gemini fallback — used only when no Kimi key is configured. */
+/** Gemini — the fallback, and the provider actually answering today. */
 async function askGemini(messages: ChatTurn[]): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return '';
@@ -333,7 +381,15 @@ async function askGemini(messages: ChatTurn[]): Promise<string> {
             role: m.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: asText(m) }],
           })),
-          generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
+          generationConfig: {
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+            temperature: 0.7,
+            // gemini-2.5-flash is a thinking model and its reasoning is billed against
+            // maxOutputTokens before a single visible word is produced. A portfolio
+            // widget answering "what does Elad build" needs none of it, and leaving it on
+            // is what starved the reply and cut it off mid-word.
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
         cache: 'no-store',
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
@@ -344,7 +400,16 @@ async function askGemini(messages: ChatTurn[]): Promise<string> {
       console.error(`[chat] gemini ${res.status}`, String(data?.error?.message ?? '').slice(0, 120));
       return '';
     }
-    return String(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim();
+    const candidate = data?.candidates?.[0];
+    if (candidate?.finishReason === 'MAX_TOKENS') {
+      console.warn('[chat] gemini hit the token ceiling — answer was truncated');
+    }
+    // The text can arrive split across several parts; joining them is not optional.
+    const parts = candidate?.content?.parts;
+    if (Array.isArray(parts)) {
+      return parts.map((p: { text?: unknown }) => String(p?.text ?? '')).join('').trim();
+    }
+    return '';
   } catch (e) {
     console.error('[chat] gemini request failed', e instanceof Error ? e.name : 'unknown');
     return '';
@@ -386,25 +451,32 @@ export async function POST(req: NextRequest) {
       return jsonWithRateHeaders({ error: 'invalid_input' }, { status: 400 }, rateInfo);
     }
 
-    if (typeof turnstileToken !== 'string' || turnstileToken.length < 10) {
-      return jsonWithRateHeaders({ error: 'captcha_missing' }, { status: 400 }, rateInfo);
-    }
+    if (isTurnstileConfigured()) {
+      if (typeof turnstileToken !== 'string' || turnstileToken.length < 10) {
+        return jsonWithRateHeaders({ error: 'captcha_missing' }, { status: 400 }, rateInfo);
+      }
 
-    const turnstileOk = await verifyTurnstileToken(turnstileToken, ip);
-    if (!turnstileOk) {
-      return jsonWithRateHeaders({ error: 'captcha_failed' }, { status: 403 }, rateInfo);
+      const turnstileOk = await verifyTurnstileToken(turnstileToken, ip);
+      if (!turnstileOk) {
+        return jsonWithRateHeaders({ error: 'captcha_failed' }, { status: 403 }, rateInfo);
+      }
     }
 
     const trimmed = (messages as { role?: unknown; text?: unknown }[]).slice(-MAX_MESSAGES);
 
-    // Kimi is the primary model; Gemini stays wired as a fallback so the widget keeps
-    // working on any deployment that has not been given a Kimi key yet.
-    const provider = KIMI_API_KEY ? 'kimi' : process.env.GEMINI_API_KEY ? 'gemini' : null;
-    if (!provider) {
+    // Kimi is the primary model and Gemini is the fallback — at RUNTIME, not only at
+    // configuration time. Choosing the provider by which key exists meant a Kimi key that
+    // was expired, revoked, or simply wrong took the whole widget down while a working
+    // Gemini key sat right there unused. A provider that fails must degrade, not decide.
+    if (!KIMI_API_KEY && !process.env.GEMINI_API_KEY) {
       return jsonWithRateHeaders({ error: 'not_configured' }, { status: 503 }, rateInfo);
     }
 
-    const text = provider === 'kimi' ? await askKimi(trimmed) : await askGemini(trimmed);
+    let text = KIMI_API_KEY ? await askKimi(trimmed) : '';
+    if (!text && process.env.GEMINI_API_KEY) {
+      if (KIMI_API_KEY) console.warn('[chat] kimi returned nothing — falling back to gemini');
+      text = await askGemini(trimmed);
+    }
     if (!text) {
       return jsonWithRateHeaders({ error: 'upstream_unavailable' }, { status: 502 }, rateInfo);
     }

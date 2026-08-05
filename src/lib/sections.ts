@@ -1,4 +1,7 @@
-import type { Locale } from './i18n';
+// Locale comes straight from translations, not from i18n: i18n now imports
+// localeForPath from here, and pointing back at i18n would be a cycle (harmless while
+// the import is type-only, but only one edit away from not being).
+import type { Locale } from './translations';
 
 /**
  * The cosmic sections — each is a real crawlable route AND a planet/target the
@@ -36,23 +39,115 @@ export const PLANET_SECTION: Record<string, SectionId> = {
   mars: 'contact',
 };
 
-/** Locale-aware path for a section ('/about' for he, '/en/about' for en/ru). */
+/**
+ * F3 — English is the default locale and owns the un-prefixed URL space; Hebrew and
+ * Russian are prefixed. Every locale-aware link in the app goes through the three
+ * helpers below rather than re-deriving the rule, because an inline copy of it is
+ * exactly what silently rots when the default changes.
+ */
+const PREFIXED_LOCALES: readonly Locale[] = ['he', 'ru'];
+const isPrefixedLocale = (v: string): v is Locale => (PREFIXED_LOCALES as readonly string[]).includes(v);
+
+/** Locale-aware path for a section ('/about' for en, '/he/about' for he/ru). */
 export function sectionPath(section: SectionId, locale: Locale): string {
-  return locale === 'he' ? `/${section}` : `/${locale}/${section}`;
+  return locale === 'en' ? `/${section}` : `/${locale}/${section}`;
 }
 
 /** Home path per locale. */
 export function homePath(locale: Locale): string {
-  return locale === 'he' ? '/' : `/${locale}`;
+  return locale === 'en' ? '/' : `/${locale}`;
+}
+
+/** Locale-aware path for any slug below the root ('/services/x' or '/he/services/x'). */
+export function localePath(slug: string, locale: Locale): string {
+  const clean = slug.replace(/^\//, '');
+  return locale === 'en' ? `/${clean}` : `/${locale}/${clean}`;
+}
+
+/**
+ * Route roots that exist in all three languages, so an un-prefixed one means English.
+ */
+const LOCALIZED_ROOTS: ReadonlySet<string> = new Set(SECTIONS.map((s) => s.slug));
+
+/**
+ * Hand-written Hebrew-only subtrees: no English or Russian counterpart exists, so they
+ * keep their indexed un-prefixed URLs and are pinned to Hebrew rather than inheriting
+ * the English default. Exported because proxy.ts resolves the same question on the
+ * server and a second copy of this list is a divergence waiting to happen.
+ */
+export const HEBREW_ONLY_PREFIXES = ['/guides'] as const;
+
+/** The same pathname re-pointed at another locale, used by the language switcher. */
+export function switchLocalePath(pathname: string, locale: Locale): string {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length && isPrefixedLocale(parts[0])) parts.shift();
+  if (!parts.length) return homePath(locale);
+  // A single-URL route stays put: pushing /he/privacy would be a 404, and before F3
+  // the same line 404'd on /en/privacy — it was simply invisible while Hebrew, the
+  // primary audience, happened to be the un-prefixed default.
+  if (!LOCALIZED_ROOTS.has(parts[0])) return pathname;
+  return localePath(parts.join('/'), locale);
+}
+
+/**
+ * The locale a pathname PINS, or null when the route serves every language from one URL
+ * and therefore has to follow the visitor's stored preference instead.
+ *
+ * This is the single rule for "what language is this URL", and both the server (proxy.ts)
+ * and the client (i18n resolveLocale, LocaleRouteSync) answer the question through it.
+ *
+ * Two things it has to get right, both learned by measuring rather than reasoning:
+ *
+ * 1. The un-prefixed answer is 'en', not "no answer". A sync that only recognises
+ *    PREFIXED segments can correct the UI toward Hebrew or Russian but never back to the
+ *    default, so choosing English from /ru/about left <html lang="ru"> on English content.
+ *
+ * 2. A pinned route beats a stored preference, because on these routes the CONTENT is not
+ *    negotiable: /about renders <SectionPage locale="en" /> decided by the route file on
+ *    the server. A stored 'ru' could only ever repaint the chrome around it, which is how
+ *    /about came to render a Russian navbar over an English page. Only the URL can decide
+ *    a route whose body the URL already decided.
+ */
+export function localeForPath(pathname: string): Locale | null {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length && isPrefixedLocale(parts[0])) return parts[0];
+  if (HEBREW_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'he';
+  if (!parts.length) return 'en';
+  return LOCALIZED_ROOTS.has(parts[0]) ? 'en' : null;
 }
 
 /** Map a pathname to the focused section (or null for home / unknown routes). */
 export function sectionForPath(pathname: string): Section | null {
   const parts = pathname.split('/').filter(Boolean);
   // Drop a leading locale segment.
-  const seg = parts[0] === 'en' || parts[0] === 'ru' ? parts[1] : parts[0];
+  const seg = parts.length && isPrefixedLocale(parts[0]) ? parts[1] : parts[0];
   if (!seg) return null;
   return BY_SLUG.get(seg) ?? null;
+}
+
+/**
+ * Does this route get the live WebGL cosmos at all?
+ *
+ * Exactly six routes do: home in each locale, and the five planet-world section routes.
+ * Everything else - the legal pages, the guides, the service pages, 404 - is long-form
+ * reading and gets a plain background.
+ *
+ * This exists because both the layout and the canvas mount used to answer that question
+ * separately, and one of them dropped the route half: the layout knew /privacy was not
+ * immersive while CosmicStage only checked the view mode, so the galaxy rendered behind
+ * the privacy policy in production and every content route paid for a running scene. One
+ * predicate, imported by both, is the only way that stays true.
+ */
+export function isImmersiveRoute(pathname: string): boolean {
+  const parts = pathname.split('/').filter(Boolean);
+  const rest = parts.length && isPrefixedLocale(parts[0]) ? parts.slice(1) : parts;
+  // Home, in any locale.
+  if (rest.length === 0) return true;
+  // Deliberately NOT sectionForPath(), which matches on the first segment alone and so
+  // answers "yes" for /services/nextjs-development and every other service sub-page.
+  // Those are long-form reading, not worlds. Exactly one segment, and it must be a section.
+  if (rest.length > 1) return false;
+  return BY_SLUG.has(rest[0]);
 }
 
 /** Per-section, per-locale SEO title + description (Hebrew is primary). */
@@ -98,7 +193,7 @@ export function sectionMetadata(id: SectionId, locale: Locale) {
         'he-IL': `${BASE}${sectionPath(id, 'he')}`,
         'en-US': `${BASE}${sectionPath(id, 'en')}`,
         'ru-RU': `${BASE}${sectionPath(id, 'ru')}`,
-        'x-default': `${BASE}${sectionPath(id, 'he')}`,
+        'x-default': `${BASE}${sectionPath(id, 'en')}`,
       },
     },
   };

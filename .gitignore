@@ -80,3 +80,8 @@ tsconfig.check.json
 
 # harness output (screenshots + measurement reports)
 .harness-out/
+
+# One package manager. The lockfile is pnpm-lock.yaml; an npm or yarn install here
+# would build a second, divergent dependency tree from the same package.json.
+package-lock.json
+yarn.lock
