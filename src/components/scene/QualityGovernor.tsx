@@ -103,6 +103,23 @@ function forcedHz(): number | null {
  * tier still look right" was a question nobody could answer with a screenshot. Judging a
  * cost knob by eye requires being able to hold the tier still.
  */
+/**
+ * `?fpsTarget=20` lowers the bar the governor judges against. Ignored in production.
+ *
+ * The promotion path is now THE mechanism, and it can only be observed on a machine with
+ * headroom — which this development box is not: it renders the cosmic home at a steady
+ * 30fps against a 60 target, so it correctly never promotes and the path stays unproven.
+ * "Correctly never fires" and "cannot fire" produce identical evidence, and that ambiguity
+ * is exactly how a knob silently stops being wired. Lowering the target turns any machine
+ * into a machine with headroom for one run.
+ */
+function forcedTarget(): number | null {
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV === 'production') return null;
+  if (typeof window === 'undefined') return null;
+  const v = Number(new URLSearchParams(window.location.search).get('fpsTarget'));
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
 function forcedTier(): Quality | null {
   if (process.env.NEXT_PUBLIC_VERCEL_ENV === 'production') return null;
   if (typeof window === 'undefined') return null;
@@ -153,7 +170,7 @@ export default function QualityGovernor() {
         const p10 = sorted[Math.floor(sorted.length * 0.1)];
         const measured = forcedHz() ?? (enough ? snapRate(1 / p10) : ASSUMED_HZ);
         const pacing = measured >= SMOOTH_HZ_MIN ? 'smooth' : 'even';
-        targetFps.current = pacing === 'smooth' ? measured : EVEN_TARGET;
+        targetFps.current = forcedTarget() ?? (pacing === 'smooth' ? measured : EVEN_TARGET);
         decided.current = true;
         samples.current.length = 0;
         setDisplayHz(measured);

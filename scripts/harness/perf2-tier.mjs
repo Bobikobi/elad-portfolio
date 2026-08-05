@@ -24,6 +24,10 @@ const BASE = process.env.BASE;
 const BYPASS = process.env.BYPASS || '';
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const ROUTE = process.env.ROUTE || '/';
+// FPS_TARGET lowers the governor's bar so the promotion path can be exercised on a box
+// with no headroom. It proves the MECHANISM fires; it says nothing about assignment on a
+// real machine, which is why the strong run still has to happen on one.
+const FPS_TARGET = process.env.FPS_TARGET || '';
 const THROTTLE = Number(process.env.THROTTLE || 1);
 const WATCH_MS = Number(process.env.WATCH_MS || 35000);
 const OUT = process.env.OUT || path.join(process.cwd(), '.harness-out', 'perf2');
@@ -46,7 +50,8 @@ const cdp = await page.createCDPSession();
 if (THROTTLE > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
 
 const t0 = Date.now();
-await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+const url = `${BASE}${ROUTE}${FPS_TARGET ? `?fpsTarget=${FPS_TARGET}` : ''}`;
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
 const samples = [];
 while (Date.now() - t0 < WATCH_MS) {
