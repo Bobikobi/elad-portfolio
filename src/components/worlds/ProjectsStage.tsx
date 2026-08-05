@@ -122,6 +122,11 @@ export default function ProjectsStage({
     // Written by the layout pass, read by the focus handlers below.
     const pitchRef = { current: 1 };
     const hovered = { current: -1 };
+    // A coarse pointer has no hover, so a tap has to do two jobs: say which window this is,
+    // and then enter it. `tapped` is the window the first tap armed. It cannot be `hovered`
+    // - a touch tap fires pointerenter AND pointerleave in the same sequence, so hover state
+    // is gone before the second tap arrives.
+    const tapped = { current: -1 };
     const axisRef = { current: 'y' as 'x' | 'y' };
     const shownActive = { current: -2 };
     const centreOffsetRef = { current: 0 };
@@ -143,6 +148,12 @@ export default function ProjectsStage({
     const hits: SVGGElement[] = [];
     const clips: Array<SVGPathElement | null> = [];
     const marks: Array<SVGTextElement | null> = [];
+    const lights: Array<(on: boolean) => void> = [];
+    /** Give up the armed window: it goes dark and the panel falls back to the centred one. */
+    const disarm = () => {
+      if (tapped.current >= 0) lights[tapped.current]?.(false);
+      tapped.current = -1;
+    };
     cards.forEach((card, i) => {
       const grad = document.createElementNS(SVG_NS, 'linearGradient');
       grad.setAttribute('id', `ring-accent-${i}`);
@@ -235,8 +246,11 @@ export default function ProjectsStage({
         accent.classList.toggle('is-hot', on);
         photo?.classList.toggle('is-hot', on);
       };
-      const onEnter = () => { hot(true); hovered.current = i; };
-      const onLeave = () => { hot(false); if (hovered.current === i) hovered.current = -1; };
+      lights.push(hot);
+      // An armed window stays lit after the finger lifts - it is the one the panel is
+      // describing, and going dark would leave the visitor with text and no idea which
+      // picture it belongs to.
+      const onLeave = () => { if (tapped.current !== i) hot(false); if (hovered.current === i) hovered.current = -1; };
       const onFocus = () => {
         hot(true);
         hovered.current = i;
@@ -252,22 +266,96 @@ export default function ProjectsStage({
             : { top: target, behavior: 'smooth' }
         );
       };
-      const onOpen = () => {
-        const href = card.dataset.href;
-        if (href) window.open(href, '_blank', 'noopener,noreferrer');
-      };
-      hitG.addEventListener('pointerenter', onEnter);
-      hitG.addEventListener('pointerleave', onLeave);
-      hitG.addEventListener('click', onOpen);
       card.addEventListener('focusin', onFocus);
       card.addEventListener('focusout', onLeave);
       unbind.push(() => {
-        hitG.removeEventListener('pointerenter', onEnter);
-        hitG.removeEventListener('pointerleave', onLeave);
-        hitG.removeEventListener('click', onOpen);
         card.removeEventListener('focusin', onFocus);
         card.removeEventListener('focusout', onLeave);
       });
+    });
+
+    // --- Pointer input. It arrives at the SCROLL CONTAINER, not at the shapes. ---
+    //
+    // The list is sized to the fan's bounding box and painted after the svg, so it covers
+    // every window: a listener on the hit group never fires, whatever pointer-events say.
+    // That is not a stacking bug to be fixed by re-ordering - the container has to keep
+    // receiving wheel and touch-drag, which is how the ring scrolls at all - so the shapes
+    // are hit-tested here instead, off the same coordinates, and the sector stays the
+    // exact hit area it was drawn as.
+    //
+    // Measured before this existed, on production and locally at 1440x900: hovering a
+    // window left the panel empty and clicking one did nothing at all.
+
+    /** The window under a viewport point, or -1. elementsFromPoint returns the whole stack,
+     *  so the covering container does not hide what is beneath it. */
+    const windowAt = (x: number, y: number) => {
+      for (const el of document.elementsFromPoint(x, y)) {
+        const own = hits.indexOf(el as SVGGElement);
+        if (own >= 0) return own;
+        // The photo, the body, the accent and the monogram are all children of the group.
+        const parent = hits.indexOf(el.parentElement as unknown as SVGGElement);
+        if (parent >= 0) return parent;
+      }
+      return -1;
+    };
+
+    const setHover = (i: number) => {
+      if (hovered.current === i) return;
+      const was = hovered.current;
+      if (was >= 0 && was !== tapped.current) lights[was]?.(false);
+      hovered.current = i;
+      if (i >= 0) lights[i]?.(true);
+      list.style.cursor = i >= 0 ? 'pointer' : '';
+    };
+
+    const activate = (i: number, coarse: boolean) => {
+      // First tap on a coarse pointer names the window instead of entering it: a phone has
+      // no hover, so without this the visitor leaves for a URL that nothing on the page
+      // ever described. Second tap on the same window enters. A mouse is unaffected.
+      if (coarse && tapped.current !== i) {
+        disarm();
+        tapped.current = i;
+        lights[i]?.(true);
+        return;
+      }
+      const href = cards[i]?.dataset.href;
+      if (href) window.open(href, '_blank', 'noopener,noreferrer');
+    };
+
+    // Which device produced THIS press, read off the event rather than a media query - for
+    // the same reason `mouseSeen` exists above. A `click` carries no pointerType of its own,
+    // so it is recorded on the press that precedes it.
+    let coarse = false;
+    let downX = 0;
+    let downY = 0;
+    const onListDown = (e: PointerEvent) => {
+      coarse = e.pointerType === 'touch' || e.pointerType === 'pen';
+      downX = e.clientX;
+      downY = e.clientY;
+    };
+    const onListMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return;
+      setHover(windowAt(e.clientX, e.clientY));
+    };
+    const onListLeave = () => setHover(-1);
+    const onListClick = (e: MouseEvent) => {
+      // A drag that ends on a window is a scroll, not a choice. Chromium suppresses the
+      // click after a touch scroll but not after a mouse drag, and 10px is below what a
+      // deliberate tap moves.
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 10) return;
+      const i = windowAt(e.clientX, e.clientY);
+      if (i >= 0) activate(i, coarse);
+    };
+    list.addEventListener('pointerdown', onListDown, { passive: true });
+    list.addEventListener('pointermove', onListMove, { passive: true });
+    list.addEventListener('pointerleave', onListLeave);
+    list.addEventListener('click', onListClick);
+    unbind.push(() => {
+      list.removeEventListener('pointerdown', onListDown);
+      list.removeEventListener('pointermove', onListMove);
+      list.removeEventListener('pointerleave', onListLeave);
+      list.removeEventListener('click', onListClick);
+      list.style.cursor = '';
     });
 
     // The ring's own scrollbar (B8c): a rail concentric with the windows, outside them, so
@@ -370,6 +458,7 @@ export default function ProjectsStage({
     const SCROLL_TAU = 0.085; // seconds to 1/e — quick enough not to feel like lag
     let shown = 0;
     let lastT = 0;
+    let lastRaw = 0;
     const update = (force = false) => {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
@@ -383,6 +472,11 @@ export default function ProjectsStage({
       // in an RTL container in every current engine, hence the abs.
       const raw = m.portrait ? Math.abs(list.scrollLeft) : list.scrollTop;
       const target = clamp(raw, 0, span0);
+      // Swiping the fan gives up the armed window. Otherwise a tap meant for whatever is
+      // under the finger NOW would enter a project that scrolled off the fan three windows
+      // ago. The 4px floor is there so the jitter of the tap itself does not disarm it.
+      if (tapped.current >= 0 && Math.abs(raw - lastRaw) > 4) disarm();
+      lastRaw = raw;
       if (force || reduce) shown = target;
       else {
         shown += (target - shown) * (1 - Math.exp(-dt / SCROLL_TAU));
@@ -514,7 +608,17 @@ export default function ProjectsStage({
       // focused one when there is a pointer, and otherwise the one at the centre of the
       // fan: a phone has no hover, and twelve pictures with no way to learn what any of
       // them is would be the whole design's failure mode.
-      const active = hovered.current >= 0 ? hovered.current : mouseSeen ? -1 : centred;
+      // ...or, on a coarse pointer, the window a first tap armed - that tap's whole purpose
+      // is to put its own project in this panel, and the centred fallback would otherwise
+      // describe a different one.
+      const active =
+        hovered.current >= 0
+          ? hovered.current
+          : mouseSeen
+            ? -1
+            : tapped.current >= 0
+              ? tapped.current
+              : centred;
       if (active !== shownActive.current) {
         shownActive.current = active;
         const src = active >= 0 ? cards[active] : null;
