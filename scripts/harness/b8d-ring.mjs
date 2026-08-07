@@ -161,18 +161,58 @@ for (const c of CASES) {
   await page.screenshot({ path: path.join(OUT, `${c.name}.png`) });
 
   // Hover the middle visible window and check the panel follows it.
+  //
+  // The sweep above leaves the ring DAMPED and still travelling. Choosing a point while it
+  // moves put the cursor where a window had been a moment earlier, and the panel - which now
+  // re-hit-tests under a parked cursor - correctly showed nothing, which read as a broken
+  // hover. Let the ring settle first, and record what is under the cursor AT READ TIME so a
+  // pass cannot be claimed on a pointer that is over empty space.
   let panelHover = null;
   if (!base.error) {
+    await new Promise((r) => setTimeout(r, 1800));
     const box = await page.evaluate(() => {
-      const vis = [...document.querySelectorAll('svg[data-ring] path.ring-window')].filter((p) => p.getAttribute('d'));
+      // The bbox CENTRE of an annular sector is usually in the hole, and even when it is
+      // not, the top element there is the scroll container. Hover the shape itself: scan
+      // the bbox for a point whose elementsFromPoint stack contains a sibling of the body
+      // path, and require its neighbours at 8px too, because the planet drifts under the
+      // pointer. Hovering the centre reported an empty panel on a page whose hover works.
+      // A path can carry a `d` and still have no box - the ones scrolled off the fan do.
+      // Picking the middle of THOSE put the sample at (0,0), off the page entirely.
+      const vis = [...document.querySelectorAll('svg[data-ring] path.ring-window')].filter((p) => {
+        const r = p.getBoundingClientRect();
+        return p.getAttribute('d') && r.width && r.height;
+      });
       if (!vis.length) return null;
-      const r = vis[Math.floor(vis.length / 2)].getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      const p = vis[Math.floor(vis.length / 2)];
+      const r = p.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      const on = (x, y) => document.elementsFromPoint(x, y).some((el) => el.parentElement === p.parentElement);
+      for (let a = 1; a < 8; a++) {
+        for (let b = 1; b < 8; b++) {
+          const x = r.left + (r.width * a) / 8;
+          const y = r.top + (r.height * b) / 8;
+          if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
+          if (on(x, y) && on(x - 8, y) && on(x + 8, y) && on(x, y - 8) && on(x, y + 8)) return { x, y };
+        }
+      }
+      return null;
     });
     if (box) {
       await page.mouse.move(box.x, box.y);
       await new Promise((r) => setTimeout(r, 600));
       panelHover = await page.evaluate(panelCheck);
+      panelHover.under = await page.evaluate(([x, y]) => {
+        const paths = [...document.querySelectorAll('svg[data-ring] path.ring-window')];
+        const cards = document.querySelectorAll('[data-window]');
+        for (const el of document.elementsFromPoint(x, y)) {
+          const k = paths.findIndex((q) => q.parentElement === el.parentElement || q.parentElement === el);
+          if (k >= 0) return cards[k]?.dataset.title ?? null;
+        }
+        return null;
+      }, [box.x, box.y]);
+      panelHover.followsCursor = panelHover.under === null
+        ? panelHover.text === ''
+        : panelHover.under.startsWith(panelHover.text) && panelHover.text !== '';
       await page.screenshot({ path: path.join(OUT, `${c.name}-hover.png`) });
     }
   }
@@ -190,6 +230,7 @@ for (const [k, v] of Object.entries(report)) {
     `major=${v.ringMajorDeg}/${v.planeMajorDeg} fan=${v.fanUpDeg}/${v.fanDownDeg} ` +
     `win>=${v.sweep.minWindowsDuringSweep} top=${v.sweep.minWindowTop}>nav${v.sweep.navBottom}=${v.sweep.clearsNavbar} ` +
     `hdrHits=${v.sweep.headerOverlaps} painted=${v.paintedTextBoxes} inDom=${v.cardsWithCopyInDom} ` +
-    `panel="${v.panelIdle.text}"->"${v.panelHover ? v.panelHover.text : '-'}"`
+    `panel="${v.panelIdle.text}"->"${v.panelHover ? v.panelHover.text : '-'}" ` +
+    `follows=${v.panelHover ? v.panelHover.followsCursor : '-'} under="${v.panelHover ? v.panelHover.under : '-'}"`
   );
 }
