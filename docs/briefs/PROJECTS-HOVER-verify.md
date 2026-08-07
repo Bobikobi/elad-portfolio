@@ -106,3 +106,75 @@ reason to measure it rather than assume.
   synthetic-click behaviour after a `touchend` is not covered by any of it.
 - **The overlay-follows-the-pointer question is still open** - see the end of the brief. What
   is measured here is the panel parked on the planet, which is what the site does today.
+
+---
+
+## ROUND 2 - the review's two findings, and the owner's ruling on the panel
+
+Re-measured 2026-08-07 on the same branch alias, now serving deployment
+`elad-portfolio-cvgfr3v7z`, built from commit `060fc61` - confirmed by asking Vercel for the
+deployment whose `githubCommitSha` is that commit, rather than by matching a string in a
+chunk. (The first attempt watched for a local variable name; minification renames those, so
+the watcher would have waited forever on a build that had already shipped.)
+
+`060fc61` is the merge of `origin/master` into this branch - master had moved on with PR #32
+(PERF-2 and the em-dash pass). One conflict, in a comment line, resolved by keeping both
+sides' meaning.
+
+### The two P2s from the code review, both correct, both fixed
+
+| finding | measured before | after |
+|---|---|---|
+| **hover goes stale when the ring scrolls under a parked cursor** - `hovered` was only recomputed on `pointermove` | cursor parked on a window, fan scrolled 220px: panel still named `"Yaar Ad…"` while `"CEOS…"` was under the cursor | panel names `"CEOS…"` - the window actually under the cursor. `rehover=true` |
+| **the armed tap lost to the mouse fallback on a hybrid** - `mouseSeen` was tested before `tapped` | a real mouse move, then a touch tap: panel empty, first tap gave no feedback at all | panel names the tapped project. `hybrid=true arm=true` at 1440x900 with both inputs |
+
+The re-hit-test runs against the **damped** ring position, not the container's `scrollTop`.
+The raw value jumps in a single frame while the windows are still travelling, so testing it
+ran the hit test once, before anything had moved, and found the same window - measured that
+way first, and it read as a pass.
+
+A mouse that MOVES now also gives the panel back from an armed tap, so on a hybrid the two
+inputs cannot both hold it.
+
+### The owner's ruling: the panel travels along the disc
+
+The words stay on the planet and slide along it toward the window they describe, damped at
+`SLIDE_TAU = 0.16s` against the ring's `0.085s` - they are read while they move.
+
+| | measured, 1440x900 |
+|---|---|
+| travel between the centred window and a hovered one | **162.1px** on the alias (168.7 local, 170.8 on an earlier build - it tracks the live limb, so it is not a fixed number) |
+| still on the disc | **true** - within `0.45R` of the planet's centre plus the panel's own half-height |
+| the panel clears the navbar | **true**, 7/7 cases |
+| inside the viewport | **true**, 7/7 cases |
+
+Bounded by the window's position **within the fan**, not by its distance from the disc's
+centre: at 1440x900 the whole fan hangs below the centre, so clamping the raw distance
+pinned every window to the same bound and the panel travelled **0.8px** between two windows
+130px apart. That was the first implementation, and the harness caught it.
+
+### Ring geometry, unchanged by any of it
+
+Same harness, same 7 cases, alias at `060fc61`: `axisRatio` **0.498/0.498**, `major`
+**-34.4x**, `fan` **35/5.8** landscape and **20.8/20.8** portrait, painted text boxes **0**,
+copy in DOM **12**. Identical to the production control.
+
+### A third instrument defect, found and fixed this round
+
+`b8d-ring.mjs` chose its hover point **immediately after the scroll sweep**, while the ring
+was still damped and travelling. The cursor landed where a window had been a moment earlier,
+and the panel - which now correctly re-hit-tests under a parked cursor - showed nothing. The
+harness reported `panel -> ""` on three desktop cases and it looked exactly like a broken
+hover. It now lets the ring settle first, **and records which window is under the cursor at
+read time**, so a pass cannot be claimed for a pointer sitting over empty space:
+`follows=true` in **7 of 7** cases, each against the window actually under the cursor.
+
+That is the third harness defect in this stage, after the `parentElement.contains` false
+positive and the bounding-box-centre sample. All three reported confidently.
+
+### Still not covered
+
+Everything listed at the end of round 1 stands. Added: **how far the panel should travel is
+a judgement, not a measurement.** 162px between two windows is what the current bound gives;
+whether that reads as "following the window" or as "too much movement" is for the owner to
+say on the live preview.

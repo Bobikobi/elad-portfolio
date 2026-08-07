@@ -161,8 +161,15 @@ for (const c of CASES) {
   await page.screenshot({ path: path.join(OUT, `${c.name}.png`) });
 
   // Hover the middle visible window and check the panel follows it.
+  //
+  // The sweep above leaves the ring DAMPED and still travelling. Choosing a point while it
+  // moves put the cursor where a window had been a moment earlier, and the panel - which now
+  // re-hit-tests under a parked cursor - correctly showed nothing, which read as a broken
+  // hover. Let the ring settle first, and record what is under the cursor AT READ TIME so a
+  // pass cannot be claimed on a pointer that is over empty space.
   let panelHover = null;
   if (!base.error) {
+    await new Promise((r) => setTimeout(r, 1800));
     const box = await page.evaluate(() => {
       // The bbox CENTRE of an annular sector is usually in the hole, and even when it is
       // not, the top element there is the scroll container. Hover the shape itself: scan
@@ -194,6 +201,18 @@ for (const c of CASES) {
       await page.mouse.move(box.x, box.y);
       await new Promise((r) => setTimeout(r, 600));
       panelHover = await page.evaluate(panelCheck);
+      panelHover.under = await page.evaluate(([x, y]) => {
+        const paths = [...document.querySelectorAll('svg[data-ring] path.ring-window')];
+        const cards = document.querySelectorAll('[data-window]');
+        for (const el of document.elementsFromPoint(x, y)) {
+          const k = paths.findIndex((q) => q.parentElement === el.parentElement || q.parentElement === el);
+          if (k >= 0) return cards[k]?.dataset.title ?? null;
+        }
+        return null;
+      }, [box.x, box.y]);
+      panelHover.followsCursor = panelHover.under === null
+        ? panelHover.text === ''
+        : panelHover.under.startsWith(panelHover.text) && panelHover.text !== '';
       await page.screenshot({ path: path.join(OUT, `${c.name}-hover.png`) });
     }
   }
@@ -211,6 +230,7 @@ for (const [k, v] of Object.entries(report)) {
     `major=${v.ringMajorDeg}/${v.planeMajorDeg} fan=${v.fanUpDeg}/${v.fanDownDeg} ` +
     `win>=${v.sweep.minWindowsDuringSweep} top=${v.sweep.minWindowTop}>nav${v.sweep.navBottom}=${v.sweep.clearsNavbar} ` +
     `hdrHits=${v.sweep.headerOverlaps} painted=${v.paintedTextBoxes} inDom=${v.cardsWithCopyInDom} ` +
-    `panel="${v.panelIdle.text}"->"${v.panelHover ? v.panelHover.text : '-'}"`
+    `panel="${v.panelIdle.text}"->"${v.panelHover ? v.panelHover.text : '-'}" ` +
+    `follows=${v.panelHover ? v.panelHover.followsCursor : '-'} under="${v.panelHover ? v.panelHover.under : '-'}"`
   );
 }
