@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { AdaptiveDpr } from '@react-three/drei';
 import SeededStars from './SeededStars';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
@@ -15,6 +14,7 @@ import DragControls from './DragControls';
 import TourDots from './TourDots';
 import PlanetLabelsOverlay, { PlanetLabelDriver } from './PlanetLabels';
 import QualityGovernor from './QualityGovernor';
+import { FramePacer, ResolutionScaler } from './PerfPacer';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
@@ -80,7 +80,11 @@ export default function SceneRoot() {
     <div className="fixed inset-0" style={{ zIndex: 0, pointerEvents: 'auto', touchAction: 'pan-y' }} aria-hidden="true">
       <Canvas
         gl={{ powerPreference: 'high-performance', antialias: true, alpha: false, preserveDrawingBuffer: HUD_AVAILABLE }}
-        dpr={[1, 1.5]}
+        // Starts conservative and is owned by ResolutionScaler from the first evaluation.
+        // Opening at 1.5 spent the most expensive seconds of the whole session — compiles,
+        // uploads, first draws — on 2.25x the fragments, on exactly the machines that
+        // cannot afford it. It rises within a few seconds wherever there is headroom.
+        dpr={1}
         camera={{ position: [0, 2.6, 9], fov: 55, near: 0.1, far: 200 }}
         shadows={false}
         onCreated={({ gl }) => {
@@ -89,14 +93,18 @@ export default function SceneRoot() {
         }}
       >
         <color attach="background" args={['#050714']} />
-        {/* R5.9 — the quality governor owns every tier decision now (warm-up grace,
+        {/* R5.9 - the quality governor owns every tier decision now (warm-up grace,
             hysteresis, refresh-rate-aware pacing). A raw PerformanceMonitor.onDecline
             downgraded on the very first frames, while shaders were still compiling. */}
         <QualityGovernor />
-        <AdaptiveDpr pixelated />
+        {/* Cost control, composition untouched. AdaptiveDpr used to sit here; it reacts to
+            R3F's regress() signal, which nothing in this scene raises, so it was a second
+            writer of `dpr` doing nothing. ResolutionScaler measures the frame instead. */}
+        <FramePacer />
+        <ResolutionScaler />
         <Warmup />
         <CameraRig />
-        {/* Shared SKY — lives outside both acts and never swaps, so the universe is
+        {/* Shared SKY - lives outside both acts and never swaps, so the universe is
             continuous through the transition (only the "middle" changes). */}
         <GradientSky solar={act === 'solar'} />
         {/* Seeded (see SeededStars): drei's own Stars rolls this field fresh on every load, which
@@ -105,13 +113,13 @@ export default function SceneRoot() {
         <HeroStars />
         {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
             In the solar act the veils drop to a faint backdrop so they read as distant
-            nebulosity, not the milky haze that used to wash the poster frame — corners
+            nebulosity, not the milky haze that used to wash the poster frame - corners
             stay <10% brightness but never empty (stars + a nebula touch everywhere). */}
         {/* B4: 0.28 left the solar sky effectively empty, which is most of why the worlds
             read as faded. The veils are a BACKDROP, not a rumour of one. */}
         <Nebula intensity={act === 'solar' ? 0.5 : 1} />
         {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
-        {/* In-world swap curtain — persists across the act swap, covers the seam. */}
+        {/* In-world swap curtain - persists across the act swap, covers the seam. */}
         <SwapMask />
         <Effects />
         {/* Priority 2 → the last thing in the frame, after the composer has drawn it, so
@@ -124,7 +132,7 @@ export default function SceneRoot() {
     </div>
     {/* Interactive scene chrome lives OUTSIDE the aria-hidden canvas wrapper: these are
         real buttons a screen-reader user must be able to reach. (They were previously
-        nested inside it — focusable content under aria-hidden.) */}
+        nested inside it - focusable content under aria-hidden.) */}
     <PlanetLabelsOverlay />
     <TourDots />
     </>

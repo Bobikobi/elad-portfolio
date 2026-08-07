@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
 import { ViewModeProvider, useViewMode } from '@/lib/viewModeContext';
 import { DEFAULT_VIEW_MODE, type ViewMode } from '@/lib/viewMode';
-import { sectionForPath } from '@/lib/sections';
+import { isImmersiveRoute } from '@/lib/sections';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
@@ -31,13 +31,16 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
   // F2: the mode gates everything else. `cosmic` is only a request - the provider has
   // already demoted it to classic if the browser cannot honour it - so asking the two
   // capability hooks again here would just be a second, drifting copy of that decision.
-  const isHome = pathname === '/' || pathname === '/he' || pathname === '/ru';
-  const immersive = mode === 'cosmic' && (isHome || !!sectionForPath(pathname));
+  // The same test the canvas uses, from the same place. `sectionForPath` matches by first
+  // segment, so a service DETAIL page reads as the services section and was treated as an
+  // immersive route: no footer, a click-through main, and the scene mounted behind a page
+  // of text.
+  const immersive = mode === 'cosmic' && isImmersiveRoute(pathname);
 
   return (
     <>
       <LocaleRouteSync />
-      {/* Persistent WebGL cosmos — one canvas for the whole site, behind the DOM. */}
+      {/* Persistent WebGL cosmos - one canvas for the whole site, behind the DOM. */}
       <CosmicStage />
       <a href="#main-content" className="skip-link">
         Skip to content

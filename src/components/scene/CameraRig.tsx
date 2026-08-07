@@ -5,8 +5,9 @@ import { damp, damp3 } from 'maath/easing';
 import * as THREE from 'three';
 import { useScene, type Act } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, planetRingNormal, beltTourAnchor } from '@/lib/planetPositions';
+import { RING_OUTER_R } from '@/lib/planetPositions';
 import { SECTIONS } from '@/lib/sections';
-import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect } from '@/lib/orbitFraming';
+import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect, livePlanetPlane } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 import { HUD_AVAILABLE } from './DebugHud';
 
@@ -111,7 +112,7 @@ function orbitVantage(
   lit: number,
   planeAngle: number,
   sideSign: number,
-  prevPhi: number | null     // last frame's choice, for branch continuity — see below
+  prevPhi: number | null     // last frame's choice, for branch continuity - see below
 ): number {
   // Phase angle straight from the target: lit = (1 + cos α)/2.
   const alpha = Math.acos(clampUnit(2 * clamp01(lit) - 1));
@@ -237,8 +238,8 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 // The floor cannot be waived: releasing on a clock alone would uncover a frame that has
 // not been drawn, which is the B7 defect with the sign flipped.
 const REVEAL_FRAMES = 8;
-const REVEAL_MIN_FRAMES = 2;   // readiness floor — drawn frames, never wall-clock
-const REVEAL_HOLD_CAP = 0.4;   // s — past this the floor alone governs
+const REVEAL_MIN_FRAMES = 2;   // readiness floor - drawn frames, never wall-clock
+const REVEAL_HOLD_CAP = 0.4;   // s - past this the floor alone governs
 const REVEAL_FADE = 0.35; // s
 const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
@@ -287,6 +288,71 @@ const _limbU = new THREE.Vector3();
 const _limbW = new THREE.Vector3();
 const _limbP = new THREE.Vector3();
 const _limbAny = new THREE.Vector3();
+// Ring-plane projection (B8d).
+const _pl1 = new THREE.Vector3();
+const _pl2 = new THREE.Vector3();
+const _plC = new THREE.Vector3();
+const _plView = new THREE.Vector3();
+const _plE1 = new THREE.Vector3();
+const _plE2 = new THREE.Vector3();
+
+/**
+ * Project the focused planet's RING PLANE and publish it for the DOM ring (B8d).
+ *
+ * The owner asked for the project windows to sit at the same angle as the planet's rings.
+ * Geometrically that means the window ring is a circle in the RING PLANE rather than in
+ * the screen plane, so what the DOM needs is that plane's projection: the images of two
+ * orthonormal in-plane vectors, each one planet-radius long.
+ *
+ * `e1` is taken perpendicular to both the plane normal and the view direction, which is
+ * precisely the in-plane direction that is NOT foreshortened - the projected ellipse's
+ * major axis. `e2` completes the basis inside the plane and carries the foreshortening,
+ * so |v| / |u| falls out as the axis ratio without measuring anything.
+ */
+function publishRingPlane(
+  cam: THREE.PerspectiveCamera,
+  centre: THREE.Vector3,
+  radius: number,
+  ringN: THREE.Vector3 | undefined,
+  ringOuter: number,
+  vw: number,
+  vh: number
+) {
+  if (!ringN || radius <= 0) {
+    livePlanetPlane.ringOuter = 0;
+    return;
+  }
+  _plView.copy(centre).sub(cam.position).normalize();
+  _plE1.crossVectors(ringN, _plView);
+  if (_plE1.lengthSq() < 1e-8) {
+    // Looking straight down the plane normal: any in-plane pair is as good as any other.
+    _plE1.set(1, 0, 0).cross(ringN);
+    if (_plE1.lengthSq() < 1e-8) _plE1.set(0, 0, 1).cross(ringN);
+  }
+  _plE1.normalize();
+  _plE2.crossVectors(ringN, _plE1).normalize();
+
+  const toScreen = (v: THREE.Vector3): [number, number] => {
+    v.project(cam);
+    return [(v.x * 0.5 + 0.5) * vw, (0.5 - v.y * 0.5) * vh];
+  };
+  const [cx, cy] = toScreen(_plC.copy(centre));
+  const [x1, y1] = toScreen(_pl1.copy(centre).addScaledVector(_plE1, radius));
+  const [x2, y2] = toScreen(_pl2.copy(centre).addScaledVector(_plE2, radius));
+
+  const ux = x1 - cx, uy = y1 - cy;
+  const vx = x2 - cx, vy = y2 - cy;
+  const lu = Math.hypot(ux, uy);
+  livePlanetPlane.ux = ux;
+  livePlanetPlane.uy = uy;
+  livePlanetPlane.vx = vx;
+  livePlanetPlane.vy = vy;
+  livePlanetPlane.axisRatio = lu > 0 ? Math.hypot(vx, vy) / lu : 0;
+  livePlanetPlane.ringOuter = ringOuter;
+  livePlanetPlane.vw = vw;
+  livePlanetPlane.vh = vh;
+  livePlanetPlane.stamp = performance.now();
+}
 
 /**
  * Fit a circle to the focused planet's projected LIMB and publish it for the DOM ring
@@ -431,8 +497,8 @@ function beltRidePose(pos: THREE.Vector3, look: THREE.Vector3, ride: BeltRide, d
 const EST_DIST = 30;                    // establishing: far enough that the page-planets fit portrait
 const EST_ELEV = 35 * DEG2RAD;          // elevated ~35° so the ecliptic reads as a system, not a line
 const EST_FOV = 64;                     // wide vertical fov so the narrow portrait frame still holds it
-const EST_HOLD = 1.7;                   // s — how long the establishing shot lingers before the tour
-const EST_EASE = 1.4;                   // s — glide from establishing to the first stop
+const EST_HOLD = 1.7;                   // s - how long the establishing shot lingers before the tour
+const EST_EASE = 1.4;                   // s - glide from establishing to the first stop
 const TOUR_FOV = 44;                    // per-stop fov
 const TOUR_FILL = 0.4;                  // planet ≈ 40% of viewport height (huge; leaves room for the label)
 const _tourPos = new THREE.Vector3();
@@ -497,13 +563,13 @@ export default function CameraRig() {
   const vantagePhi = useRef<number | null>(null);
   const vantageFor = useRef<string | null>(null);
   const revealHold = useRef(0);
-  const revealDrawn = useRef(0); // G1: drawn frames since the latch — the readiness floor
-  const revealAge = useRef(0);   // G1: wall-clock seconds since the latch — the slow-client exit
+  const revealDrawn = useRef(0); // G1: drawn frames since the latch - the readiness floor
+  const revealAge = useRef(0);   // G1: wall-clock seconds since the latch - the slow-client exit
   const dtNominal = useRef(1 / 60); // G1b: median estimate of this client's own frame time
   const dtRing = useRef<number[]>(new Array(DT_WINDOW).fill(1 / 60));
   const dtRingAt = useRef(0);
   const fadeAge = useRef(0);        // G1b: seconds the current fade has been running
-  const covOut = useRef(0); // last published coverage — the rate limiter's state
+  const covOut = useRef(0); // last published coverage - the rate limiter's state
   // The solar root, cached: the belt poses are expressed in its frame and would otherwise
   // cost a whole-scene name search every frame. Re-resolved whenever the act swap has
   // replaced it (`parent === null` once three has detached the old one).
@@ -702,7 +768,7 @@ export default function CameraRig() {
           store.setAct(desired);
           act = desired;
           swapLatch.current = true;
-          latchReveal(); // B7 — the curtain stays shut until the new act has actually drawn
+          latchReveal(); // B7 - the curtain stays shut until the new act has actually drawn
           arrivedViaDive.current = desired === 'solar'; // scroll-drive the arrival dolly (T7a); cleared on reverse
           if (desired === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
         }
@@ -732,7 +798,7 @@ export default function CameraRig() {
             if (DEV) console.log(`[swap:reconcile] ${act}→${scrollSide}  cov=${recCov.current.toFixed(3)} scroll=${scrollProgress.toFixed(3)}`);
             store.setAct(scrollSide);
             act = scrollSide;
-            latchReveal(); // B7 — same hold on the reconciled swap
+            latchReveal(); // B7 - same hold on the reconciled swap
             pGate.current = scrollProgress;   // sync the gate so the normal machine resumes cleanly
             arrivedViaDive.current = false;   // a teleport, not a dive → time-damped reveal (overview/tour)
             if (scrollSide === 'solar') { try { sessionStorage.setItem('seen-intro', '1'); } catch { /* private mode */ } }
@@ -939,6 +1005,10 @@ export default function CameraRig() {
           // Hand the DOM the limb it is actually looking at, from the pose we just landed
           // on — the projects ring reads it in its own rAF and rebuilds its arcs from it.
           publishLimb(cam, pp, r, state.size.width, state.size.height);
+          publishRingPlane(
+            cam, pp, r, planetRingNormal.get(focused as string),
+            RING_OUTER_R, state.size.width, state.size.height
+          );
         } else if (store.tourMode) {
           // --- T7b: MOBILE TOUR ---------------------------------------------------
           // Portrait crops the wide overview to mostly-sun, so we guide instead: a brief

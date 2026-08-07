@@ -120,14 +120,14 @@ export default function Navbar() {
           />
         )}
         <nav className="relative mx-auto max-w-[1200px] w-full px-4 sm:px-6 flex items-center justify-between h-16 [text-shadow:0_1px_10px_rgba(0,0,0,0.55)]">
-          {/* Logo — a real link home (the galaxy / solar overview), not a button. */}
+          {/* Logo - a real link home (the galaxy / solar overview), not a button. */}
           <Link
             href={home}
             onClick={goHome}
             className="flex items-center opacity-90 hover:opacity-100 transition-opacity"
             aria-label={t('nav.home')}
           >
-            {/* Outline, not a webfont — see Wordmark. `tracking-wide` is baked into the
+            {/* Outline, not a webfont - see Wordmark. `tracking-wide` is baked into the
                 path, so the class is gone rather than doubled. */}
             <Wordmark className="text-3xl text-[var(--color-text-primary)]" />
           </Link>

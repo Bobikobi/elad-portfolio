@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import { useScene, type Quality } from '@/lib/sceneStore';
+import { isIdle } from './PerfPacer';
 
 /**
  * Quality governor v2 (R5.9). Replaces drei's raw `PerformanceMonitor onDecline`, which
@@ -21,9 +22,21 @@ import { useScene, type Quality } from '@/lib/sceneStore';
  *     Everything else locks to an even-paced 60: on a 75/90Hz panel an uncapped scene
  *     produces a repeating long/short frame pattern that reads as micro-stutter even at
  *     "good" FPS. Pacing is COST ONLY; it never changes what is in the frame.
- *  4. HYSTERESIS. A downgrade needs a sustained shortfall, an upgrade needs a longer
- *     sustained surplus, and after {@link MAX_DOWNGRADES} downgrades the tier is latched
- *     low so a borderline machine cannot oscillate.
+ *  4. HYSTERESIS. A downgrade needs a sustained shortfall; a promotion needs sustained
+ *     REAL headroom (see {@link UP_RATIO}); and one demotion latches the tier low for the
+ *     rest of the session, so a borderline machine cannot oscillate.
+ *
+ * PERF-2 — THE DEFAULT IS LOW, AND PROMOTION IS THE MECHANISM.
+ *
+ * This used to start every visitor on the high tier and demote on evidence, which meant an
+ * integrated-GPU desktop was handed a profile built for a gaming GPU and stuttered its way
+ * through the first seconds — while a phone, correctly classified low, ran fine. The defect
+ * was never the cost of the high tier; it was who got assigned to it.
+ *
+ * So the burden of proof is inverted. Everyone starts cheap. A machine is promoted only
+ * after it has held sustained headroom AT the cheap cost, which is the only evidence that
+ * means anything about what it can afford. A promotion nobody notices is a much better
+ * failure mode than a stutter everybody does.
  *
  * TIER COMPOSITION LAW: the governor only ever writes `quality` (particle counts, God
  * Rays samples, hi-res texture tier) and the frame pacing. Camera framing, poses, easing
@@ -32,11 +45,31 @@ import { useScene, type Quality } from '@/lib/sceneStore';
 
 const WARMUP_S = 3.5;          // no judging while shaders compile / textures upload
 const SAMPLE_TARGET = 96;      // frame deltas collected for the refresh-rate estimate
+// ...but never wait longer than this for them. Measured on the branch alias under a 4x CPU
+// throttle: the scene delivered 7-12fps, so 96 samples would have taken 8-14 SECONDS, and
+// until the estimate lands the governor returns early and governs nothing at all. The
+// machines that most need a demotion were the ones guaranteed not to get one.
+const DECIDE_BY_S = 4;
+// When the deadline fires with a starved sample set, assume the ordinary display rather
+// than trusting the estimate. A struggling machine's FASTEST frames are still slow, so the
+// estimate would come back "30Hz display" — and a 30fps target is one a stuttering machine
+// meets, which is exactly how a governor talks itself out of ever demoting.
+const ASSUMED_HZ = 60;
 const DOWN_RATIO = 0.62;       // below this share of target fps = struggling
-const UP_RATIO = 0.86;         // above this share = comfortable
+// PERF-2 raised this from 0.86. Promotion is now THE mechanism rather than a rarely-taken
+// path, so the bar is what a machine with genuine headroom clears and a borderline one does
+// not: at a 60fps target, sustained 55fps+. The machines this defect is about sit at 40-55
+// and stay exactly where they are.
+const UP_RATIO = 0.92;         // above this share = real headroom, not "coping"
 const DOWN_HOLD_S = 1.2;       // sustained shortfall before a downgrade
-const UP_HOLD_S = 6;           // (longer) sustained surplus before an upgrade
-const MAX_DOWNGRADES = 2;      // then latch low
+// Shortened from 6s. The promotion changes particle counts, so it is visible; landing it
+// early, while a visitor is still orienting in the scene, is much less noticeable than
+// six seconds in. Still long enough that a burst of easy frames cannot trigger it.
+const UP_HOLD_S = 3;
+// A promotion this late is a surprise, not an improvement: a machine that has not proven
+// headroom in the first half-minute is not about to, and changing the sky under someone
+// who has settled in is worse than leaving it alone.
+const PROMOTE_WINDOW_S = 25;
 const SMOOTH_HZ_MIN = 100;     // display rates at or above this get the `smooth` profile
 const EVEN_TARGET = 60;        // the even-paced lock
 
@@ -62,14 +95,42 @@ function forcedHz(): number | null {
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
+/**
+ * `?tier=low` pins the quality tier. Ignored in production builds, like `?hz`.
+ *
+ * Without this a low-tier decision cannot be inspected on purpose: the tier is whatever
+ * the governor concluded about the machine that happened to be looking, so "does the low
+ * tier still look right" was a question nobody could answer with a screenshot. Judging a
+ * cost knob by eye requires being able to hold the tier still.
+ */
+/**
+ * `?fpsTarget=20` lowers the bar the governor judges against. Ignored in production.
+ *
+ * The promotion path is now THE mechanism, and it can only be observed on a machine with
+ * headroom — which this development box is not: it renders the cosmic home at a steady
+ * 30fps against a 60 target, so it correctly never promotes and the path stays unproven.
+ * "Correctly never fires" and "cannot fire" produce identical evidence, and that ambiguity
+ * is exactly how a knob silently stops being wired. Lowering the target turns any machine
+ * into a machine with headroom for one run.
+ */
+function forcedTarget(): number | null {
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV === 'production') return null;
+  if (typeof window === 'undefined') return null;
+  const v = Number(new URLSearchParams(window.location.search).get('fpsTarget'));
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+function forcedTier(): Quality | null {
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV === 'production') return null;
+  if (typeof window === 'undefined') return null;
+  const v = new URLSearchParams(window.location.search).get('tier');
+  return v === 'low' || v === 'high' ? v : null;
+}
+
 export default function QualityGovernor() {
   const setQuality = useScene((s) => s.setQuality);
   const setDisplayHz = useScene((s) => s.setDisplayHz);
   const setPacing = useScene((s) => s.setPacing);
-  const invalidate = useThree((s) => s.invalidate);
-  const setFrameloop = useThree((s) => s.setFrameloop);
-  // 0 until the estimate lands; the flip from 0 → measured is what starts the paced loop.
-  const displayHz = useScene((s) => s.displayHz);
 
   const started = useRef(0);
   const samples = useRef<number[]>([]);
@@ -78,30 +139,19 @@ export default function QualityGovernor() {
   const fps = useRef(0);
   const belowFor = useRef(0);
   const aboveFor = useRef(0);
-  const downgrades = useRef(0);
-  const pacedRef = useRef(false);
+  const latchedLow = useRef(false);
+  const pinned = useRef<Quality | null>(null);
 
-  // Paced driver for the even-60 lock: R3F is switched to on-demand and we ask for one
-  // frame per 1/60s slot. Frames are still real frames (same delta-driven easing), we
-  // simply stop asking for the ones the design does not need.
   useEffect(() => {
-    if (!displayHz || !pacedRef.current) return;
-    // Switch to on-demand HERE, in the same tick that starts the driver, so there is
-    // never a window where the loop is off and nothing is asking for frames.
-    setFrameloop('demand');
-    let raf = 0;
-    let last = 0;
-    const period = 1000 / EVEN_TARGET;
-    const tick = (ts: number) => {
-      raf = requestAnimationFrame(tick);
-      if (ts - last >= period - 1) {
-        last = ts;
-        invalidate();
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); setFrameloop('always'); };
-  }, [invalidate, setFrameloop, displayHz]);
+    const t = forcedTier();
+    pinned.current = t;
+    if (t) setQuality(t);
+  }, [setQuality]);
+
+  // The paced driver used to live here. It now belongs to FramePacer, which also owns the
+  // idle throttle — two components calling setFrameloop is how a scene ends up with a loop
+  // that neither of them thinks it turned off. This file governs the TIER and the pacing
+  // PROFILE; it no longer touches the loop.
 
   useFrame((_, delta) => {
     const now = performance.now() / 1000;
@@ -111,40 +161,56 @@ export default function QualityGovernor() {
     // --- refresh-rate estimate ---------------------------------------------------------
     if (!decided.current) {
       samples.current.push(dt);
-      if (samples.current.length >= SAMPLE_TARGET) {
+      const enough = samples.current.length >= SAMPLE_TARGET;
+      const tooLong = now - started.current > DECIDE_BY_S;
+      if (enough || tooLong) {
         const sorted = [...samples.current].sort((a, b) => a - b);
         // 10th percentile: the fastest honest frames. Load lengthens frames, never
         // shortens them, so the low tail is the closest thing to the display period.
         const p10 = sorted[Math.floor(sorted.length * 0.1)];
-        const measured = forcedHz() ?? snapRate(1 / p10);
+        const measured = forcedHz() ?? (enough ? snapRate(1 / p10) : ASSUMED_HZ);
         const pacing = measured >= SMOOTH_HZ_MIN ? 'smooth' : 'even';
-        targetFps.current = pacing === 'smooth' ? measured : EVEN_TARGET;
+        targetFps.current = forcedTarget() ?? (pacing === 'smooth' ? measured : EVEN_TARGET);
         decided.current = true;
         samples.current.length = 0;
         setDisplayHz(measured);
         setPacing(pacing);
-        // Only engage the paced loop where it actually buys something: a panel faster
-        // than 60 but below the smooth threshold, whose uncapped cadence is uneven.
-        if (pacing === 'even' && measured > EVEN_TARGET + 6) pacedRef.current = true;
       }
       return;
     }
 
     // --- steady-state tier governance --------------------------------------------------
     if (now - started.current < WARMUP_S) return;
+    // An idle page is being paced to 30fps on purpose. Measuring it here reads as a
+    // machine that cannot hold the target and demotes the tier for a scene nobody was
+    // even interacting with — measured on the branch alias, where six of eight cosmic
+    // routes came back `low` purely because they had been left alone for 2.5 seconds.
+    // Frames only count while the loop is running free.
+    if (isIdle(performance.now())) { belowFor.current = 0; aboveFor.current = 0; return; }
     fps.current = fps.current ? fps.current * 0.9 + (1 / dt) * 0.1 : 1 / dt;
 
+    if (pinned.current) return; // an explicitly pinned tier is not up for renegotiation
     const q: Quality = useScene.getState().quality;
     const target = targetFps.current;
     if (fps.current < target * DOWN_RATIO) { belowFor.current += dt; aboveFor.current = 0; }
     else if (fps.current > target * UP_RATIO) { aboveFor.current += dt; belowFor.current = 0; }
     else { belowFor.current = 0; aboveFor.current = 0; }
 
-    if (q === 'high' && belowFor.current > DOWN_HOLD_S && downgrades.current < MAX_DOWNGRADES) {
-      downgrades.current += 1;
+    if (q === 'high' && belowFor.current > DOWN_HOLD_S) {
+      // One demotion is final. The old code allowed two against a BINARY tier, so the
+      // second spent budget and changed nothing — a counter guarding a door that was
+      // already shut. What actually matters is that a machine which has proven it cannot
+      // hold the high tier is never offered it again, or the two rules take turns and the
+      // visitor watches the sky flap.
+      latchedLow.current = true;
       belowFor.current = 0;
       setQuality('low');
-    } else if (q === 'low' && aboveFor.current > UP_HOLD_S && downgrades.current < MAX_DOWNGRADES) {
+    } else if (
+      q === 'low' &&
+      !latchedLow.current &&
+      aboveFor.current > UP_HOLD_S &&
+      now - started.current < PROMOTE_WINDOW_S
+    ) {
       aboveFor.current = 0;
       setQuality('high');
     }

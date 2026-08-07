@@ -23,7 +23,7 @@ export default function Projects() {
   const featuredProject = (featuredId ? filtered.find((p) => p.id === featuredId) : undefined) ?? filtered[0];
   const regularProjects = filtered.filter((p) => p.id !== featuredProject?.id);
   const sideStack = regularProjects.slice(0, 2);
-  const bottomRow = regularProjects.slice(2); // show all remaining — never silently drop projects
+  const bottomRow = regularProjects.slice(2); // show all remaining - never silently drop projects
 
   return (
     <section id="projects" className="relative py-14 md:py-20 px-6" ref={ref}>

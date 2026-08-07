@@ -46,7 +46,7 @@ const schemas = [
         name: 'האם Next.js מתאים לאתר תדמית פשוט?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'כן, אבל אם צריך רק דף נחיתה סטטי — וורדפרס או אפילו Builder.io עשויים להתאים יותר. Next.js מצטיין כשצריך ביצועים, אבטחה וסקיילביליות.',
+          text: 'כן, אבל אם צריך רק דף נחיתה סטטי - וורדפרס או אפילו Builder.io עשויים להתאים יותר. Next.js מצטיין כשצריך ביצועים, אבטחה וסקיילביליות.',
         },
       },
       {
@@ -59,7 +59,7 @@ const schemas = [
       },
       {
         '@type': 'Question',
-        name: 'מה זול יותר בטווח הארוך — Next.js או וורדפרס?',
+        name: 'מה זול יותר בטווח הארוך - Next.js או וורדפרס?',
         acceptedAnswer: {
           '@type': 'Answer',
           text: 'Next.js. וורדפרס דורשת תוספים בתשלום, אחסון יקר יותר ככל שהתנועה גדלה, ועדכוני אבטחה תכופים. Next.js על Vercel או Cloudflare עולה פחות ומתרחב אוטומטית.',
@@ -74,7 +74,7 @@ export default function NextJsVsWordPressPage() {
     {
       icon: Gauge,
       title: 'ביצועים ומהירות',
-      nextjs: 'דפים סטטיים + SSR — Core Web Vitals ירוקים כברירת מחדל. LCP מתחת ל-1.5 שניות.',
+      nextjs: 'דפים סטטיים + SSR - Core Web Vitals ירוקים כברירת מחדל. LCP מתחת ל-1.5 שניות.',
       wp: 'תלוי בתוספים ובאחסון. לרוב LCP מעל 3 שניות, צורך תוספי caching ומטמון.',
     },
     {
@@ -107,8 +107,8 @@ export default function NextJsVsWordPressPage() {
       a: 'בהחלט. Shopify, Medusa ו-Saleor משתלבים נהדר עם Next.js. מקבלים חוויית קנייה מהירה, SEO מעולה לעמודי מוצר, ותמיכה ב-i18n לחנות רב-לשונית.',
     },
     {
-      q: 'מה קורה עם תוכן דינמי — בלוגים, מאמרים, עדכונים?',
-      a: 'Next.js תומך ב-Incremental Static Regeneration (ISR) — תוכן דינמי שמתעדכן ברקע בלי לבנות מחדש את כל האתר. אפשר לשלב עם CMS קיים כמו Sanity, Contentful או אפילו וורדפרס כ-headless.',
+      q: 'מה קורה עם תוכן דינמי - בלוגים, מאמרים, עדכונים?',
+      a: 'Next.js תומך ב-Incremental Static Regeneration (ISR) - תוכן דינמי שמתעדכן ברקע בלי לבנות מחדש את כל האתר. אפשר לשלב עם CMS קיים כמו Sanity, Contentful או אפילו וורדפרס כ-headless.',
     },
   ];
 
@@ -122,7 +122,7 @@ export default function NextJsVsWordPressPage() {
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
         וורדפרס שולטת בכ-40% מהאתרים בעולם, אבל Next.js צומח בקצב מהיר ומשמש כבר חברות כמו TikTok, 
-        Notion ו-Hulu. ההבדל האמיתי הוא לא טכנולוגי — אלא כלכלי. המדריך הזה משווה מחיר, ביצועים, 
+        Notion ו-Hulu. ההבדל האמיתי הוא לא טכנולוגי - אלא כלכלי. המדריך הזה משווה מחיר, ביצועים, 
         אבטחה ו-SEO כדי לעזור לכם להחליט.
       </p>
 

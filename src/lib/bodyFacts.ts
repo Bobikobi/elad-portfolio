@@ -5,7 +5,7 @@ import type { Locale } from './translations';
  * they carry a small glass tooltip: the body's name, one REAL astronomy fact, and a
  * playful tie-in back to the site. Two of them do something when clicked.
  */
-export type BodyAction = { kind: 'cv'; href: string } | { kind: 'soon' } | null;
+export type BodyAction = { kind: 'soon' } | null;
 
 export interface BodyFact {
   name: Record<Locale, string>;
@@ -18,31 +18,29 @@ export interface BodyFact {
   cta?: Record<Locale, string>;
 }
 
-/** Where the CV lives. Probed at runtime — if it is not published yet the pill
- *  degrades to the "coming soon" state instead of offering a broken download. */
-export const CV_HREF = '/cv/elad-saadon-cv.pdf';
-
+// There is deliberately no CV affordance here. A download the site is not going to publish
+// should not be hinted at anywhere in the UI — not as a link, and not as a "coming soon"
+// pill standing in for one. Mercury carries its tooltip and nothing else.
 export const BODY_FACTS: Record<string, BodyFact> = {
   mercury: {
     name: { he: 'כוכב חמה', en: 'Mercury', ru: 'Меркурий' },
     fact: {
-      he: 'הקטן במערכת השמש — שנה שלמה שם אורכת 88 ימי-ארץ בלבד.',
-      en: 'The smallest planet in the system — a whole year here lasts just 88 Earth days.',
+      he: 'הקטן במערכת השמש - שנה שלמה שם אורכת 88 ימי-ארץ בלבד.',
+      en: 'The smallest planet in the system - a whole year here lasts just 88 Earth days.',
       ru: 'Самая маленькая планета системы — год здесь длится всего 88 земных суток.',
     },
     tie: {
-      he: 'מהיר. בערך כמו קורות החיים שמחכים כאן להורדה.',
-      en: 'Fast. About as fast as the CV waiting here for you.',
-      ru: 'Быстро. Примерно как резюме, которое здесь можно скачать.',
+      he: 'מהיר. בערך כמו הזמן שלקח לדף הזה להיטען.',
+      en: 'Fast. About as fast as this page finished loading.',
+      ru: 'Быстро. Примерно как загрузилась эта страница.',
     },
-    action: { kind: 'cv', href: CV_HREF },
-    cta: { he: 'הורדת קורות חיים', en: 'Download CV', ru: 'Скачать резюме' },
+    action: null,
   },
   venus: {
     name: { he: 'נוגה', en: 'Venus', ru: 'Венера' },
     fact: {
-      he: 'מסתובבת לאחור — על נוגה השמש זורחת במערב ושוקעת במזרח.',
-      en: 'It spins backwards — on Venus the sun rises in the west and sets in the east.',
+      he: 'מסתובבת לאחור - על נוגה השמש זורחת במערב ושוקעת במזרח.',
+      en: 'It spins backwards - on Venus the sun rises in the west and sets in the east.',
       ru: 'Вращается в обратную сторону — на Венере солнце восходит на западе.',
     },
     tie: {
@@ -56,8 +54,8 @@ export const BODY_FACTS: Record<string, BodyFact> = {
   uranus: {
     name: { he: 'אורנוס', en: 'Uranus', ru: 'Уран' },
     fact: {
-      he: 'שוכב על הצד — הקטבים שלו, ולא קו המשווה, הם שפונים אל השמש.',
-      en: 'It lies on its side — its poles, not its equator, are what face the sun.',
+      he: 'שוכב על הצד - הקטבים שלו, ולא קו המשווה, הם שפונים אל השמש.',
+      en: 'It lies on its side - its poles, not its equator, are what face the sun.',
       ru: 'Лежит на боку — к Солнцу обращены его полюса, а не экватор.',
     },
     tie: {
@@ -70,8 +68,8 @@ export const BODY_FACTS: Record<string, BodyFact> = {
   neptune: {
     name: { he: 'נפטון', en: 'Neptune', ru: 'Нептун' },
     fact: {
-      he: 'הרוחות המהירות במערכת השמש נושבות כאן — עד 2,000 קמ״ש.',
-      en: 'The fastest winds in the solar system blow here — up to 2,000 km/h.',
+      he: 'הרוחות המהירות במערכת השמש נושבות כאן - עד 2,000 קמ״ש.',
+      en: 'The fastest winds in the solar system blow here - up to 2,000 km/h.',
       ru: 'Здесь дуют самые быстрые ветры системы — до 2000 км/ч.',
     },
     tie: {

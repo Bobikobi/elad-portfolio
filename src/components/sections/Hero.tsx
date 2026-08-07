@@ -232,7 +232,7 @@ function GalaxyHome() {
     <section ref={driverRef} className="relative" style={{ height: '500vh' }}>
       <SeoContent />
 
-      {/* Welcome — fixed, fades as the dive begins */}
+      {/* Welcome - fixed, fades as the dive begins */}
       <motion.div
         style={{ opacity: welcomeOpacity }}
         className="pointer-events-none fixed inset-0 z-10 flex flex-col items-center px-6 pt-[16vh] text-center"

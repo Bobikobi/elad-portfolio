@@ -89,7 +89,11 @@ export const useScene = create<SceneState>((set) => ({
   tourMode: false,
   tourStop: 0,
   scrollDriven: false,
-  quality: 'high',
+  // PERF-2: everyone STARTS low and is promoted only on proven headroom. The default used
+  // to be 'high', which handed an integrated-GPU desktop a profile tuned for a gaming GPU
+  // and made it stutter until the governor caught up - if it ever did. A promotion nobody
+  // notices is a better failure than a stutter everybody does.
+  quality: 'low',
   displayHz: 0,
   pacing: 'even',
   hoveredBody: null,

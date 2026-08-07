@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Elad Saadon — Full-Stack Developer & AI Systems Architect',
+    name: 'Elad Saadon - Full-Stack Developer & AI Systems Architect',
     short_name: 'Elad Saadon',
     description:
       'Full-stack web development, AI integration, cloud automation, and civic-tech solutions.',
