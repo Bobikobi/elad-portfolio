@@ -85,3 +85,7 @@ tsconfig.check.json
 # would build a second, divergent dependency tree from the same package.json.
 package-lock.json
 yarn.lock
+
+# --- סודות: לא נכנסים לגיט (גם בריפו פרטי) ---
+client_secret*.json
+credentials.json
