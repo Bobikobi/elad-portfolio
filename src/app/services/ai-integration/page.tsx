@@ -8,7 +8,7 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 export const metadata: Metadata = {
   title: 'AI Integration for Existing and New Systems',
   description:
-    'Integrate AI into web products: smart chat, document summarization, data classification, and automation with Gemini and OpenAI — securely.',
+    'Integrate AI into web products: smart chat, document summarization, data classification, and automation with Gemini and OpenAI - securely.',
   alternates: {
     canonical: 'https://www.eladsaadon.dev/services/ai-integration',
     languages: {
@@ -44,7 +44,7 @@ const schemas = [
         name: 'How do you integrate AI without risking sensitive data?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'We set up permission layers, data filtering, and controlled logging. All AI calls go through the server only — keys and secrets are never exposed to the browser.',
+          text: 'We set up permission layers, data filtering, and controlled logging. All AI calls go through the server only - keys and secrets are never exposed to the browser.',
         },
       },
       {
@@ -73,7 +73,7 @@ const useCases = [
   {
     icon: Zap,
     title: 'Smart Classification & Prioritization',
-    desc: 'Inquiries, leads, and tasks are automatically ranked by importance and urgency — the team focuses on what really matters.',
+    desc: 'Inquiries, leads, and tasks are automatically ranked by importance and urgency - the team focuses on what really matters.',
   },
   {
     icon: Bot,
@@ -99,7 +99,7 @@ export default function AiIntegrationPage() {
         AI Integration for Digital Products
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
-        Integrate AI capabilities into your product securely and measurably — so your team saves time and your users get a smarter experience.
+        Integrate AI capabilities into your product securely and measurably - so your team saves time and your users get a smarter experience.
       </p>
 
       {/* Use case cards */}
@@ -127,7 +127,7 @@ export default function AiIntegrationPage() {
         <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
           <h3 className="text-base font-medium text-[var(--color-text-primary)]">How do you keep data secure?</h3>
           <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-            All AI calls go through the server — keys and sensitive data are never exposed to the browser. We add permissions, filtering, and controlled logging.
+            All AI calls go through the server - keys and sensitive data are never exposed to the browser. We add permissions, filtering, and controlled logging.
           </p>
         </article>
         <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">

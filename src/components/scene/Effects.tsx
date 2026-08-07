@@ -49,9 +49,9 @@ const GALAXY_SAT = 0.08; // A6: the same gentle grade enriches the galaxy arms (
 // the edge fades the rays without recompiling the composer mid-gesture.
 const SUN_POS = new THREE.Vector3(0, 0, 0);
 const GODRAY_WEIGHT = 0.16;
-const RAY_FADE_IN = 0.9;   // × half-diagonal fov — full weight inside this
-const RAY_FADE_OUT = 1.7;  // × half-diagonal fov — zero weight beyond this
-const RAY_MOUNT = 2.2;     // × half-diagonal fov — mounted out to here (hysteresis below)
+const RAY_FADE_IN = 0.9;   // × half-diagonal fov - full weight inside this
+const RAY_FADE_OUT = 1.7;  // × half-diagonal fov - zero weight beyond this
+const RAY_MOUNT = 2.2;     // × half-diagonal fov - mounted out to here (hysteresis below)
 const _fwd = new THREE.Vector3();
 const _toSun = new THREE.Vector3();
 
@@ -201,8 +201,10 @@ export default function Effects() {
           // the fragments in the pass that samples 26-60 times per pixel.
           resolutionScale={0.5}
           // Presence is composition and stays in every tier (owner ruling); only the
-          // sample count is cost. 26 -> 16 on the low tier.
-          samples={high ? 60 : 16}
+          // sample count is cost. Low 26 -> 16, and PERF-2 brings high 60 -> 32: the high
+          // tier had grown while nobody was checking what it cost the borderline machines
+          // that were being assigned to it.
+          samples={high ? 32 : 16}
           density={0.86}
           decay={0.93}
           weight={0}
@@ -213,9 +215,9 @@ export default function Effects() {
       ) : (
         <></>
       )}
-      {/* B3: bloom runs AFTER tone mapping, so in a focused world — where a planet fills
+      {/* B3: bloom runs AFTER tone mapping, so in a focused world - where a planet fills
           two thirds of the frame and its whole lit face sits above the overview's 0.72
-          threshold — it was adding a broad glow on top of an image already near the top
+          threshold - it was adding a broad glow on top of an image already near the top
           of the range, and that addition is what clipped. The overview keeps its numbers
           (the sun is the hero there and must burn); a world raises the bar so only the
           genuinely burning limb blooms. This is a per-STATE change, not per-tier: every
@@ -239,7 +241,14 @@ export default function Effects() {
         // NOTE: `levels` is a MOUNT-TIME option in postprocessing, not a live setter, so
         // it belongs in the key below - a tier change has to rebuild this effect for the
         // number to take. That is why `high` is part of the key.
-        levels={high ? 9 : 6}
+        //
+        // PERF-2: high goes 9 -> 7. The widest two levels are a 1-2px buffer stretched
+        // across the frame — the faintest, broadest part of the halo — and on a machine
+        // with genuine headroom their absence is imperceptible, while on the borderline
+        // machines that were wrongly living in the high tier it is four fewer renders a
+        // frame. The high tier had drifted UP during the pass round (21.0 -> 22.7 on
+        // home); this is the correction.
+        levels={high ? 7 : 6}
         intensity={solar ? (focused ? 0.34 : 0.6) : 0.5}
         luminanceThreshold={solar ? (focused ? 0.86 : 0.72) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
@@ -250,22 +259,22 @@ export default function Effects() {
           display-referred one). See ExposureToneMap for why three cannot do this itself
           once a composer owns the render. */}
       <ExposureToneMap />
-      {/* Global grade: a gentle saturation lift — colour on the planets without touching
+      {/* Global grade: a gentle saturation lift - colour on the planets without touching
           any texture. Kept LOW in solar (was 0.14) because the higher lift pushed the dim
           sky violet, which the vignette then framed as a milky "lavender oval" (F1). */}
-      {/* A6: the grade now runs in BOTH acts (driven per-frame above) — same family. */}
+      {/* A6: the grade now runs in BOTH acts (driven per-frame above) - same family. */}
       <HueSaturation ref={(e: HueSatLike | null) => { hueSatRef.current = e ?? null; }} saturation={OVERVIEW_SAT} />
-      {/* Very subtle film grain + vignette — the glue that binds the depth layers. */}
+      {/* Very subtle film grain + vignette - the glue that binds the depth layers. */}
       <Noise premultiply opacity={0.045} />
       {/* Deeper vignette in the solar act pulls the corners to deep space (spec: <10%
           brightness at the edges) while the sun keeps the centre warm. Darkness/offset
-          are driven per-frame (vigRef) to ease across the swap — see above. */}
+          are driven per-frame (vigRef) to ease across the swap - see above. */}
       <Vignette ref={(e: VignetteLike | null) => { vigRef.current = e ?? null; }} offset={0.28} darkness={0.62} />
       {/* B13: the composer runs with multisampling 0, so nothing was anti-aliasing the
-          planet limbs — a lit rim against near-black space is the worst case for a
+          planet limbs - a lit rim against near-black space is the worst case for a
           stair-stepped edge, and at DPR 1 it was visible on every world. SMAA is one
           cheap fullscreen pass and it goes last, on the finished frame.
-          F5: it is also the ONLY effect the composer could not merge — the audit shows
+          F5: it is also the ONLY effect the composer could not merge - the audit shows
           every other effect collapsing into a single EffectPass while SMAA takes one of
           its own, because it is the convolution effect in the chain. On the low tier it
           now comes off, on the owner's ruling and against a side-by-side crop. High tier

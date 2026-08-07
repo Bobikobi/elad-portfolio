@@ -12,7 +12,7 @@ export default function About() {
 
   return (
     <section id="about" className="relative py-14 md:py-20 px-6" ref={ref}>
-      {/* Structured content for AI search engines (GEO) — visually hidden but crawlable */}
+      {/* Structured content for AI search engines (GEO) - visually hidden but crawlable */}
       <article className="sr-only" itemScope itemType="https://schema.org/Person">
         <h2 itemProp="name">Elad Saadon</h2>
         <span itemProp="alternateName">אלעד סעדון</span>

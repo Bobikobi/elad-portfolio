@@ -40,7 +40,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <LocaleRouteSync />
-      {/* Persistent WebGL cosmos — one canvas for the whole site, behind the DOM. */}
+      {/* Persistent WebGL cosmos - one canvas for the whole site, behind the DOM. */}
       <CosmicStage />
       <a href="#main-content" className="skip-link">
         Skip to content

@@ -44,7 +44,7 @@ const schemas = [
         name: 'Which processes should I automate first?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Start with processes that repeat many times a week and consume manual time — usually reporting, data syncing, and operational tasks.',
+          text: 'Start with processes that repeat many times a week and consume manual time - usually reporting, data syncing, and operational tasks.',
         },
       },
       {
@@ -63,22 +63,22 @@ const outcomes = [
   {
     icon: RefreshCw,
     title: 'Less Repetitive Work',
-    desc: 'Tasks that repeat over and over — data syncing, report generation, sending updates — run on their own without human touch.',
+    desc: 'Tasks that repeat over and over - data syncing, report generation, sending updates - run on their own without human touch.',
   },
   {
     icon: Bell,
     title: 'Real-Time Alerts',
-    desc: 'When something needs attention, the team gets an immediate update. No discovering issues after the fact — respond before it becomes a problem.',
+    desc: 'When something needs attention, the team gets an immediate update. No discovering issues after the fact - respond before it becomes a problem.',
   },
   {
     icon: Link2,
     title: 'Connected Systems',
-    desc: 'CRM, email, spreadsheets, APIs — everything talks to each other. Information flows automatically and doesn\'t fall through the cracks.',
+    desc: 'CRM, email, spreadsheets, APIs - everything talks to each other. Information flows automatically and doesn\'t fall through the cracks.',
   },
   {
     icon: BarChart2,
     title: 'Transparency & Logs',
-    desc: 'Every action is logged. It\'s always clear what ran, when, and with what result — easy to diagnose and improve.',
+    desc: 'Every action is logged. It\'s always clear what ran, when, and with what result - easy to diagnose and improve.',
   },
 ];
 
@@ -133,7 +133,7 @@ export default function AutomationWorkflowsPage() {
         <article className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5">
           <h3 className="text-base font-medium text-[var(--color-text-primary)]">How do we know the automation is working?</h3>
           <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-            Every process comes with logs, error alerts, and clear metrics — time saved, error reduction, increased throughput.
+            Every process comes with logs, error alerts, and clear metrics - time saved, error reduction, increased throughput.
           </p>
         </article>
       </section>

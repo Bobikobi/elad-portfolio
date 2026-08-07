@@ -159,7 +159,7 @@ export const SECTION_META: Record<SectionId, Record<Locale, { title: string; des
   },
   services: {
     he: { title: 'שירותי פיתוח Next.js, AI ואוטומציה', description: 'פיתוח Full-Stack, אינטגרציית AI ואוטומציה עסקית. קוד נקי, ביצועים גבוהים ופריסה מאובטחת לפרודקשן.' },
-    en: { title: 'Services — Next.js, AI & Automation', description: 'Full-stack web development, AI integration, and business automation. Clean code, high performance, secure production deployment.' },
+    en: { title: 'Services - Next.js, AI & Automation', description: 'Full-stack web development, AI integration, and business automation. Clean code, high performance, secure production deployment.' },
     ru: { title: 'Услуги — Next.js, AI и Автоматизация', description: 'Full-stack разработка, интеграция AI и бизнес-автоматизация. Чистый код, высокая производительность, безопасный деплой.' },
   },
   projects: {

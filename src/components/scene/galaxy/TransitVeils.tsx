@@ -36,7 +36,7 @@ interface VeilDef {
   u: number;          // fraction along the (extended) corridor
   off: [number, number]; // radial offset in the (NX, NY) plane
   scale: number;
-  tint: string;       // gentle hue lean (multiplies the photo — kept pale)
+  tint: string;       // gentle hue lean (multiplies the photo - kept pale)
   op: number;
   close: boolean;     // on the flight path → washes the frame on the pass
   phase: number;
