@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { motion, useScroll, useMotionValueEvent, useMotionValue } from 'framer-motion';
 import Link from 'next/link';
@@ -117,7 +117,14 @@ function GalaxyHome() {
     scene.setFocusedPlanet(null);
     if (seen) {
       scene.setAct('solar');
-      scene.setScrollDriven(false); // returning visit: no tall driver, scroll must not steer the act
+      // The driver IS mounted for a returning visitor, who simply starts at the END of it.
+      // Not replaying the intro and not being able to go back are two different things,
+      // and this was both: with no tall driver the document was exactly one viewport high,
+      // so someone who came back from a world was parked in the solar overview with no way
+      // to reach the galaxy again short of a reload. Starting at the bottom keeps the
+      // intro unplayed - there is nothing below them to fall through - while the swap
+      // machine, which is bidirectional, can still carry them back up.
+      scene.setScrollDriven(true);
       // R5.1: park the dive progress at "fully arrived". A stale mid-dive value left the
       // arrival choreography half-played with no scroll left to finish it.
       scene.setScrollProgress(1);
@@ -130,6 +137,26 @@ function GalaxyHome() {
     return () => { useScene.getState().setScrollDriven(false); };
   }, []);
 
+  // A returning visitor starts at the END of the driver: already arrived, nothing below
+  // them, and the whole runway above to scroll back up through. A layout effect, because
+  // by the time a passive one ran the browser could have painted a frame at the top -
+  // which is the intro's first frame, the one thing this arrival must never show.
+  useLayoutEffect(() => {
+    if (seenIntro !== true) return;
+    // `behavior: 'instant'`, and the object form, because `html { scroll-behavior: smooth }`
+    // is set globally in globals.css and the NUMERIC overload of scrollTo inherits it. The
+    // first version of this used that overload and so ANIMATED from the top to the end -
+    // scrolling the returning visitor through the intro's opening frames, which is the one
+    // thing this effect exists to prevent. Caught in review; my own harness could not see
+    // it, because it samples after a delay by which time a smooth scroll has also arrived.
+    const toEnd = () =>
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+    toEnd();
+    // Once more after a frame: a browser restores its remembered scroll position after us.
+    const raf = requestAnimationFrame(toEnd);
+    return () => cancelAnimationFrame(raf);
+  }, [seenIntro]);
+
   // Feed raw scroll to the store; CameraRig owns the act swap + coverage (T1). The
   // crossover curtain is now the in-world SwapMask (T3, in SceneRoot) driven by the same
   // store.coverage — no DOM overlay, so the wash is a real bloomed glow, not a flat gradient.
@@ -137,7 +164,10 @@ function GalaxyHome() {
   const lastDir = useRef(1);
   const prevV = useRef(0);
   useMotionValueEvent(scrollYProgress, 'change', (v) => {
-    if (seenIntro) return;
+    // Only while the decision is still pending. This used to bail for a RETURNING visitor
+    // too, which was consistent with there being no driver to read - and wrong the moment
+    // one is mounted for them, because then scrolling moved the page and nothing else.
+    if (seenIntro === null) return;
     if (v !== prevV.current) {
       lastDir.current = v > prevV.current ? 1 : -1;
       prevV.current = v;
@@ -155,7 +185,9 @@ function GalaxyHome() {
   // whichever direction they were already travelling. Never fires while they are still
   // scrolling, so it can never fight the gesture.
   useEffect(() => {
-    if (seenIntro !== false) return;
+    // Any visitor with a driver under them can come to rest inside the curtain, so the
+    // auto-commit belongs to both arrivals now, not only the fresh one.
+    if (seenIntro === null) return;
     const REST_MS = 320;
     const COMMIT_COV = 0.45; // only while the curtain actually obscures the frame
     // Clear of the ENTIRE covered band: the plateau half-width AND the falloff, plus a
@@ -193,19 +225,9 @@ function GalaxyHome() {
     return () => cancelAnimationFrame(raf);
   }, [seenIntro]);
 
-  // Repeat visit: no dive, no tall driver — the overview is already on screen. Give
-  // a short crawlable hint to explore the planets.
-  if (seenIntro) {
-    return (
-      <section className="relative min-h-dvh">
-        <SeoContent />
-        <div className="pointer-events-none fixed inset-x-0 bottom-10 z-10 flex justify-center">
-          <span className="text-xs tracking-[0.2em] text-[var(--color-core-gold)]/70">{t('hero.galaxy.hint')}</span>
-        </div>
-      </section>
-    );
-  }
-
+  // One render for both arrivals now. A repeat visitor gets the same driver and simply
+  // starts at the end of it (see the layout effect above), so the runway back up to the
+  // galaxy exists for them too.
   return (
     <section ref={driverRef} className="relative" style={{ height: '500vh' }}>
       <SeoContent />
