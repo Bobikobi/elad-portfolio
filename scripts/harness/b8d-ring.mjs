@@ -136,6 +136,37 @@ const panelCheck = () => {
   };
 };
 
+/** A point genuinely ON a window's sector, well inside it.
+ *
+ *  The bbox CENTRE of an annular sector is usually in the hole, and even when it is not,
+ *  the top element there is the scroll container. So scan the bbox for a point whose
+ *  elementsFromPoint stack contains a sibling of the body path, and require its neighbours
+ *  at 8px too, because the planet drifts under the pointer. Hovering the centre reported an
+ *  empty panel on a page whose hover works.
+ *
+ *  A path can carry a `d` and still have no box - the ones scrolled off the fan do. Picking
+ *  the middle of THOSE put the sample at (0,0), off the page entirely. */
+const pickHoverPoint = () => {
+  const vis = [...document.querySelectorAll('svg[data-ring] path.ring-window')].filter((p) => {
+    const r = p.getBoundingClientRect();
+    return p.getAttribute('d') && r.width && r.height;
+  });
+  if (!vis.length) return null;
+  const p = vis[Math.floor(vis.length / 2)];
+  const r = p.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  const on = (x, y) => document.elementsFromPoint(x, y).some((el) => el.parentElement === p.parentElement);
+  for (let a = 1; a < 8; a++) {
+    for (let b = 1; b < 8; b++) {
+      const x = r.left + (r.width * a) / 8;
+      const y = r.top + (r.height * b) / 8;
+      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
+      if (on(x, y) && on(x - 8, y) && on(x + 8, y) && on(x, y - 8) && on(x, y + 8)) return { x, y };
+    }
+  }
+  return null;
+};
+
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
@@ -170,36 +201,28 @@ for (const c of CASES) {
   let panelHover = null;
   if (!base.error) {
     await new Promise((r) => setTimeout(r, 1800));
-    const box = await page.evaluate(() => {
-      // The bbox CENTRE of an annular sector is usually in the hole, and even when it is
-      // not, the top element there is the scroll container. Hover the shape itself: scan
-      // the bbox for a point whose elementsFromPoint stack contains a sibling of the body
-      // path, and require its neighbours at 8px too, because the planet drifts under the
-      // pointer. Hovering the centre reported an empty panel on a page whose hover works.
-      // A path can carry a `d` and still have no box - the ones scrolled off the fan do.
-      // Picking the middle of THOSE put the sample at (0,0), off the page entirely.
-      const vis = [...document.querySelectorAll('svg[data-ring] path.ring-window')].filter((p) => {
-        const r = p.getBoundingClientRect();
-        return p.getAttribute('d') && r.width && r.height;
-      });
-      if (!vis.length) return null;
-      const p = vis[Math.floor(vis.length / 2)];
-      const r = p.getBoundingClientRect();
-      if (!r.width || !r.height) return null;
-      const on = (x, y) => document.elementsFromPoint(x, y).some((el) => el.parentElement === p.parentElement);
-      for (let a = 1; a < 8; a++) {
-        for (let b = 1; b < 8; b++) {
-          const x = r.left + (r.width * a) / 8;
-          const y = r.top + (r.height * b) / 8;
-          if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
-          if (on(x, y) && on(x - 8, y) && on(x + 8, y) && on(x, y - 8) && on(x, y + 8)) return { x, y };
-        }
-      }
-      return null;
-    });
+    const box = await page.evaluate(pickHoverPoint);
     if (box) {
-      await page.mouse.move(box.x, box.y);
-      await new Promise((r) => setTimeout(r, 600));
+      // The planet DRIFTS. A point chosen a second ago can be off the sector by the time
+      // the panel is read, with no scroll involved at all - and then the panel is naming a
+      // window the cursor is no longer on, which is hysteresis rather than a defect but
+      // cannot be told apart from one. So: move, settle, and if the cursor has slipped off
+      // the shape, pick a fresh point and try again before believing anything.
+      let box2 = box;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await page.mouse.move(box2.x, box2.y);
+        await new Promise((r) => setTimeout(r, 500));
+        const stillOn = await page.evaluate(([x, y]) => {
+          const paths = [...document.querySelectorAll('svg[data-ring] path.ring-window')];
+          return document.elementsFromPoint(x, y).some((el) =>
+            paths.some((q) => q.parentElement === el.parentElement || q.parentElement === el));
+        }, [box2.x, box2.y]);
+        if (stillOn) break;
+        box2 = (await page.evaluate(pickHoverPoint)) || box2;
+      }
+      await page.mouse.move(box2.x + 1, box2.y);
+      await page.mouse.move(box2.x, box2.y);
+      await new Promise((r) => setTimeout(r, 400));
       panelHover = await page.evaluate(panelCheck);
       panelHover.under = await page.evaluate(([x, y]) => {
         const paths = [...document.querySelectorAll('svg[data-ring] path.ring-window')];
@@ -209,7 +232,7 @@ for (const c of CASES) {
           if (k >= 0) return cards[k]?.dataset.title ?? null;
         }
         return null;
-      }, [box.x, box.y]);
+      }, [box2.x, box2.y]);
       panelHover.followsCursor = panelHover.under === null
         ? panelHover.text === ''
         : panelHover.under.startsWith(panelHover.text) && panelHover.text !== '';
