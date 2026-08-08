@@ -77,13 +77,7 @@ const sunFrag = /* glsl */ `
     // circle read as a ball.
     float ndv = max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0);
     float limb = pow(ndv, 0.6);
-    // EXPERIMENT, not a design decision: 2.2 -> 1.4. The disc measured a mean luminance of
-    // 222 of 255 with every radial bin between 205 and 230 - the whole surface sits in the
-    // top fifth of the range, where ACES compresses hard and everything lands near white.
-    // Detail cannot exist in a blown-out region, which is why the granulation octave moved
-    // the measurement by 0.5 units and the limb-darkening change by 0.025. This deploy is
-    // to find out whether exposure is what is eating both.
-    col *= (1.4 + uPulse) * mix(0.68, 1.0, limb);
+    col *= (2.2 + uPulse) * mix(0.68, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
