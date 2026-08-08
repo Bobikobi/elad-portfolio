@@ -15,6 +15,11 @@ const NOISE_GLSL = /* glsl */ `
                mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),
                    mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z); }
   float fbm(vec3 p){ float v=0.0, a=0.5; for(int i=0;i<4;i++){ v+=a*noise(p); p*=2.0; a*=0.5; } return v; }
+  // SUN-2 granulation. TWO octaves, not four: this is sampled at ten times the surface
+  // frequency, and fbm's remaining octaves would land at ~70 cycles per radius - finer than
+  // the disc has pixels at any framing the sun is seen at, which is not detail, it is noise
+  // for the sampler to alias.
+  float grain(vec3 p){ return noise(p) * 0.62 + noise(p * 2.0) * 0.38; }
 `;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
@@ -39,10 +44,28 @@ const sunFrag = /* glsl */ `
   varying vec3 vNormal;
   ${NOISE_GLSL}
   void main() {
-    vec3 p = vPos * 2.4;
+    // SUN-2, and this is the change that decides whether it reads as a star at all.
+    //
+    // At 2.4 the base octave completes about seven cycles across the disc: continent-sized
+    // soft blotches. Looking at the crop rather than the statistic is what caught it - the
+    // sun read as a pale moon, mottled at a scale no photograph of a star has, and no amount
+    // of exposure or fine grain fixes a structure that is simply the wrong size. Doubled, it
+    // is about fourteen, and the weight moves to the finer of the two so the big shapes stop
+    // dominating the face.
+    vec3 p = vPos * 4.6;
     float slow = fbm(p + vec3(0.0, uTime*0.05, 0.0));               // big slow swirls
     float fast = fbm(p*2.6 - vec3(0.0, uTime*0.16, uTime*0.05));    // fast granules
-    float n = slow*0.6 + fast*0.4;
+    float n = slow*0.45 + fast*0.55;
+    // SUN-2. The surface had the large blotches and nothing else - measured, its
+    // high-frequency energy was 1.3 luminance units against 6.5 for the large structure, and
+    // that is what makes a photographed sun read as smooth instead of boiling. A detail
+    // octave at 10x the surface frequency, drifting SLOWLY and across the other two rather
+    // than with them, so the three do not read as one sheet sliding.
+    // Kept at the SAME absolute frequency it had before the base was doubled - 62 times the
+    // surface position, not 26 times a base that has itself moved - or the two octaves would
+    // have converged and there would be no separation between the cells and their grain.
+    float gr = grain(p*13.6 + vec3(uTime*0.09, -uTime*0.06, uTime*0.04));
+    n += (gr - 0.5) * 0.17;
     // B3: these were mixed for a frame that had NO tone mapper, where anything over 1
     // simply clamped and (1.0, 0.5, 0.11) stayed vividly gold. ACES desaturates its
     // highlights toward white on the way up, so the same values came out pale butter.
@@ -52,10 +75,30 @@ const sunFrag = /* glsl */ `
     vec3 dark = vec3(0.60, 0.13, 0.015);
     vec3 mid  = vec3(1.00, 0.30, 0.030);
     vec3 hot  = vec3(1.00, 0.74, 0.300);
-    vec3 col = mix(dark, mid, smoothstep(0.28, 0.6, n));
+    // SUN-2: the lanes between the cells go deeper and the ramp starts earlier, so the dark
+    // stop is actually reached somewhere on the disc instead of being a limit the surface
+    // approaches. The HOT stop is untouched - B3 measured the gold that survives ACES at
+    // exactly these values, and the tone-map discipline is not what this stage is changing.
+    vec3 col = mix(dark, mid, smoothstep(0.24, 0.62, n));
     col = mix(col, hot, smoothstep(0.62, 0.86, n));
-    float limb = pow(max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0), 0.35); // subtle limb darkening
-    col *= (2.2 + uPulse) * mix(0.75, 1.0, limb);
+    // SUN-2 limb darkening. The exponent was 0.35, which holds the term above 0.9 across
+    // most of the disc and then falls off a cliff in the last few percent of the radius: the
+    // rendered limb measured 1.006x the centre's luminance, i.e. no sphericity at all. At
+    // 0.6 the darkening is spread across the disc, which is the term that makes a flat
+    // circle read as a ball.
+    float ndv = max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0);
+    // Depth 32% -> 48%. Measured on the preview, a 32% darkening arrived at the screen as a
+    // 6% one: bloom spills off the bright interior and fills the limb back in. The term has
+    // to be stronger than the result we want, because something downstream is subtracting
+    // from it - which is a statement about the composite, not about physics.
+    float limb = pow(ndv, 0.6);
+    // Exposure, on the owner's ruling. At 2.2 every radial bin of the disc measured between
+    // 205 and 230 of 255 - the top fifth of the range, where ACES compresses hardest and
+    // desaturates toward white. The grain was being drawn and then flattened, a 32% limb
+    // darkening was arriving as 2%, and the gold B3 locked was coming out chalk. Measured at
+    // 1.4 the grain became visible and the mid tone's red-to-blue gap doubled; 1.5 keeps
+    // that and gives back a little of the brightness.
+    col *= (1.5 + uPulse) * mix(0.52, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -121,7 +164,11 @@ function Prominences() {
       const anchor = SUN_R * 0.985 + l * 0.5;
       s.position.set(pr.x * anchor, pr.y * anchor, 0);
       s.scale.set(SUN_R * (0.16 + 0.10 * e), l, 1);
-      (s.material as THREE.SpriteMaterial).opacity = 0.05 + 0.20 * e;
+      // SUN-2: the arcs sat at 0.05-0.25 on additive blending, against a rim the bloom has
+      // already lit - close to invisible, so the limb read as a clean circle with nothing
+      // happening on it. Raised enough to be seen against dark space at the silhouette,
+      // still driven entirely by each arc's own eruption envelope.
+      (s.material as THREE.SpriteMaterial).opacity = 0.08 + 0.30 * e;
       s.material.rotation = pr.a - Math.PI / 2;
     }
   });

@@ -58,6 +58,16 @@ export interface HudData {
   solar: boolean;
   sunPct: number; // sun disc height as % of viewport height
   sunPx: number;
+  // SUN-2. Where the disc actually IS, in CSS px from the top-left. Finding the sun by
+  // thresholding a screenshot picks up the bloom skirt and the nearby planets with it: the
+  // first attempt reported a radius 33% too large and an edge that "varied" by 23%. The
+  // camera knows exactly where the sphere projects to; the screenshot does not.
+  sunX: number;
+  sunY: number;
+  // SUN-2 tier law: the extra noise octaves are shader maths and must not change what the
+  // renderer DOES per frame.
+  calls: number;
+  tris: number;
   planets: { key: string; px: number }[]; // on-screen diameter in px
   fps: number;
   corners: [number, number, number, number]; // TL, TR, BL, BR luminance %
@@ -72,7 +82,7 @@ export interface HudData {
 }
 
 export const hudData: HudData = {
-  solar: false, sunPct: 0, sunPx: 0, planets: [], fps: 0,
+  solar: false, sunPct: 0, sunPx: 0, sunX: 0, sunY: 0, calls: 0, tris: 0, planets: [], fps: 0,
   corners: [0, 0, 0, 0], vw: 0, vh: 0, fov: 0, camDist: 0, pdb: false, center: 0,
   cov: 0, scroll: 0,
 };
@@ -143,6 +153,11 @@ export function HudProbe() {
       hudData.sunPct = sunFrac * 100;
       hudData.sunPx = sunFrac * vh;
       hudData.camDist = sunDist;
+      // The disc's centre in CSS px. `project` gives NDC in [-1,1] with y up; the screen has
+      // y down and the origin at the top-left.
+      _p.copy(_sun).project(cam);
+      hudData.sunX = ((_p.x + 1) / 2) * vw;
+      hudData.sunY = ((1 - _p.y) / 2) * vh;
 
       const planets: { key: string; px: number }[] = [];
       planetPositions.forEach((pos, key) => {
@@ -156,8 +171,28 @@ export function HudProbe() {
     } else {
       hudData.sunPct = 0;
       hudData.sunPx = 0;
+      hudData.sunX = 0;
+      hudData.sunY = 0;
       hudData.planets = [];
     }
+
+    // What the renderer did on the PREVIOUS frame - this hook runs before R3F's render, so
+    // reading after it would report a half-built frame. One frame late is invisible for a
+    // diagnostic and is the same convention the corner readback already uses.
+    //
+    // `autoReset` has to be off for the number to mean anything: three.js clears the counters
+    // at the START of every render, and with the composer's passes each one clearing again,
+    // reading here returned `calls: 1, triangles: 1` - one pass's worth, not the frame's.
+    // Off, the counters accumulate across every pass, and this is the one place that resets
+    // them, once per frame, after they have been read.
+    //
+    // Taken off the frame STATE rather than the `useThree` value: the renderer from a hook
+    // is not ours to mutate, and the compiler's immutability rule is right to say so.
+    const renderer = state.gl;
+    renderer.info.autoReset = false;
+    hudData.calls = renderer.info.render.calls;
+    hudData.tris = renderer.info.render.triangles;
+    renderer.info.reset();
 
     // Corner luminance from the POST-processed framebuffer (captures bloom/vignette/etc.).
     // Throttled to ~5Hz — readPixels is a GPU stall. Reads the previous frame (priority 0
