@@ -282,7 +282,9 @@ const realGpu = /angle|vulkan/i.test(gpu) && !/swiftshader/i.test(gpu);
 // stripped from the production bundle, which means SUN-2 can only be measured on a preview.
 const hud = await page.evaluate(() => {
   const h = window.__hud;
-  return h ? { solar: h.solar, sunPx: h.sunPx, sunX: h.sunX, sunY: h.sunY, vw: h.vw, vh: h.vh, calls: h.calls, tris: h.tris, fps: h.fps } : null;
+  // `corners` is the R2.2 milky-halo acceptance: the emissive this stage lowers is what
+  // Bloom reads, so the halo has to be re-measured, not assumed unchanged.
+  return h ? { solar: h.solar, sunPx: h.sunPx, sunX: h.sunX, sunY: h.sunY, vw: h.vw, vh: h.vh, calls: h.calls, tris: h.tris, fps: h.fps, corners: h.corners, center: h.center } : null;
 });
 const hudDisc = hud && hud.solar && hud.sunPx > 40
   ? { cx: hud.sunX, cy: hud.sunY, r: hud.sunPx / 2, pixels: Math.PI * (hud.sunPx / 2) ** 2, fromCamera: true }

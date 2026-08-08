@@ -87,6 +87,10 @@ const sunFrag = /* glsl */ `
     // 0.6 the darkening is spread across the disc, which is the term that makes a flat
     // circle read as a ball.
     float ndv = max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0);
+    // Depth 32% -> 48%. Measured on the preview, a 32% darkening arrived at the screen as a
+    // 6% one: bloom spills off the bright interior and fills the limb back in. The term has
+    // to be stronger than the result we want, because something downstream is subtracting
+    // from it - which is a statement about the composite, not about physics.
     float limb = pow(ndv, 0.6);
     // Exposure, on the owner's ruling. At 2.2 every radial bin of the disc measured between
     // 205 and 230 of 255 - the top fifth of the range, where ACES compresses hardest and
@@ -94,7 +98,7 @@ const sunFrag = /* glsl */ `
     // darkening was arriving as 2%, and the gold B3 locked was coming out chalk. Measured at
     // 1.4 the grain became visible and the mid tone's red-to-blue gap doubled; 1.5 keeps
     // that and gives back a little of the brightness.
-    col *= (1.5 + uPulse) * mix(0.68, 1.0, limb);
+    col *= (1.5 + uPulse) * mix(0.52, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
