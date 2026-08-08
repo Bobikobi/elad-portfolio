@@ -439,6 +439,15 @@ export default function ProjectsStage({
           photo.setAttribute('y', by0.toFixed(1));
           photo.setAttribute('width', (bx1 - bx0).toFixed(1));
           photo.setAttribute('height', (by1 - by0).toFixed(1));
+          // The previews are MIRRORED for the same reason the monograms were, and the note
+          // below - "photographs survive being mirrored without anyone noticing" - was
+          // wrong: every one of these is a screenshot of a website, so every one of them is
+          // full of text. On the live site the Hebrew in them read back to front.
+          //
+          // Flipped about y = 0, which is the sector's own axis of symmetry, so the clip
+          // path lands on exactly the same shape and only the image inside it turns over.
+          const detP = m.matrix[0] * m.matrix[3] - m.matrix[1] * m.matrix[2];
+          photo.setAttribute('transform', detP < 0 ? 'scale(1,-1)' : '');
         }
         const mark = marks[i];
         if (mark) {
@@ -446,10 +455,9 @@ export default function ProjectsStage({
           mark.setAttribute('y', '0');
           mark.setAttribute('font-size', Math.max(22, Math.min(64, m.contentHalf * 1.5)).toFixed(0));
           // The ring-plane matrix can have a NEGATIVE determinant - here it does, because
-          // the plane is seen from below and its `v` points up the screen. Shapes and
-          // photographs survive being mirrored without anyone noticing; letters do not,
-          // and the monograms rendered back to front. Flipping about the text's own
-          // baseline undoes it without moving it.
+          // the plane is seen from below and its `v` points up the screen. Letters render
+          // back to front under it; flipping about the text's own baseline undoes that
+          // without moving it.
           const det = m.matrix[0] * m.matrix[3] - m.matrix[1] * m.matrix[2];
           mark.setAttribute('transform', det < 0 ? `translate(0,0) scale(1,-1)` : '');
         }
