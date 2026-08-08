@@ -18,6 +18,7 @@
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 const BASE = process.env.BASE || 'http://localhost:3112';
 const BYPASS = process.env.BYPASS || '';
@@ -33,7 +34,7 @@ const browser = await puppeteer.launch({
   protocolTimeout: 240000,
   // Its own profile per run. Puppeteer's default profile path is shared, so a browser left
   // behind by an interrupted run holds it and every later run dies on "already running".
-  userDataDir: fs.mkdtempSync(path.join(OUT, 'profile-')),
+  userDataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'harness-profile-')),
   args: [
     '--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars',
     '--use-gl=angle', '--use-angle=vulkan', '--disable-dev-shm-usage',

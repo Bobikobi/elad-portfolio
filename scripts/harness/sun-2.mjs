@@ -20,6 +20,7 @@
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import zlib from 'zlib';
 
 const BASE = process.env.BASE || 'http://localhost:3112';
@@ -236,7 +237,7 @@ const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
   protocolTimeout: 240000,
-  userDataDir: fs.mkdtempSync(path.join(OUT, 'profile-')),
+  userDataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'harness-profile-')),
   args: [
     '--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars',
     '--use-gl=angle', '--use-angle=vulkan', '--disable-dev-shm-usage',
