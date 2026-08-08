@@ -79,8 +79,13 @@ const sunFrag = /* glsl */ `
     // stop is actually reached somewhere on the disc instead of being a limit the surface
     // approaches. The HOT stop is untouched - B3 measured the gold that survives ACES at
     // exactly these values, and the tone-map discipline is not what this stage is changing.
-    vec3 col = mix(dark, mid, smoothstep(0.24, 0.62, n));
-    col = mix(col, hot, smoothstep(0.62, 0.86, n));
+    // The ramp's windows move UP. n centres near 0.5, so with the old windows almost the
+    // whole disc sat at or past the mid stop and the surface came out one flat cream tone -
+    // "not rich enough", and correctly so: a photographed sun is mostly deep amber with the
+    // bright cells as a minority. Now most of the face lives between the dark and mid stops,
+    // and the hot stop is reserved for the cells that have actually earned it.
+    vec3 col = mix(dark, mid, smoothstep(0.34, 0.74, n));
+    col = mix(col, hot, smoothstep(0.74, 0.94, n));
     // SUN-2 limb darkening. The exponent was 0.35, which holds the term above 0.9 across
     // most of the disc and then falls off a cliff in the last few percent of the radius: the
     // rendered limb measured 1.006x the centre's luminance, i.e. no sphericity at all. At
