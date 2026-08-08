@@ -129,6 +129,9 @@ export default function ProjectsStage({
     const tapped = { current: -1 };
     const axisRef = { current: 'y' as 'x' | 'y' };
     const shownActive = { current: -2 };
+    /** The preview image's box in CANONICAL space, as the last rebuild placed it. The
+     *  per-frame upright correction rotates about its centre. */
+    const photoBox = { x: 0, y: 0, w: 0, h: 0 };
     /** How far the panel has travelled along the disc from its resting place, in px. */
     const slide = { current: 0 };
     const centreOffsetRef = { current: 0 };
@@ -216,7 +219,17 @@ export default function ProjectsStage({
       hitG.setAttribute('style', 'pointer-events: auto; cursor: pointer');
       space.appendChild(hitG);
       hits.push(hitG);
-      if (photo) hitG.appendChild(photo);
+      // The photo gets its own wrapper, and the CLIP lives on the wrapper rather than on the
+      // image. A clip-path is resolved in the user space of the element that references it,
+      // so a transform on the image would drag its clip along with it - and the image is
+      // about to be counter-rotated inside a sector that must not move.
+      if (photo) {
+        const wrap = document.createElementNS(SVG_NS, 'g');
+        if (src) wrap.setAttribute('clip-path', `url(#ring-clip-${i})`);
+        photo.removeAttribute('clip-path');
+        wrap.appendChild(photo);
+        hitG.appendChild(wrap);
+      }
 
       const body = document.createElementNS(SVG_NS, 'path');
       body.setAttribute('class', 'ring-window');
@@ -294,9 +307,12 @@ export default function ProjectsStage({
       for (const el of document.elementsFromPoint(x, y)) {
         const own = hits.indexOf(el as SVGGElement);
         if (own >= 0) return own;
-        // The photo, the body, the accent and the monogram are all children of the group.
+        // The body, the accent and the monogram are children of the group; the photo sits
+        // one level deeper, inside the wrapper that carries its clip.
         const parent = hits.indexOf(el.parentElement as unknown as SVGGElement);
         if (parent >= 0) return parent;
+        const grand = hits.indexOf(el.parentElement?.parentElement as unknown as SVGGElement);
+        if (grand >= 0) return grand;
       }
       return -1;
     };
@@ -439,6 +455,12 @@ export default function ProjectsStage({
           photo.setAttribute('y', by0.toFixed(1));
           photo.setAttribute('width', (bx1 - bx0).toFixed(1));
           photo.setAttribute('height', (by1 - by0).toFixed(1));
+          photoBox.x = bx0;
+          photoBox.y = by0;
+          photoBox.w = bx1 - bx0;
+          photoBox.h = by1 - by0;
+          // The upright correction itself is per-window and per-frame, so it lives with the
+          // window's own transform below, not here.
         }
         const mark = marks[i];
         if (mark) {
@@ -446,10 +468,9 @@ export default function ProjectsStage({
           mark.setAttribute('y', '0');
           mark.setAttribute('font-size', Math.max(22, Math.min(64, m.contentHalf * 1.5)).toFixed(0));
           // The ring-plane matrix can have a NEGATIVE determinant - here it does, because
-          // the plane is seen from below and its `v` points up the screen. Shapes and
-          // photographs survive being mirrored without anyone noticing; letters do not,
-          // and the monograms rendered back to front. Flipping about the text's own
-          // baseline undoes it without moving it.
+          // the plane is seen from below and its `v` points up the screen. Letters render
+          // back to front under it; flipping about the text's own baseline undoes that
+          // without moving it.
           const det = m.matrix[0] * m.matrix[3] - m.matrix[1] * m.matrix[2];
           mark.setAttribute('transform', det < 0 ? `translate(0,0) scale(1,-1)` : '');
         }
@@ -651,6 +672,57 @@ export default function ProjectsStage({
           'transform',
           `rotate(${((th * 180) / Math.PI).toFixed(3)}) scale(${k.toFixed(4)})`
         );
+
+        // KEEP THE PREVIEW THE RIGHT WAY UP.
+        //
+        // The window must lie in the ring plane - that is the whole design - but the
+        // PICTURE inside it must not stand on its head. Measured on the live site with a
+        // marker image in place of the screenshots: the preview came out rotated **225deg**
+        // at 1440x900 and **275deg** at 390x844. Every one of these previews is a
+        // screenshot of a website, so that is a page of text upside down, which is what
+        // "the windows are inverted" was pointing at.
+        //
+        // The correction is the rotation ONLY. The plane's squash stays - it is what makes
+        // the window sit in the rings rather than float over them - and so does the mirror
+        // when the plane is seen from below, which is undone here for the same reason the
+        // monogram undoes it.
+        const photoEl = photos[i];
+        if (photoEl) {
+          // SOLVED, not guessed. Simply counter-rotating by the screen angle of the image's
+          // x axis is only correct when the transform above it is a similarity, and the
+          // plane matrix is not one - it squashes one axis to put the window in the rings.
+          // A local rotation therefore arrives on screen as a DIFFERENT angle, which is why
+          // the first attempt fixed the phone (where the matrix is a plain translation) and
+          // left the desktop lying on its side.
+          //
+          // A is the plane matrix composed with this window's rotation. Find the local
+          // angle phi whose image under A is horizontal on screen:
+          //     A21*cos(phi) + A22*sin(phi) = 0   ->   phi = atan2(-A21, A22)
+          const [ma, mb, mc, md] = m.matrix;
+          const cos = Math.cos(th);
+          const sin = Math.sin(th);
+          const a11 = ma * cos + mc * sin;
+          const a12 = -ma * sin + mc * cos;
+          const a21 = mb * cos + md * sin;
+          const a22 = -mb * sin + md * cos;
+          let phi = Math.atan2(-a21, a22);
+          // Two angles satisfy that; take the one that leaves the image reading left to
+          // right rather than backwards.
+          if (a11 * Math.cos(phi) + a12 * Math.sin(phi) < 0) phi += Math.PI;
+          // And when the plane is seen from below the whole space is mirrored, which the
+          // monogram already undoes for itself. det(A * R * F) = -det(A), so the flip is
+          // exactly what puts it back.
+          const det = a11 * a22 - a12 * a21;
+          const cxImg = photoBox.x + photoBox.w / 2;
+          const cyImg = photoBox.y + photoBox.h / 2;
+          photoEl.setAttribute(
+            'transform',
+            `translate(${cxImg.toFixed(1)} ${cyImg.toFixed(1)}) ` +
+              `rotate(${((phi * 180) / Math.PI).toFixed(2)}) ` +
+              (det < 0 ? 'scale(1,-1) ' : '') +
+              `translate(${(-cxImg).toFixed(1)} ${(-cyImg).toFixed(1)})`
+          );
+        }
         g.style.opacity = opacity.toFixed(3);
         // The window IS the preview, so the preview has to read as one. This line was
         // lost when the per-frame block was replaced by the cached one, and the stylesheet

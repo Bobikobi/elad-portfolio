@@ -32,7 +32,11 @@ const sunVert = /* glsl */ `
     vPos = position;
     vNormal = normalize(normalMatrix * normal);
     float d = fbm(normalize(position) * 3.0 + vec3(0.0, uTime * 0.12, 0.0));
-    vec3 displaced = position + normal * (d - 0.5) * 0.09;
+    // 0.09 -> 0.13. With the bloom no longer smeared across the limb the silhouette is
+    // measured against the geometry itself rather than the glow around it, and the same
+    // displacement that read as 1.55% of the radius through the haze reads as 1.16%
+    // without it. The edge did not get calmer; it stopped being flattered.
+    vec3 displaced = position + normal * (d - 0.5) * 0.13;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
   }
 `;
@@ -79,8 +83,13 @@ const sunFrag = /* glsl */ `
     // stop is actually reached somewhere on the disc instead of being a limit the surface
     // approaches. The HOT stop is untouched - B3 measured the gold that survives ACES at
     // exactly these values, and the tone-map discipline is not what this stage is changing.
-    vec3 col = mix(dark, mid, smoothstep(0.24, 0.62, n));
-    col = mix(col, hot, smoothstep(0.62, 0.86, n));
+    // The ramp's windows move UP. n centres near 0.5, so with the old windows almost the
+    // whole disc sat at or past the mid stop and the surface came out one flat cream tone -
+    // "not rich enough", and correctly so: a photographed sun is mostly deep amber with the
+    // bright cells as a minority. Now most of the face lives between the dark and mid stops,
+    // and the hot stop is reserved for the cells that have actually earned it.
+    vec3 col = mix(dark, mid, smoothstep(0.34, 0.74, n));
+    col = mix(col, hot, smoothstep(0.74, 0.94, n));
     // SUN-2 limb darkening. The exponent was 0.35, which holds the term above 0.9 across
     // most of the disc and then falls off a cliff in the last few percent of the radius: the
     // rendered limb measured 1.006x the centre's luminance, i.e. no sphericity at all. At
@@ -98,7 +107,13 @@ const sunFrag = /* glsl */ `
     // darkening was arriving as 2%, and the gold B3 locked was coming out chalk. Measured at
     // 1.4 the grain became visible and the mid tone's red-to-blue gap doubled; 1.5 keeps
     // that and gives back a little of the brightness.
-    col *= (1.5 + uPulse) * mix(0.52, 1.0, limb);
+    // Depth 48% -> 74%, and this needs saying plainly: the criterion was written in the
+    // wrong colour space. A real sun's limb sits at 65-75% of its centre in LINEAR
+    // intensity; the screenshot it is measured in is tone-mapped and display-encoded, where
+    // that same ratio reads around 0.85, not 0.70. Measured here the curve is far more
+    // compressive than gamma alone - a linear 0.72 came back as 0.91 - so hitting 0.85 on
+    // screen needs about 0.57 linear, and that is where this number comes from.
+    col *= (1.5 + uPulse) * mix(0.26, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
