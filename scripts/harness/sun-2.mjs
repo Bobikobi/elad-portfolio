@@ -31,8 +31,14 @@ const SETTLE = Number(process.env.SETTLE || 12000);
 fs.mkdirSync(OUT, { recursive: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Minimal PNG reader: enough for the 8-bit RGBA screenshots Chromium produces. */
-function readPng(buf) {
+/** Minimal PNG reader: enough for the 8-bit RGBA screenshots Chromium produces.
+ *
+ *  The bytes are wrapped rather than trusted. Everything below uses Buffer-only methods
+ *  (`readUInt32BE`, `toString('ascii')`), and puppeteer's screenshot return type has moved
+ *  between Buffer and Uint8Array across majors - it is a Buffer in the version pinned here,
+ *  which is why this ran at all, and `Buffer.from` on a Buffer is a no-op view. */
+function readPng(bytes) {
+  const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   let pos = 8, width = 0, height = 0, bitDepth = 0, colorType = 0;
   const idat = [];
   while (pos < buf.length) {
