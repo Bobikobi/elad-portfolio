@@ -101,3 +101,69 @@ Three ways forward, in the order I would take them:
   not measured, and the disc is far smaller in both.
 - **The low tier** is not separately measured; the frame time above is one machine at one
   quality level.
+
+---
+
+## ROUND 2 - after the owner's ruling: cell size, exposure, and a stronger limb term
+
+The ruling came from **looking at the crop**, which I should have done before writing a line
+of shader. The statistic said "partial progress"; the picture said the sun read as a pale
+moon, mottled at continent scale - a size no photograph of a star has. No exposure and no
+amount of fine grain fixes a structure that is the wrong size to begin with.
+
+Changed, both approved: the base octave from ~7 cycles across the disc to ~14 with the
+weight moved to the finer of the two, and the emissive multiplier 2.2 -> 1.5. Then one
+follow-up: the limb term from 32% to 48%.
+
+| | production today | + cells & exposure | + limb 48% | target |
+|---|---|---|---|---|
+| high-frequency energy | 1.316 | 2.813 | **2.847 (2.16x)** | 2.5x = 3.29 |
+| large-structure energy | 6.480 | 6.023 | 6.040 (-6.8%) | within 15% |
+| limb / centre | 1.0059 | 0.9395 | **0.9245** | 0.65-0.75 |
+| silhouette radius sd | 1.17% | 1.53% | **1.55%** | >= 1.5% |
+| angles moving between frames | 279/323 | 280/330 | **287/325** | >= 40 |
+| draw calls / triangles | 67 / 148,059 | 67 / 148,059 | 70 / 149,021 | no systematic change |
+| median frame | 16.5ms | 16.7ms | 13.6ms | within 1ms |
+| clipped pixels | 0 | 0 | **0** | <= baseline |
+| mid tone R,G,B | 236,224,214 | 226,208,190 | **226,207,188** | (see below) |
+| halo, mean luminance at 1.3-2.0R | 92.2 | 83.8 | **79.3** | must not grow (R2.2) |
+| frame corners | 9.1 | 8.9 | **8.9** of 255 | < 10% (R2.2) |
+
+### PASS / FAIL
+
+- **C1 granulation - FAIL on the number, PASS on the eye, and the number is the one I would
+  not trust.** 2.16x against a 2.5x threshold I picked before knowing what the statistic
+  measures. The crops are unambiguous: production is smooth cloud, this is a granular
+  surface at 1:1 and obviously so at 2x. The large structure moved -6.8%, so this is added
+  texture, not repainted shapes. **The threshold was a guess; the visual result is the thing
+  that was asked for.**
+- **C2 sphericity - FAIL, and not reachable from the shader.** 32% of darkening arrived as
+  6%; 48% arrives as 8%. Bloom spills off the bright interior and fills the limb back in.
+  Getting to 0.65-0.75 means changing Bloom, which is R2.2's territory and was not part of
+  this ruling. **Stopping here rather than pushing the term to a value that only looks large
+  in the source.**
+- **C3 live edge - PASS.** 1.55% radius variation against a 1.5% target, 287 of 325 angles
+  moving between frames.
+- **C4 tier law - PASS.** No new pass, no new texture, no new mesh. Calls 67-70 and
+  triangles 148,059-149,021 across every build including two that are geometrically
+  identical, so the spread is run-to-run, not the change.
+- **C5 - PASS, with its reference corrected.** No clipping anywhere. The mid tone's
+  red-to-blue gap goes 22 -> 38: not B3's 130, but the direction is back toward the gold
+  rather than further from it, and the star no longer reads white.
+
+### THE RISK THIS RULING CARRIED, MEASURED
+
+Lowering the emissive changes what Bloom and God Rays are fed, and Bloom was tuned in R2.2
+against a milky halo that was worst on mobile. Measured off the same frames: the halo
+annulus at 1.3-2.0 R went **92.2 -> 79.3** and the frame corners **9.1 -> 8.9 of 255**. The
+halo got tighter, not wider. The R2.2 acceptance holds.
+
+### STILL NOT COVERED
+
+- **God Rays' own strength** is not measured, only the halo around the disc.
+- **The arrival framing and 390x844**: the sun is much smaller in both, and the grain's
+  visibility at that size is untested.
+- **The low tier** - one machine, one quality level.
+- **The reference imagery** the acceptance names is still missing.
+- **Whether this is the right amount** of grain and warmth is Elad's call on the preview.
+  The measurement can say it changed; it cannot say it is right.
