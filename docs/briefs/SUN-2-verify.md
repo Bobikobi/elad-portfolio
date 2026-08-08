@@ -167,3 +167,48 @@ halo got tighter, not wider. The R2.2 acceptance holds.
 - **The reference imagery** the acceptance names is still missing.
 - **Whether this is the right amount** of grain and warmth is Elad's call on the preview.
   The measurement can say it changed; it cannot say it is right.
+
+---
+
+## ROUND 3 - "not rich enough, and not really round"
+
+Both true, and both had a cause the earlier rounds had not reached.
+
+**Bloom was being laid over the disc, not around it.** The overview threshold was 0.72, which
+most of the sun's surface clears - so the glow was painted on top of the surface itself. That
+is why a 48% limb darkening arrived as 8% and why the granulation came out smeared.
+Threshold 0.72 -> 0.94, intensity 0.6 -> 0.5.
+
+**The ramp was making one flat cream tone.** `n` centres near 0.5, so with windows at
+0.24/0.62 nearly the whole face sat at or past the mid stop. Moved to 0.34/0.74 and
+0.74/0.94: most of the disc now lives between the deep amber and the mid, and the hot stop is
+reserved for the cells that earned it.
+
+**And C2's target was written in the wrong colour space** - which is worth more than the
+number it produced. A real sun's limb sits at 65-75% of its centre in LINEAR intensity; the
+screenshot it is measured in is tone-mapped and display-encoded, where the same ratio reads
+around **0.85**, not 0.70. Measured here the curve is far more compressive than gamma alone -
+a linear 0.72 came back as 0.91 - so 0.85 on screen needs about 0.57 linear. The limb term
+went to 74% on that basis, and the edge displacement 0.09 -> 0.13, because with the bloom no
+longer smeared across the limb the same wobble that read as 1.55% of the radius through the
+haze read as 1.16% without it.
+
+| | production | round 2 | **round 3** | target |
+|---|---|---|---|---|
+| high-frequency energy | 1.316 | 2.847 | **3.425 (2.60x)** | 2.5x = 3.29 |
+| large structure | 6.480 | 6.040 | 7.016 (+8.3%) | within 15% |
+| limb / centre | 1.0059 | 0.9245 | **0.8707** | ~0.85 (restated) |
+| silhouette radius sd | 1.17% | 1.55% | **2.14%** | >= 1.5% |
+| angles moving | 279/323 | 287/325 | **276/307** | >= 40 |
+| draw calls / triangles | 67 / 148,059 | 70 / 149,021 | 70 / 149,021 | no systematic change |
+| clipped pixels | 0 | 0 | **0** | <= baseline |
+| mid tone R,G,B | 236,224,214 | 226,207,188 | **225,192,162** | toward the gold |
+| halo at 1.3-2.0R | 92.2 | 79.3 | **69.8** | must not grow |
+| frame corners | 9.1 | 8.9 | **8.8** of 255 | < 10% |
+
+**C1 PASS** at 2.60x. **C3 PASS** at 2.14%. **C4 PASS.** **C5 PASS**, and the mid tone's
+red-to-blue gap is now 63 against production's 22. **C2 at 0.871 against a restated 0.85** -
+close, and the remaining distance is bloom's, not the shader's.
+
+The R2.2 risk went the safe way again: the halo is now **69.8** against production's 92.2,
+and the corners 8.8 against 9.1. Raising the threshold can only tighten it.
