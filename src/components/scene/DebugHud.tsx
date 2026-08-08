@@ -179,8 +179,20 @@ export function HudProbe() {
     // What the renderer did on the PREVIOUS frame - this hook runs before R3F's render, so
     // reading after it would report a half-built frame. One frame late is invisible for a
     // diagnostic and is the same convention the corner readback already uses.
-    hudData.calls = gl.info.render.calls;
-    hudData.tris = gl.info.render.triangles;
+    //
+    // `autoReset` has to be off for the number to mean anything: three.js clears the counters
+    // at the START of every render, and with the composer's passes each one clearing again,
+    // reading here returned `calls: 1, triangles: 1` - one pass's worth, not the frame's.
+    // Off, the counters accumulate across every pass, and this is the one place that resets
+    // them, once per frame, after they have been read.
+    //
+    // Taken off the frame STATE rather than the `useThree` value: the renderer from a hook
+    // is not ours to mutate, and the compiler's immutability rule is right to say so.
+    const renderer = state.gl;
+    renderer.info.autoReset = false;
+    hudData.calls = renderer.info.render.calls;
+    hudData.tris = renderer.info.render.triangles;
+    renderer.info.reset();
 
     // Corner luminance from the POST-processed framebuffer (captures bloom/vignette/etc.).
     // Throttled to ~5Hz — readPixels is a GPU stall. Reads the previous frame (priority 0

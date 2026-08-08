@@ -140,29 +140,42 @@ function findDiscByThreshold(img) {
   return { cx, cy, r, pixels: n, thr, maxL, bbox: [minX, minY, maxX, maxY] };
 }
 
-/** Silhouette radius at 360 angles, by walking out from the centre until the luminance
- *  drops through the threshold. */
+/** The silhouette's radius at 360 angles, taken as the STEEPEST LUMINANCE DROP along each
+ *  ray rather than a threshold crossing.
+ *
+ *  A threshold does not find this edge. The sun is wrapped in bloom that decays smoothly for
+ *  another 30% of the radius, so "the last pixel above half the peak" lands somewhere out in
+ *  the glow: it reported a mean radius of 222px for a disc the camera says is 175px, and an
+ *  edge that "varied" by 12-23%, which is the glow's shape and not the star's. The limb is a
+ *  step; the glow is a ramp; the derivative tells them apart.
+ *
+ *  Rays that disagree wildly with the rest are dropped, and the count is reported: a planet
+ *  crossing the disc's edge or a prominence licking out takes its ray with it, and they must
+ *  not be averaged in silently. */
 function silhouette(img, disc) {
-  const out = [];
-  // The camera-derived disc carries no threshold of its own; take one from the frame.
-  if (disc.thr == null) {
-    let peak = 0;
-    for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) peak = Math.max(peak, lum(img, x, y));
-    disc = { ...disc, thr: peak * 0.5 };
-  }
+  const radii = [];
   for (let a = 0; a < 360; a++) {
     const th = (a * Math.PI) / 180;
     const dx = Math.cos(th), dy = Math.sin(th);
-    let last = 0;
-    for (let t = disc.r * 0.5; t < disc.r * 1.6; t += 0.25) {
+    let best = 0, bestDrop = 0;
+    let prev = null;
+    for (let t = disc.r * 0.6; t < disc.r * 1.5; t += 0.5) {
       const x = Math.round(disc.cx + dx * t);
       const y = Math.round(disc.cy + dy * t);
       if (x < 0 || y < 0 || x >= img.width || y >= img.height) break;
-      if (lum(img, x, y) >= disc.thr) last = t;
+      const L = lum(img, x, y);
+      if (prev !== null) {
+        const drop = prev - L;
+        if (drop > bestDrop) { bestDrop = drop; best = t; }
+      }
+      prev = L;
     }
-    out.push(last);
+    radii.push(best);
   }
-  return out;
+  const sorted = [...radii].filter((v) => v > 0).sort((a, b) => a - b);
+  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+  const kept = radii.map((v) => (median > 0 && Math.abs(v - median) <= median * 0.25 ? v : null));
+  return { radii, kept, median, dropped: kept.filter((v) => v === null).length };
 }
 
 function analyse(img, disc) {
@@ -294,6 +307,10 @@ const cost = await page.evaluate(() => new Promise((resolve) => {
   requestAnimationFrame(tick);
 }));
 
+// The HUD panel is a DOM overlay in the same screenshot. It sits top-left and the sun does
+// not, but a measurement that depends on that staying true is one bad viewport from lying.
+await page.evaluate(() => { for (const el of document.querySelectorAll('pre')) el.style.display = 'none'; });
+
 const shots = [];
 for (let i = 0; i < 3; i++) {
   const buf = await page.screenshot({ encoding: 'binary' });
@@ -311,19 +328,31 @@ if (!disc) {
   process.exitCode = 1;
 } else {
   const sils = shots.map((s) => silhouette(s, disc));
-  const mean = sils[0].reduce((a, b) => a + b, 0) / sils[0].length;
-  const sd = Math.sqrt(sils[0].reduce((a, b) => a + (b - mean) ** 2, 0) / sils[0].length);
-  let moved = 0;
+  const kept0 = sils[0].kept.filter((v) => v !== null);
+  const mean = kept0.reduce((a, b) => a + b, 0) / Math.max(1, kept0.length);
+  const sd = Math.sqrt(kept0.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, kept0.length));
+  // An angle counts as moving only if it survived the outlier filter in ALL three frames -
+  // otherwise a planet drifting across the limb reads as the star's edge coming apart.
+  let moved = 0, comparable = 0;
   for (let a = 0; a < 360; a++) {
-    const d = Math.max(Math.abs(sils[1][a] - sils[0][a]), Math.abs(sils[2][a] - sils[0][a]));
-    if (d > mean * 0.005) moved++;
+    const v0 = sils[0].kept[a], v1 = sils[1].kept[a], v2 = sils[2].kept[a];
+    if (v0 === null || v1 === null || v2 === null) continue;
+    comparable++;
+    if (Math.max(Math.abs(v1 - v0), Math.abs(v2 - v0)) > mean * 0.005) moved++;
   }
   const stats = analyse(shots[0], disc);
   const report = {
     base: BASE, gpu, realGpu, hud, discFromCamera: Boolean(hudDisc),
     disc: { cx: +disc.cx.toFixed(1), cy: +disc.cy.toFixed(1), r: +disc.r.toFixed(1), pixels: disc.pixels },
     cost,
-    edge: { meanRadius: +mean.toFixed(2), radiusSdShare: +(sd / mean).toFixed(4), anglesMoved: moved },
+    edge: {
+      meanRadius: +mean.toFixed(2),
+      cameraRadius: +disc.r.toFixed(2),
+      radiusSdShare: +(sd / mean).toFixed(4),
+      anglesMoved: moved,
+      anglesComparable: comparable,
+      anglesDropped: sils[0].dropped,
+    },
     ...stats,
   };
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
