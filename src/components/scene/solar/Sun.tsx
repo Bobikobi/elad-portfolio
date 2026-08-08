@@ -44,16 +44,27 @@ const sunFrag = /* glsl */ `
   varying vec3 vNormal;
   ${NOISE_GLSL}
   void main() {
-    vec3 p = vPos * 2.4;
+    // SUN-2, and this is the change that decides whether it reads as a star at all.
+    //
+    // At 2.4 the base octave completes about seven cycles across the disc: continent-sized
+    // soft blotches. Looking at the crop rather than the statistic is what caught it - the
+    // sun read as a pale moon, mottled at a scale no photograph of a star has, and no amount
+    // of exposure or fine grain fixes a structure that is simply the wrong size. Doubled, it
+    // is about fourteen, and the weight moves to the finer of the two so the big shapes stop
+    // dominating the face.
+    vec3 p = vPos * 4.6;
     float slow = fbm(p + vec3(0.0, uTime*0.05, 0.0));               // big slow swirls
     float fast = fbm(p*2.6 - vec3(0.0, uTime*0.16, uTime*0.05));    // fast granules
-    float n = slow*0.6 + fast*0.4;
+    float n = slow*0.45 + fast*0.55;
     // SUN-2. The surface had the large blotches and nothing else - measured, its
     // high-frequency energy was 1.3 luminance units against 6.5 for the large structure, and
     // that is what makes a photographed sun read as smooth instead of boiling. A detail
     // octave at 10x the surface frequency, drifting SLOWLY and across the other two rather
     // than with them, so the three do not read as one sheet sliding.
-    float gr = grain(p*26.0 + vec3(uTime*0.09, -uTime*0.06, uTime*0.04));
+    // Kept at the SAME absolute frequency it had before the base was doubled - 62 times the
+    // surface position, not 26 times a base that has itself moved - or the two octaves would
+    // have converged and there would be no separation between the cells and their grain.
+    float gr = grain(p*13.6 + vec3(uTime*0.09, -uTime*0.06, uTime*0.04));
     n += (gr - 0.5) * 0.17;
     // B3: these were mixed for a frame that had NO tone mapper, where anything over 1
     // simply clamped and (1.0, 0.5, 0.11) stayed vividly gold. ACES desaturates its
@@ -77,7 +88,13 @@ const sunFrag = /* glsl */ `
     // circle read as a ball.
     float ndv = max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0);
     float limb = pow(ndv, 0.6);
-    col *= (2.2 + uPulse) * mix(0.68, 1.0, limb);
+    // Exposure, on the owner's ruling. At 2.2 every radial bin of the disc measured between
+    // 205 and 230 of 255 - the top fifth of the range, where ACES compresses hardest and
+    // desaturates toward white. The grain was being drawn and then flattened, a 32% limb
+    // darkening was arriving as 2%, and the gold B3 locked was coming out chalk. Measured at
+    // 1.4 the grain became visible and the mid tone's red-to-blue gap doubled; 1.5 keeps
+    // that and gives back a little of the brightness.
+    col *= (1.5 + uPulse) * mix(0.68, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
