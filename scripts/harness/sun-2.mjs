@@ -31,8 +31,14 @@ const SETTLE = Number(process.env.SETTLE || 12000);
 fs.mkdirSync(OUT, { recursive: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Minimal PNG reader: enough for the 8-bit RGBA screenshots Chromium produces. */
-function readPng(buf) {
+/** Minimal PNG reader: enough for the 8-bit RGBA screenshots Chromium produces.
+ *
+ *  The bytes are wrapped rather than trusted. Everything below uses Buffer-only methods
+ *  (`readUInt32BE`, `toString('ascii')`), and puppeteer's screenshot return type has moved
+ *  between Buffer and Uint8Array across majors - it is a Buffer in the version pinned here,
+ *  which is why this ran at all, and `Buffer.from` on a Buffer is a no-op view. */
+function readPng(bytes) {
+  const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   let pos = 8, width = 0, height = 0, bitDepth = 0, colorType = 0;
   const idat = [];
   while (pos < buf.length) {
@@ -258,11 +264,16 @@ const browser = await puppeteer.launch({
   ],
 });
 
+// C4 says "on the low and high tiers", and a run that samples whichever tier the governor
+// happened to choose can report it passing while missing a tier-specific cost regression -
+// the review was right about that. `?tier=` pins it; the same flag the governor's own
+// harness uses, and stripped from production with the rest of the debug hooks.
+const TIER = process.env.TIER || '';
 const ctx = await browser.createBrowserContext();
 const page = await ctx.newPage();
 if (BYPASS) await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': BYPASS });
 await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
-await page.goto(`${BASE}/?hud=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+await page.goto(`${BASE}/?hud=1${TIER ? `&tier=${TIER}` : ''}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await wait(SETTLE);
 
 // The sun is in the SOLAR act, at the end of the scroll driver. Park there and let the rig
@@ -270,6 +281,9 @@ await wait(SETTLE);
 await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
 await wait(SETTLE);
 
+// What the tier ACTUALLY is, read from the store rather than from the flag we asked for.
+// A pin that quietly failed would otherwise be reported as a measurement of that tier.
+const tier = await page.evaluate(() => window.__scene?.getState?.().quality ?? null);
 const gpu = await page.evaluate(() => {
   const g = document.createElement('canvas').getContext('webgl2');
   const d = g?.getExtension('WEBGL_debug_renderer_info');
@@ -345,6 +359,7 @@ if (!disc) {
   const stats = analyse(shots[0], disc);
   const report = {
     base: BASE, gpu, realGpu, hud, discFromCamera: Boolean(hudDisc),
+    tierAsked: TIER || '(governor)', tierActual: tier,
     disc: { cx: +disc.cx.toFixed(1), cy: +disc.cy.toFixed(1), r: +disc.r.toFixed(1), pixels: disc.pixels },
     cost,
     edge: {
@@ -360,6 +375,10 @@ if (!disc) {
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
   // A disc under 40px across cannot carry a granulation measurement.
+  if (TIER && tier !== TIER) {
+    console.log(`REFUSING to report: asked for tier '${TIER}' and the scene says '${tier}'`);
+    process.exitCode = 1;
+  }
   if (!realGpu || disc.r < 20 || !hudDisc || cost.calls == null) {
     console.log(
       `REFUSING to report: realGpu=${realGpu} discRadius=${disc.r.toFixed(1)}px ` +

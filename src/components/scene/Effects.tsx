@@ -249,8 +249,20 @@ export default function Effects() {
         // frame. The high tier had drifted UP during the pass round (21.0 -> 22.7 on
         // home); this is the correction.
         levels={high ? 7 : 6}
-        intensity={solar ? (focused ? 0.34 : 0.6) : 0.5}
-        luminanceThreshold={solar ? (focused ? 0.86 : 0.72) : 0}
+        // SUN-2: the OVERVIEW threshold goes 0.72 -> 0.94 and its intensity 0.6 -> 0.5.
+        //
+        // Bloom runs after tone mapping, and at 0.72 most of the sun's disc - not just its
+        // hottest cells - was over the bar. The glow was therefore being laid over the
+        // surface itself: measured, a 48% limb darkening arrived at the screen as 8%,
+        // because the halo spilling inward off the bright interior filled the limb back in,
+        // and the granulation was smeared for the same reason. At 0.94 only the genuinely
+        // burning cells bloom, which is what the threshold is for; the disc keeps its own
+        // shading and the star still glows.
+        //
+        // This can only make the halo TIGHTER, which is the direction R2.2 wanted - but the
+        // corner luminance is re-measured anyway rather than argued about.
+        intensity={solar ? (focused ? 0.34 : 0.5) : 0.5}
+        luminanceThreshold={solar ? (focused ? 0.86 : 0.94) : 0}
         luminanceSmoothing={solar ? 0.22 : 0}
         radius={solar ? 0.45 : 0.5}
       />
