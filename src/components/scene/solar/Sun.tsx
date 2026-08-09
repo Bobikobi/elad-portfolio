@@ -195,7 +195,12 @@ const PROM_COUNT = 7;
 // glow and the system sits in dark space (corners <10% lum, measured).
 const SHOW_HALO_SPRITE = false;  // big soft gold disc (scale 4.4) - milky-halo contributor
 const SHOW_CORONA_SHELL = false; // corona backside shell (scale 1.28) - primary milky-halo source
-const SHOW_ANAMORPHIC = true;    // short horizontal gold streak - kept (subtle, not a wash)
+// SUN-2: OFF. The streak is drawn across the disc, and on the old cloudy surface nobody
+// could tell. On a granular one it reads as a bright horizontal line cutting the star in
+// half - toggled off and on with everything else held, and the line goes with it. A real
+// anamorphic flare extends past a light source; it does not draw a stripe through it.
+// The sprite itself is kept, so restoring it is one word if the owner wants it back.
+const SHOW_ANAMORPHIC = false;   // short horizontal gold streak - it crossed the disc
 
 /**
  * Solar prominences — flame arcs licking off the limb, each on its own irregular cycle so
