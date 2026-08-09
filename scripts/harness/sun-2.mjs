@@ -314,10 +314,15 @@ const cost = await page.evaluate(() => new Promise((resolve) => {
     // Published by the HUD probe from inside the Canvas - the renderer is not reachable
     // from the page otherwise.
     if (window.__hud) { calls = window.__hud.calls; tris = window.__hud.tris; }
-    if (++n < 120) requestAnimationFrame(tick);
+    if (++n < 400) requestAnimationFrame(tick);
     else {
+      // The SPREAD, not just the middle. Repeated runs of identical builds came back
+      // anywhere between 13.3ms and 16.6ms, so a single median cannot resolve a change of a
+      // millisecond or two and should not be quoted as if it can. p25 and p75 make that
+      // visible instead of hiding it behind one number.
       frames.sort((a, b) => a - b);
-      resolve({ calls, tris, medianFrame: +frames[Math.floor(frames.length / 2)].toFixed(2), frames: frames.length });
+      const at = (q) => +frames[Math.min(frames.length - 1, Math.floor(frames.length * q))].toFixed(2);
+      resolve({ calls, tris, p25: at(0.25), medianFrame: at(0.5), p75: at(0.75), p95: at(0.95), frames: frames.length });
     }
   };
   requestAnimationFrame(tick);

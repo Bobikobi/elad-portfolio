@@ -31,13 +31,24 @@ const NOISE_GLSL = /* glsl */ `
   //
   // Returns the two nearest distances. Their DIFFERENCE is near zero exactly on the border
   // between two cells and nowhere else, which is the lane; inside a cell it is large.
+  //
+  // EIGHT cells, not twenty-seven. The exact version searches the full 3x3x3 neighbourhood
+  // and it measured +3.1ms on the low tier and +2.6ms on the high one - a fifth of the frame
+  // for a texture that is deliberately subtle. The two nearest centres are, in practice,
+  // in the octant the sample leans toward, so that is the octant this searches: its own cell
+  // and the seven neighbours on the side it is nearest to.
+  //
+  // It can pick a wrong second-nearest where three cells nearly meet. On a warped field at
+  // this contrast that is a lane a pixel wide being a shade off, and the frame time is worth
+  // more than that.
   vec2 worley(vec3 p){
     vec3 i = floor(p), f = fract(p);
+    vec3 s = step(vec3(0.5), f) * 2.0 - 1.0;
     float f1 = 9.0, f2 = 9.0;
-    for (int x = -1; x <= 1; x++)
-    for (int y = -1; y <= 1; y++)
-    for (int z = -1; z <= 1; z++) {
-      vec3 g = vec3(float(x), float(y), float(z));
+    for (int a = 0; a < 2; a++)
+    for (int b = 0; b < 2; b++)
+    for (int c = 0; c < 2; c++) {
+      vec3 g = vec3(float(a) * s.x, float(b) * s.y, float(c) * s.z);
       vec3 o = vec3(hash(i + g), hash(i + g + 11.3), hash(i + g + 27.7));
       float d = length(g + o - f);
       if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
