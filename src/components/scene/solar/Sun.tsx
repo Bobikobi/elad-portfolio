@@ -20,6 +20,30 @@ const NOISE_GLSL = /* glsl */ `
   // the disc has pixels at any framing the sun is seen at, which is not detail, it is noise
   // for the sampler to alias.
   float grain(vec3 p){ return noise(p) * 0.62 + noise(p * 2.0) * 0.38; }
+
+  // CELLULAR noise, and this is the one that matters.
+  //
+  // Value noise makes CLOUDS: soft woolly blobs, which is what the surface looked like
+  // through every round of frequency and amplitude tuning, because no amount of either turns
+  // a cloud into a cell. A photosphere is not cloudy - it is a pavement of bright granules
+  // separated by NARROW DARK LANES, and that shape only comes out of a distance-to-nearest-
+  // point field.
+  //
+  // Returns the two nearest distances. Their DIFFERENCE is near zero exactly on the border
+  // between two cells and nowhere else, which is the lane; inside a cell it is large.
+  vec2 worley(vec3 p){
+    vec3 i = floor(p), f = fract(p);
+    float f1 = 9.0, f2 = 9.0;
+    for (int x = -1; x <= 1; x++)
+    for (int y = -1; y <= 1; y++)
+    for (int z = -1; z <= 1; z++) {
+      vec3 g = vec3(float(x), float(y), float(z));
+      vec3 o = vec3(hash(i + g), hash(i + g + 11.3), hash(i + g + 27.7));
+      float d = length(g + o - f);
+      if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
+    }
+    return vec2(f1, f2);
+  }
 `;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
@@ -57,9 +81,38 @@ const sunFrag = /* glsl */ `
     // is about fourteen, and the weight moves to the finer of the two so the big shapes stop
     // dominating the face.
     vec3 p = vPos * 4.6;
-    float slow = fbm(p + vec3(0.0, uTime*0.05, 0.0));               // big slow swirls
-    float fast = fbm(p*2.6 - vec3(0.0, uTime*0.16, uTime*0.05));    // fast granules
-    float n = slow*0.45 + fast*0.55;
+    // The large scale keeps its job and loses its dominance: real photospheres do vary in
+    // brightness across the disc, but slowly and gently, and it was this term - a cloud -
+    // that the whole surface was reading as.
+    float slow = fbm(p + vec3(0.0, uTime*0.05, 0.0));
+    float fast = fbm(p*2.6 - vec3(0.0, uTime*0.16, uTime*0.05));
+    float big = slow*0.55 + fast*0.45;
+
+    // THE GRANULATION. ~36 cells across the disc, which is what a photograph of the sun
+    // shows at this size; the sun's own are far finer than any screen could resolve, and
+    // drawing them at their true scale is drawing grey.
+    // WARPED, or it reads as crackle. An unwarped Voronoi is a regular pavement - even
+    // cell sizes, even lane widths, the look of dried mud rather than plasma. Pushing the
+    // sample point around with the large-scale field first breaks the regularity in both
+    // size and shape, and costs one extra noise lookup.
+    vec3 warp = vec3(slow - 0.5, fast - 0.5, noise(p * 1.9 + vec3(7.3)) - 0.5) * 1.5;
+    vec2 w = worley(vPos * 12.0 + warp + vec3(0.0, uTime * 0.035, uTime * 0.02));
+    // Bright inside the cell, dark in the narrow lane where the two nearest centres are
+    // equidistant. The upper edge is deliberately low - a wide smoothstep here paints fat
+    // grey borders and the pavement turns back into cloud.
+    // Wide and SHALLOW. A narrow window with a big weight draws a net over the disc - the
+    // contrast between a real granule and its lane is maybe a fifth of the disc's range, not
+    // half of it, and at half the surface reads as a lychee skin rather than as plasma.
+    float cells = smoothstep(0.02, 0.34, w.y - w.x);
+    // A little variation between neighbouring granules, so the pavement is not one tone.
+    float perCell = hash(floor(vPos * 12.0 + 0.5)) * 0.07;
+
+    // The LEVEL matters as much as the pattern. The cell term sits near 1 over most of a
+    // granule and the large scale averages 0.5, so the first balance put n's mean near 0.77
+    // - past the hot stop across nearly the whole disc, and the surface went pale again
+    // exactly as it had with the old ramp. These weights put the mean near 0.49, where the
+    // amber lives, and leave the hot stop for the brightest cells.
+    float n = 0.17 + big * 0.34 + cells * 0.12 + perCell;
     // SUN-2. The surface had the large blotches and nothing else - measured, its
     // high-frequency energy was 1.3 luminance units against 6.5 for the large structure, and
     // that is what makes a photographed sun read as smooth instead of boiling. A detail
@@ -68,8 +121,11 @@ const sunFrag = /* glsl */ `
     // Kept at the SAME absolute frequency it had before the base was doubled - 62 times the
     // surface position, not 26 times a base that has itself moved - or the two octaves would
     // have converged and there would be no separation between the cells and their grain.
+    // Sub-cell texture, on top of the pavement rather than instead of it. Smaller than it
+    // was: the cells now carry the structure, and this only stops each granule from being a
+    // flat plate.
     float gr = grain(p*13.6 + vec3(uTime*0.09, -uTime*0.06, uTime*0.04));
-    n += (gr - 0.5) * 0.17;
+    n += (gr - 0.5) * 0.13;
     // B3: these were mixed for a frame that had NO tone mapper, where anything over 1
     // simply clamped and (1.0, 0.5, 0.11) stayed vividly gold. ACES desaturates its
     // highlights toward white on the way up, so the same values came out pale butter.
