@@ -451,10 +451,10 @@ export default function ProjectsStage({
         clips[i]?.setAttribute('d', d);
         const photo = photos[i];
         if (photo) {
-          photo.setAttribute('x', bx0.toFixed(1));
-          photo.setAttribute('y', by0.toFixed(1));
-          photo.setAttribute('width', (bx1 - bx0).toFixed(1));
-          photo.setAttribute('height', (by1 - by0).toFixed(1));
+          // The sector's own box. It is the AREA THAT MUST BE COVERED, not the size the
+          // image is given - the upright correction rotates the image, and the size it needs
+          // for that rotation to still fill this box is computed per window in the frame
+          // loop, because the angle is per window.
           photoBox.x = bx0;
           photoBox.y = by0;
           photoBox.w = bx1 - bx0;
@@ -715,6 +715,23 @@ export default function ProjectsStage({
           const det = a11 * a22 - a12 * a21;
           const cxImg = photoBox.x + photoBox.w / 2;
           const cyImg = photoBox.y + photoBox.h / 2;
+          // A rectangle rotated inside its own bounds does not cover them: measured with a
+          // solid fill in place of the previews, the sector came out with bare wedges at
+          // both corners. The image is therefore given the box that, rotated by phi, still
+          // contains the sector's box - which is the bounding box of the sector's box turned
+          // by -phi:
+          //     w = W*|cos| + H*|sin|      h = W*|sin| + H*|cos|
+          // Exactly that, and no more. A square on the diagonal also covers every angle, and
+          // was the first attempt, but it throws away most of the screenshot: at 390x844 it
+          // cropped a 1280x720 page down to one bar of a test marker.
+          const ac = Math.abs(Math.cos(phi));
+          const as = Math.abs(Math.sin(phi));
+          const iw = photoBox.w * ac + photoBox.h * as;
+          const ih = photoBox.w * as + photoBox.h * ac;
+          photoEl.setAttribute('x', (cxImg - iw / 2).toFixed(1));
+          photoEl.setAttribute('y', (cyImg - ih / 2).toFixed(1));
+          photoEl.setAttribute('width', iw.toFixed(1));
+          photoEl.setAttribute('height', ih.toFixed(1));
           photoEl.setAttribute(
             'transform',
             `translate(${cxImg.toFixed(1)} ${cyImg.toFixed(1)}) ` +
