@@ -19,6 +19,7 @@
  * external verification's screenshot did.
  */
 import puppeteer from 'puppeteer-core';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -136,6 +137,73 @@ const windowIndexAt = (page, x, y) =>
     [Math.round(x), Math.round(y)]
   );
 
+/**
+ * Contrast of the card's own text against whatever is behind it, measured off the rendered
+ * pixels rather than off the declared colours - the point of the criterion is the planet
+ * underneath, and a stylesheet cannot tell you what that is.
+ *
+ * Two things here are deliberate, and the first version got both wrong.
+ *
+ * The crop is the TEXT's own extent, taken from a Range, not the title element's box. The
+ * element is as wide as the panel, so a short title leaves it mostly empty - and a Hebrew
+ * title is short. Measured that way, he-mobile came out at 3.2 while en-mobile read 5.8 on
+ * the same design: the quantile standing in for "glyph" had simply landed in empty space.
+ * That was the estimator failing, not the page.
+ *
+ * The background is measured from a SECOND capture with the text hidden, so it is the real
+ * planet-and-well behind the glyphs rather than a quantile hoping to miss them. The glyph is
+ * then the bright tail of the text-shown crop. WCAG relative luminance, standard
+ * (L1 + 0.05) / (L2 + 0.05).
+ */
+async function textContrast(page, shotPath, vp) {
+  const box = await page.evaluate(() => {
+    const t = document.querySelector('[data-panel-title]');
+    if (!t || !(t.textContent || '').trim()) return null;
+    const range = document.createRange();
+    range.selectNodeContents(t);
+    const r = range.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8) return null;
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  if (!box) return null;
+  const x = Math.max(0, Math.min(box.x, vp.width - 2));
+  const y = Math.max(0, Math.min(box.y, vp.height - 2));
+  const w = Math.max(2, Math.min(box.w, vp.width - x));
+  const h = Math.max(2, Math.min(box.h, vp.height - y));
+  const lin = (c) => { const s = c / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  const crop = (src, tag) => {
+    const raw = path.join(OUT, `title-${tag}.raw`);
+    execFileSync('ffmpeg', [
+      '-loglevel', 'error', '-y', '-i', src,
+      '-vf', `crop=${w}:${h}:${x}:${y}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', raw,
+    ]);
+    const b = fs.readFileSync(raw);
+    fs.unlinkSync(raw);
+    const out = [];
+    for (let i = 0; i < b.length; i += 3) out.push(0.2126 * lin(b[i]) + 0.7152 * lin(b[i + 1]) + 0.0722 * lin(b[i + 2]));
+    return out.sort((a, c) => a - c);
+  };
+
+  const withText = crop(shotPath, 'text');
+  // The same pixels with the glyphs taken away. `visibility` rather than removing the node,
+  // so nothing reflows and the crop still lines up.
+  await page.evaluate(() => { document.querySelector('[data-panel-title]').style.visibility = 'hidden'; });
+  await new Promise((r) => setTimeout(r, 120));
+  const bgShot = path.join(OUT, 'title-bg.png');
+  await page.screenshot({ path: bgShot });
+  await page.evaluate(() => { document.querySelector('[data-panel-title]').style.visibility = ''; });
+  const withoutText = crop(bgShot, 'bg');
+  fs.unlinkSync(bgShot);
+
+  // The glyph core is the bright tail of the text capture; the background is the MEDIAN of
+  // the same area with the text gone, which is the planet-and-well the criterion is about.
+  const glyph = withText[Math.floor(withText.length * 0.97)];
+  const back = withoutText[Math.floor(withoutText.length * 0.5)];
+  const hiL = Math.max(glyph, back);
+  const loL = Math.min(glyph, back);
+  return +((hiL + 0.05) / (loL + 0.05)).toFixed(2);
+}
+
 /** The back control, described so two worlds can be compared field by field. */
 const backControl = () => {
   const a = document.querySelector('[data-world-back]');
@@ -191,12 +259,16 @@ for (const loc of LOCALES) {
     let tapAgain = null;
     let tapAway = null;
     const hits = [];
+    let contrast = null;
 
     if (point && !v.vp.hasTouch) {
       await page.mouse.move(point.x, point.y);
       await new Promise((r) => setTimeout(r, 700));
       hover = await page.evaluate(panelState);
-      await page.screenshot({ path: path.join(OUT, `${key}-hover.png`) });
+      const shot = path.join(OUT, `${key}-hover.png`);
+      await page.screenshot({ path: shot });
+      // NEW-1's last criterion: the card's text over the planet, at 4.5:1 or better.
+      contrast = await textContrast(page, shot, v.vp);
       // Off the ring entirely - the top-left corner is header, not fan.
       await page.mouse.move(4, 4);
       await new Promise((r) => setTimeout(r, 700));
@@ -212,7 +284,12 @@ for (const loc of LOCALES) {
         hits.push(await tapAt(page, point.x, point.y));
         await new Promise((r) => setTimeout(r, 700));
         tapOn = await page.evaluate(panelState);
-        if (attempt === 0) await page.screenshot({ path: path.join(OUT, `${key}-tap.png`) });
+        if (attempt === 0) {
+          const tapShot = path.join(OUT, `${key}-tap.png`);
+          await page.screenshot({ path: tapShot });
+          // Same NEW-1 criterion on touch, where the card sits over the planet too.
+          contrast = await textContrast(page, tapShot, v.vp);
+        }
         const between = await windowIndexAt(page, point.x, point.y);
         hits.push(await tapAt(page, point.x, point.y));
         await new Promise((r) => setTimeout(r, 700));
@@ -245,7 +322,7 @@ for (const loc of LOCALES) {
     await new Promise((r) => setTimeout(r, 700));
     const focus = focused ? await page.evaluate(panelState) : null;
 
-    report.new4[key] = { idle, hover, away, tapOn, tapAgain, tapAway, focus, hadPoint: !!point, hits };
+    report.new4[key] = { idle, hover, away, tapOn, tapAgain, tapAway, focus, contrast, hadPoint: !!point, hits };
     await page.close();
     await ctx.close();
   }
@@ -281,10 +358,13 @@ for (const [k, v] of Object.entries(report.new4)) {
   const shownStates = [v.hover, v.tapOn, v.focus].filter((s) => s && s.visibleTexts === 1);
   const worstOverlap = shownStates.length ? Math.max(...shownStates.map((s) => s.fanOverlapPct)) : 0;
   const overlapOk = worstOverlap <= 5;
-  const ok = idleOk && hoverOk && awayOk && tapOk && focusOk && overlapOk;
+  // NEW-1: the card's text over the planet must reach 4.5:1. Only measurable where a hover
+  // actually put text on screen.
+  const contrastOk = v.contrast === null || v.contrast >= 4.5;
+  const ok = idleOk && hoverOk && awayOk && tapOk && focusOk && overlapOk && contrastOk;
   if (!ok) fails++;
   console.log(
-    `  ${ok ? 'PASS' : 'FAIL'} ${k.padEnd(11)} overlap=${worstOverlap}% idle=${v.idle.visibleTexts}("${v.idle.title}") ` +
+    `  ${ok ? 'PASS' : 'FAIL'} ${k.padEnd(11)} contrast=${v.contrast ?? '-'} overlap=${worstOverlap}% idle=${v.idle.visibleTexts}("${v.idle.title}") ` +
     `hover=${v.hover ? v.hover.visibleTexts : '-'} away=${v.away ? v.away.visibleTexts : '-'} ` +
     `tap=${v.tapOn ? v.tapOn.visibleTexts : '-'}/again=${v.tapAgain ? v.tapAgain.visibleTexts : '-'}` +
     `/away=${v.tapAway ? v.tapAway.visibleTexts : '-'} focus=${v.focus ? v.focus.visibleTexts : '-'}`

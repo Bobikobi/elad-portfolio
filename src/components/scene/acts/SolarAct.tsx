@@ -58,6 +58,13 @@ if (HUD_AVAILABLE && typeof window !== 'undefined') {
 type HiTier = 'base' | 'mid' | 'hi';
 const DEV = process.env.NODE_ENV !== 'production';
 const HI_FADE = 0.5; // s
+/** `?bands=0.4` overrides the per-planet NEW-1 band amplitude for one page load, so the
+ *  value can be swept and measured rather than guessed - the same lever, and the same
+ *  reason, as `?orbitexp=` in CameraRig. Read once, at import. */
+const BANDS_OVERRIDE =
+  typeof window !== 'undefined'
+    ? Number(new URLSearchParams(window.location.search).get('bands')) || null
+    : null;
 
 let _white1: THREE.DataTexture | null = null;
 function white1(): THREE.DataTexture {
@@ -189,6 +196,24 @@ interface PlanetSpec {
   shear?: number;
   haze?: number;
   earth?: boolean;
+  /** NEW-1: fine latitudinal band structure the ALBEDO MAP does not carry, as a relative
+   *  modulation of the sampled albedo. It exists because the defect is in the asset, and
+   *  it was measured rather than assumed: normalised to 1024x512 and scored as mean
+   *  |L - blur(L)|, the maps read saturn 0.83, jupiter 2.57, earth 3.32 - Saturn's is a set
+   *  of smooth gradients with almost no structure in it, which is why the rendered disc
+   *  came out as a cream ball. Expanding its contrast cannot fix that: its p5-p95 spread is
+   *  already 79.9 against Jupiter's 83.1, so the wide bands are present and it is only the
+   *  fine detail that is missing, and multiplying a smooth gradient just makes a steeper
+   *  smooth gradient. This adds the missing octaves instead, on the same warped UV the
+   *  flow uses so the structure travels with the bands rather than sitting still on them.
+   *
+   *  SEPARATE FROM THE APERTURE, and separately revertible. The aperture change (1.0 -> 0.3
+   *  in CameraRig) is the owner's, chosen by eye from a measured sweep, and on its own it
+   *  takes the /projects disc from det25 1.89 to 3.03 against /about's 6.53. This term is on
+   *  top of that and takes it to 3.95, with clipping still at 0% and chroma unchanged. The
+   *  owner has NOT seen it - his 0.3 was chosen against the shader without it - so if the
+   *  extra structure is unwanted, `bands: 0` here removes it and touches nothing else. */
+  bands?: number;
   /** A3: atmospheric limb-scattering hue + idle strength (~0.4 subtle). Falls back to
    *  `rim` when `atmo` is absent; airless bodies use a low strength. */
   atmo?: string;
@@ -249,7 +274,7 @@ const PLANETS: PlanetSpec[] = [
   { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, incl: 2.2, node: 4.35, tilt: 0.41, bodyColor: '#cfe0ff', earth: true, atmo: '#a8d0ff', atmoStrength: 0.5 },
   { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, incl: 2.6, node: 0.95, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
   { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, incl: 1.6, node: 3.30, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
-  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, atmo: '#f0dcae', atmoStrength: 0.45 },
+  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, bands: 0.6, atmo: '#f0dcae', atmoStrength: 0.45 },
   // B10: the two outermost orbits are pulled in. On its own this is a small effect — the
   // in-frame share of a full revolution at the resting overview goes 34.4%→35.6% for
   // Uranus and 31.8%→33.4% for Neptune — because what actually pushes an outer body out
@@ -550,6 +575,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       shader.uniforms.uTime = { value: 0 };
       shader.uniforms.uFlow = { value: spec.flow ?? 0 };   // A2 gas-giant band turbulence
       shader.uniforms.uShear = { value: spec.shear ?? 0 }; // A2 latitudinal band shear
+      // NEW-1 band structure. `?bands=` overrides it for one page load so the value can be
+      // swept and measured, exactly like the aperture in CameraRig.
+      shader.uniforms.uBands = { value: BANDS_OVERRIDE ?? spec.bands ?? 0 };
       shader.uniforms.uHaze = { value: spec.haze ?? 0 };   // A2 Mars dust haze
       // B5 inter-planet eclipse: the occluder's world position + radius, and how much of
       // this frame's shadow to apply. The cone is recomputed PER FRAGMENT so the penumbra
@@ -612,7 +640,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
          #include <opaque_fragment>`
       );
       shader.fragmentShader =
-        `uniform sampler2D uHiMap; uniform float uHiMix, uTime, uFlow, uShear, uHaze;
+        `uniform sampler2D uHiMap; uniform float uHiMix, uTime, uFlow, uShear, uHaze, uBands;
          float _h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
          float _n(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
            return mix(mix(_h(i),_h(i+vec2(1,0)),u.x), mix(_h(i+vec2(0,1)),_h(i+vec2(1,1)),u.x), u.y); }
@@ -637,6 +665,16 @@ function Planet({ spec }: { spec: PlanetSpec }) {
            diffuseColor *= sampledDiffuseColor;
            // A1: crossfade the hi-res map in (same warped UV + material tint).
            diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( uHiMap, flowUv ).rgb * diffuse, uHiMix );
+           if ( uBands > 0.0 ) {
+             // NEW-1: the fine banding Saturn's map does not have. Two latitudinal octaves,
+             // multiplicative so it rides the albedo instead of washing over it, and taken
+             // on the SAME warped UV as the sample above so the structure moves with the
+             // bands. Latitude is the high-frequency axis and longitude the low one, which
+             // is what makes it read as banding rather than as noise on a sphere.
+             float fine  = _n( vec2( flowUv.x *  3.0,        flowUv.y * 130.0 ) ) - 0.5;
+             float broad = _n( vec2( flowUv.x *  1.5 + 5.0,  flowUv.y *  46.0 ) ) - 0.5;
+             diffuseColor.rgb *= 1.0 + ( fine + broad * 0.75 ) * uBands;
+           }
            if ( uHaze > 0.0 ) {
              // Mars: a faint warm dust-haze drifting slowly across the disc.
              float hz = _n( vec2( vMapUv.x * 3.0 + uTime * 0.01, vMapUv.y * 5.0 - uTime * 0.006 ) );
@@ -647,7 +685,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       hiShader.current = shader;
     };
     return m;
-  }, [texture, spec.bodyColor, spec.flow, spec.shear, spec.haze]);
+  }, [texture, spec.bodyColor, spec.flow, spec.shear, spec.haze, spec.bands]);
   useEffect(() => () => material.dispose(), [material]);
   // Procedural ring strip (colour + alpha vs radius), drawn to a 1-D canvas and mapped
   // radially. Deterministic and CSP-safe — avoids the saturn_ring.png alpha-layout that

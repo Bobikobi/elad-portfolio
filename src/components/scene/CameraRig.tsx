@@ -17,6 +17,9 @@ const clampUnit = (x: number) => (x < -1 ? -1 : x > 1 ? 1 : x);
 
 // --- T1 swap machine constants -------------------------------------------------
 const DEV = process.env.NODE_ENV !== 'production';
+/** See the note at the `livePlanetRect` write below. Read once, at import. */
+const DISC_PROBE =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discprobe');
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
 
@@ -35,7 +38,43 @@ const DEV = process.env.NODE_ENV !== 'production';
 // jupiter 140 / clip 0%, saturn 93 / 0%, mars 95 / 0.9%, earth 211 / 19.5% — Earth is the
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
-const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
+//
+// NEW-1 retune of `saturn`, 1.0 -> 0.3, and it is a HEADROOM fix rather than a clipping
+// fix. The external report called the /projects planet "blown out"; measured, it clips
+// nowhere - 0% of the lit disc at or above 250 and 0% with any channel at 255, at 1440x900
+// and at 390x844 alike. What it did was sit high enough that the bands were compressed
+// against the shoulder of the curve, which reads as a flat cream ball without a single
+// clipped pixel. Saturn was also the only world still at 1.0, which is the global default,
+// so its per-world aperture was a no-op while every other world was pulled down in B3.
+//
+// Measured over the same normalised disc on both worlds, the disc taken from the camera
+// (`?discprobe=1`) rather than from a brightness threshold - a threshold selects the lit
+// half and then reports how bright it is, which is how these two faults get confused:
+//
+//                      lit mean   p99   >=250   chroma   det5   det25
+//   /about (Earth)        177.6  246.3   0.06%    35.6   2.58    6.53
+//   /projects at 1.0      206.9  249.2   0.03%    20.2   0.42    1.89
+//   /projects at 0.3      167.9  230.5   0.00%    44.9   0.72    3.03
+//
+// det25 is local contrast at the scale BANDS occupy; det5 is the fine scale, where Earth's
+// coastlines and cloud edges live and where a gas giant has nothing - chasing Earth's 2.58
+// there would be asking Saturn to grow continents, and it stays where it is on purpose.
+//
+// THE RESPONSE IS SEVERELY COMPRESSED AT THE TOP. Cutting 1.0 -> 0.55 moved the 80%-radius
+// mean by 15 levels; cutting 0.4 -> 0.2 moved it by 27. Three of us independently estimated
+// 0.6-0.7 by eye and every one of us was out by a factor of three. If anything else in the
+// chain changes, do not infer a value here - sweep it. `?orbitexp=` exists for that.
+const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 0.3, belt: 1.0 };
+/**
+ * `?orbitexp=0.7` overrides the focused world's aperture for one page load, so the value
+ * above can be SWEPT and measured instead of guessed - which is how the B3 numbers were
+ * arrived at, and the only way to tell an aperture problem from a lighting one. It does
+ * nothing on the overview and nothing without the parameter.
+ */
+const ORBIT_EXPOSURE_OVERRIDE =
+  typeof window !== 'undefined'
+    ? Number(new URLSearchParams(window.location.search).get('orbitexp')) || null
+    : null;
 
 // --- The ORBIT vantage is SOLVED, not dialled in --------------------------------------
 // The old construction was "sit A radians off the lit direction, then add a fixed vertical
@@ -412,6 +451,14 @@ function publishLimb(
   livePlanetRect.vw = vw;
   livePlanetRect.vh = vh;
   livePlanetRect.stamp = performance.now();
+  // `?discprobe=1` publishes that same disc to the DOM, so an exposure measurement can be
+  // taken over the disc the camera actually framed. The alternative - finding the planet by
+  // thresholding a screenshot - selects the bright half of the body and then reports how
+  // bright it is, which is how "over-exposed" and "clipped" get confused. Off by default;
+  // the cost when off is one boolean per frame.
+  if (DISC_PROBE) {
+    document.documentElement.dataset.planetDisc = `${cx.toFixed(1)},${cy.toFixed(1)},${(r / 8).toFixed(1)}`;
+  }
 }
 const _orbOff = new THREE.Vector3();
 const _orbAxis = new THREE.Vector3();
@@ -1101,7 +1148,7 @@ export default function CameraRig() {
     // as the departure meter scrubs back toward the overview, ease exposure back to 1.
     const fp = useScene.getState().focusedPlanet;
     const dep = fp ? clamp01(useScene.getState().departure) : 0;
-    const orbitExpo = fp ? ORBIT_EXPOSURE[fp] ?? 1 : 1;
+    const orbitExpo = fp ? ORBIT_EXPOSURE_OVERRIDE ?? ORBIT_EXPOSURE[fp] ?? 1 : 1;
     const expoTarget = act === 'solar' && fp ? orbitExpo + (1 - orbitExpo) * dep : 1;
     damp(state.gl, 'toneMappingExposure', expoTarget, 0.4, dt);
 
