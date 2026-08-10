@@ -220,20 +220,77 @@ interface PlanetSpec {
   atmoStrength?: number;
 }
 
-function Moons({ count, planetSize }: { count: number; planetSize: number }) {
+/** Deterministic 32-bit hash (FNV-1a). A moon's look is derived from its project's id, so
+ *  the same project always gets the same moon - across reloads, builds and machines. */
+function hash32(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * NEW-3: the moons had no identity. They were eight instances of one grey sphere -
+ * `color="#b8b2a8"`, no map - so "every moon is a project" was a line of copy with nothing
+ * behind it, and a visitor could not tell one from another.
+ *
+ * Each moon now carries the real lunar map and a surface derived from the project it stands
+ * for: a tint, a rotation and an offset into the map (so the same texture reads as a
+ * different world on each), and its own roughness. All of it comes from a hash of the
+ * project's `id`, which means it is stable and repeatable rather than random per load, and
+ * it is genuinely TIED to the project rather than merely varied.
+ *
+ * `identities` is empty for Jupiter, whose moons stand for nothing - those fall back to the
+ * hash of their own index, so they are distinguishable without pretending to mean anything.
+ */
+function Moons({
+  count,
+  planetSize,
+  identities = [],
+}: {
+  count: number;
+  planetSize: number;
+  identities?: string[];
+}) {
   const group = useRef<THREE.Group>(null);
+  const moonTex = useMemo(() => {
+    const tx = new THREE.TextureLoader().load('/textures/moon.jpg');
+    tx.colorSpace = THREE.SRGBColorSpace;
+    tx.wrapS = THREE.RepeatWrapping;
+    tx.wrapT = THREE.RepeatWrapping;
+    tx.anisotropy = 4;
+    return tx;
+  }, []);
+  useEffect(() => () => moonTex.dispose(), [moonTex]);
   const moons = useMemo(() => {
     const rnd = makeRng(SEED.moons);
-    return Array.from({ length: count }, (_, i) => ({
-      // Hug the planet so at the close ORBIT vantage the moons stay a tight system
-      // around it (not scattered across the frame / over the content column).
-      r: planetSize * (1.4 + i * 0.12),
-      size: planetSize * (0.09 + rnd() * 0.06),
-      speed: 0.5 - i * 0.03,
-      phase: rnd() * 6.28,
-      tilt: (rnd() - 0.5) * 0.5,
-    }));
-  }, [count, planetSize]);
+    return Array.from({ length: count }, (_, i) => {
+      const h = hash32(identities[i] ?? `moon-${i}`);
+      // Three independent bytes of the hash: hue, lightness and roughness. The hue band is
+      // narrow on purpose - these are rock and ice, not billiard balls - so the moons read
+      // as different WORLDS rather than as a colour key.
+      const hue = ((h & 0xff) / 255) * 0.14 + 0.06; // warm grey through tan
+      const light = 0.52 + (((h >> 8) & 0xff) / 255) * 0.22;
+      const rough = 0.72 + (((h >> 16) & 0xff) / 255) * 0.26;
+      return {
+        // Hug the planet so at the close ORBIT vantage the moons stay a tight system
+        // around it (not scattered across the frame / over the content column).
+        r: planetSize * (1.4 + i * 0.12),
+        size: planetSize * (0.09 + rnd() * 0.06),
+        speed: 0.5 - i * 0.03,
+        phase: rnd() * 6.28,
+        tilt: (rnd() - 0.5) * 0.5,
+        tint: new THREE.Color().setHSL(hue, 0.18, light),
+        rough,
+        // A different piece of the same map, turned a different way. One texture, eight
+        // surfaces - the cheapest way to give them faces.
+        mapRot: (((h >> 24) & 0xff) / 255) * Math.PI * 2,
+        mapOff: [((h >> 3) & 0xff) / 255, ((h >> 11) & 0xff) / 255] as [number, number],
+      };
+    });
+  }, [count, planetSize, identities]);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     group.current?.children.forEach((m, i) => {

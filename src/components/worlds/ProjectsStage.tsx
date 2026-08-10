@@ -25,6 +25,9 @@ import WorldBackLink from './WorldBackLink';
 const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 const SVG_NS = 'http://www.w3.org/2000/svg';
+/** Opacity at which a preview stops being a ghost and starts being a picture. The counter
+ *  and the NEW-2 acceptance both read this, so they cannot disagree about what counts. */
+const READABLE = 0.5;
 
 /**
  * The Projects "Jupiter frame". Each project is its own floating window and every window
@@ -122,6 +125,8 @@ export default function ProjectsStage({
     const tapped = { current: -1 };
     const axisRef = { current: 'y' as 'x' | 'y' };
     const shownActive = { current: -2 };
+    const shownCount = { current: -1 };
+    const countEl = document.querySelector<HTMLElement>('[data-ring-count]')!;
     /** The preview image's box in CANONICAL space, as the last rebuild placed it. The
      *  per-frame upright correction rotates about its centre. */
     const photoBox = { x: 0, y: 0, w: 0, h: 0 };
@@ -661,10 +666,14 @@ export default function ProjectsStage({
       }
 
       rebuildShape(m);
+      // NEW-2 - how many of the twelve are actually readable right now. Counted off the same
+      // opacity the windows are drawn with, so the number cannot disagree with the picture.
+      let readable = 0;
       for (let i = 0; i < n; i++) {
         const a = windowArc(i, n, scroll, m);
         const th = m.th0 + (m.sweep * a) / m.rMid;
         const opacity = i === centred ? Math.max(fanOpacity(a, m), 1) : fanOpacity(a, m);
+        if (opacity >= READABLE) readable++;
         const g = hits[i];
         if (opacity <= 0.004) {
           if (g.style.display !== 'none') g.style.display = 'none';
@@ -774,6 +783,13 @@ export default function ProjectsStage({
         photos[i]?.style.setProperty('opacity', (0.94 * Math.min(1, opacity + 0.15)).toFixed(3));
       }
 
+      // "3 / 12". The ring shows a few of twelve and the rail says only that there is more;
+      // this says how much more, in the one place a visitor is already reading.
+      if (readable !== shownCount.current) {
+        shownCount.current = readable;
+        countEl.textContent = `${readable} / ${n}`;
+      }
+
       // The rail. It only exists when there is something to scroll, and the thumb's LENGTH
       // is the fraction of the ring currently on screen - the same information a scrollbar
       // gives, said as an arc.
@@ -874,6 +890,7 @@ export default function ProjectsStage({
           rMid: m.rMid, dHalf: m.dHalf, fanUp: m.fanUp, fanDown: m.fanDown,
           th0: m.th0, sweep: m.sweep,
           contentDepth: m.contentDepth, contentHalf: m.contentHalf, scroll, span,
+          active, centred, hovered: hovered.current, tapped: tapped.current,
           costMs: +(performance.now() - t0).toFixed(3),
           plane: { ...livePlanetPlane },
         });
@@ -919,6 +936,14 @@ export default function ProjectsStage({
         <div className="pointer-events-auto">
           <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl">{title}</h1>
           <p className="world-body mt-2 text-[var(--color-star-white)]/55">{tagline}</p>
+          {/* NEW-2: how many of the twelve are in view. Written by the frame loop off the
+              same opacity the windows are drawn with. Digits and a slash, so it needs no
+              translation and reads the same in all three locales. */}
+          <p
+            data-ring-count
+            aria-hidden
+            className="mt-1 font-mono text-xs tracking-widest text-[var(--color-core-gold)]/70"
+          />
         </div>
         {/* The shared back control - see WorldBackLink for why there is exactly one. */}
         <WorldBackLink locale={locale} onBack={returnHome} className="mt-1" />
