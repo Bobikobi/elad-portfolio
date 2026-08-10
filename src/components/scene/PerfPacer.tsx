@@ -12,7 +12,8 @@ import { useScene } from '@/lib/sceneStore';
  *
  * Two owners, one activity signal:
  *
- *  - {@link FramePacer} owns the frameloop. Idle pages drop to 30fps.
+ *  - {@link FramePacer} owns the frameloop. It no longer throttles idle pages - see the
+ *    note on the tick below for what that cost and why it went.
  *  - {@link ResolutionScaler} owns the pixel ratio. It scales the render buffer down to
  *    hold the target rate and returns to full when there is headroom or the page is idle.
  *
@@ -25,7 +26,6 @@ import { useScene } from '@/lib/sceneStore';
 // Input, not store writes: CameraRig writes `coverage` every frame, so subscribing to the
 // store would mean the scene was never idle. Transition state is read imperatively below.
 const IDLE_AFTER_MS = 2500;
-const IDLE_FPS = 30;
 const EVEN_FPS = 60;
 
 let lastInput = 0;
@@ -66,8 +66,9 @@ export function isIdle(now: number) {
 
 /**
  * The frameloop. R3F runs `always` by default: every vsync, forever, whether or not
- * anything changed. A page left open on the overview costs a full frame budget for
- * ambient drift alone, which is where the idle throttle pays.
+ * anything changed. That is now what this scene does everywhere: the idle throttle that
+ * used to buy back a page left open on the overview is gone, because it could not tell
+ * that page apart from a focused world where the animation IS the content.
  *
  * Also absorbs the paced-60 lock the governor used to drive, so the frameloop has exactly
  * one owner. On a 75/90Hz panel an uncapped scene produces a repeating long/short frame
@@ -98,13 +99,28 @@ export function FramePacer() {
       if (wantDemand) invalidate(); // never leave a frame un-asked-for in the swap tick
     };
 
+    // THE IDLE THROTTLE IS GONE (owner ruling). It used to drop an idle page to 30fps
+    // after 2.5s of no pointer motion, and `isIdle`'s gate - coverage and departure both
+    // at zero - is satisfied on a FOCUSED world page, not just on the overview it was
+    // written for. So the one screen that is nothing but ambient animation was the screen
+    // it throttled. Measured on /about: 60fps with the pointer moving, 30fps the moment it
+    // stopped, switching back and forth on a 2.5s trigger.
+    //
+    // It was also making the night-lights aliasing exactly twice as bad. At 30fps the globe
+    // turns 3.2px between frames instead of 1.6, and a city light is about 3.6px across -
+    // so at half rate a light barely overlaps its own previous position, which is the
+    // condition for strobing rather than moving.
+    //
+    // Note for whoever reads QualityGovernor next: its `if (isIdle(...)) return` guard
+    // exists because judging a deliberately-throttled frame demoted capable machines. With
+    // nothing throttling any more that reason is gone, and the guard now just means the
+    // tier is never re-judged on a page left alone. Left as it is on purpose - the governor
+    // is out of scope here - but it is no longer doing what its comment claims.
     const tick = (ts: number) => {
       raf = requestAnimationFrame(tick);
-      const idle = isIdle(ts);
-      const wantDemand = idle || pacedWhenActive;
-      setLoop(wantDemand);
-      if (!wantDemand) return;
-      const period = 1000 / (idle ? IDLE_FPS : EVEN_FPS);
+      setLoop(pacedWhenActive);
+      if (!pacedWhenActive) return;
+      const period = 1000 / EVEN_FPS;
       if (ts - last >= period - 1) {
         last = ts;
         invalidate();

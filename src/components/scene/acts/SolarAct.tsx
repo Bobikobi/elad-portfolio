@@ -368,8 +368,38 @@ const earthNightFrag = /* glsl */ `
     // roughly agree with it — the lights come up exactly as the surface light dies out, and
     // the two can no longer drift apart when the wrap is retuned.
     float night = smoothstep(${(TERM_WRAP * 0.5).toFixed(3)}, ${(-TERM_WRAP).toFixed(3)}, lit); // 1 on the dark hemisphere
-    vec3 lights = texture2D(uMap, vUv).rgb;
-    gl_FragColor = vec4(lights * 1.2, night);           // additive; alpha gates to night
+    // A2b: the lights are SAMPLED SOFT, and harder the more the surface is turned away.
+    //
+    // The map is 2048x1024 and 0.84% of its texels are bright — isolated one-to-two texel
+    // dots with 45% of their signal in the difference from their own neighbours. On a disc
+    // ~640px across that is about one texel per pixel, and the globe turns 1.6px per frame,
+    // so a light lands on a different pixel every frame with nothing in between. It cannot
+    // be seen to move; only to blink. Measured on the night side: single pixels swinging
+    // 2 -> 40 -> 12 -> 110 between consecutive frames while the TOTAL light in the region
+    // held steady to 0.7% — the energy was hopping between neighbours, which is aliasing,
+    // not lights switching on and off.
+    //
+    // A mip bias is the cheap correct answer: it asks for a level whose texels are bigger
+    // than a pixel, so each light arrives already band-limited and its motion is carried by
+    // the filter instead of by luck. The bias RISES toward the limb because that is where
+    // the defect is worst and where it was reported from — the surface is foreshortened
+    // there, one pixel covers many texels along one axis, and the anisotropic sampler runs
+    // out of taps long before it has covered them.
+    // The strength was measured, not chosen. At mix(2.0, 0.6) - the first attempt - the
+    // instability of a tracked light fell only 13%, which is not a fix, it is a rounding
+    // error with a comment on it. At mix(3.0, 1.5) it falls 34%, and that is as far as this
+    // layer can go: with the night lights deleted outright the same measurement reads 49.5%
+    // against this setting's 52.8%, so what is left over is the surface map underneath, not
+    // the lights. Past this the lights start to dissolve - at a flat bias of 6.0 the night
+    // side has no cities on it at all.
+    vec3 V = normalize(cameraPosition - vWPos);
+    float ndv = clamp(dot(normalize(vWN), V), 0.0, 1.0);   // 1 face-on, 0 at the limb
+    float bias = mix(3.0, 1.5, smoothstep(0.0, 0.55, ndv));
+    // 1.2 -> 1.06. A coarser mip spreads each light over more pixels, and spread over an
+    // additive layer means the night side gets BRIGHTER, not dimmer - measured at +12.8%,
+    // outside the 10% the brightness criterion allows. The trim is that 12.8% given back.
+    vec3 lights = texture2D(uMap, vUv, bias).rgb;
+    gl_FragColor = vec4(lights * 1.06, night);          // additive; alpha gates to night
     // B3: the lights were multiplied by 2.0 and laid additively over an already-bright
     // disc. Tone mapping is applied for the whole frame in the composer now
     // (ExposureToneMap), so the chunk below is inert while a composer owns the render —
@@ -396,14 +426,21 @@ const earthCloudFrag = /* glsl */ `
 
 function EarthLayers({ radius }: { radius: number }) {
   const clouds = useRef<THREE.Mesh>(null);
+  const gl = useThree((s) => s.gl);
+  // A2b: whatever the card will give, not a hardcoded 8. Both of these are equirectangular
+  // maps on a sphere, so the sampling footprint at the limb is extremely elongated and 8
+  // taps are spent long before it is covered — that shortfall is the other half of the
+  // twinkle the mip bias above is dealing with. Capped at 16 because that is where every
+  // desktop GPU stops anyway, and asking for more just reads back as 16.
+  const maxAniso = useMemo(() => Math.min(16, gl.capabilities.getMaxAnisotropy()), [gl]);
   const cloudTex = useMemo(() => {
     const tx = new THREE.TextureLoader().load('/textures/earth_clouds.webp');
-    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
-  }, []);
+    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = maxAniso; return tx;
+  }, [maxAniso]);
   const nightTex = useMemo(() => {
     const tx = new THREE.TextureLoader().load('/textures/earth_night.webp');
-    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
-  }, []);
+    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = maxAniso; return tx;
+  }, [maxAniso]);
   useEffect(() => () => { cloudTex.dispose(); nightTex.dispose(); }, [cloudTex, nightTex]);
   const cloudUniforms = useMemo(() => ({ uMap: { value: cloudTex } }), [cloudTex]);
   const nightUniforms = useMemo(() => ({ uMap: { value: nightTex } }), [nightTex]);
