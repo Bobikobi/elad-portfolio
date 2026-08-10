@@ -1,9 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import Link from 'next/link';
 import type { Locale } from '@/lib/translations';
 import { translations as tr } from '@/lib/translations';
-import { homePath } from '@/lib/sections';
 import {
   ringMetrics,
   sectorPath,
@@ -22,6 +20,7 @@ import {
 import { livePlanetPlane } from '@/lib/orbitFraming';
 import { useWorldExit } from '@/hooks/useWorldExit';
 import DepartureMeter from './DepartureMeter';
+import WorldBackLink from './WorldBackLink';
 
 const t = (k: string, l: Locale) => tr[k]?.[l] ?? k;
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
@@ -87,6 +86,7 @@ export default function ProjectsStage({
     const panelTitle = panel.querySelector<HTMLElement>('[data-panel-title]')!;
     const panelDesc = panel.querySelector<HTMLElement>('[data-panel-desc]')!;
     const panelTech = panel.querySelector<HTMLElement>('[data-panel-tech]')!;
+    const panelVisit = panel.querySelector<HTMLElement>('[data-panel-visit]')!;
 
     const rtl = document.documentElement.dir === 'rtl';
     // `?ringprobe=1` publishes the frame the layer actually used, so the acceptance
@@ -94,27 +94,20 @@ export default function ProjectsStage({
     // re-deriving them. Off by default — nothing extra reaches a normal render.
     const probe = new URLSearchParams(window.location.search).has('ringprobe');
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // The owner wants the words only while the pointer is on a window. A phone has no
-    // pointer, so there the panel falls back to naming whichever window is at the centre
-    // of the fan - otherwise a touch device would show twelve pictures and no way to
-    // learn what any of them is.
+    // NEW-4, the owner's ruling, and it is absolute: NO card ever shows text unless the
+    // visitor is pointing at it. Nothing is open on load and no project is selected by
+    // default.
     //
-    // Which of the two applies is decided by a mouse ACTUALLY MOVING, not by a media
-    // query. `(hover: hover) and (pointer: fine)` is false in a headless browser, which
-    // has no input device at all, and it is famously wrong on hybrid laptops; the first
-    // version of this shipped the touch behaviour to every desktop that ran the check
-    // before a mouse was plugged in. Starting in the fallback and leaving it on the first
-    // real mouse movement is right in both directions: nobody is ever left with no text.
+    // There used to be a fallback here - with no mouse seen, the panel named whichever
+    // window sat at the centre of the fan - and it is what put an open "CEOS" card into a
+    // screenshot taken with no pointer input at all. It is gone. The trigger is now the
+    // same one on every device, said three ways:
+    //   pointer  -> hover, cleared when the pointer leaves;
+    //   keyboard -> focus, which is treated as hover throughout;
+    //   touch    -> a tap on the preview, cleared by tapping it again or anywhere else.
+    // With the fallback gone, `mouseSeen` and its window-level pointermove listener have
+    // nothing left to decide, so they are gone too.
     const unbind: Array<() => void> = [];
-    let mouseSeen = false;
-    const onMouse = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') {
-        mouseSeen = true;
-        window.removeEventListener('pointermove', onMouse);
-      }
-    };
-    window.addEventListener('pointermove', onMouse, { passive: true });
-    unbind.push(() => window.removeEventListener('pointermove', onMouse));
     const cards = Array.from(deck.querySelectorAll<HTMLElement>('[data-window]'));
     const n = cards.length;
 
@@ -238,8 +231,8 @@ export default function ProjectsStage({
       body.setAttribute('vector-effect', 'non-scaling-stroke');
       // B8d - the window IS the preview now, so the glass over it is a tint rather than a
       // surface: at the panel weight (0.78) under a 0.32 photo the screenshot was a dark
-      // smudge. Set inline, not in the stylesheet, because `app/**` belongs to the other
-      // session this round.
+      // smudge. Set inline because this element is BUILT here, in script, and never exists
+      // in the markup for a stylesheet rule to reach.
       if (src) body.style.fill = 'rgba(5, 7, 20, 0.30)';
       hitG.appendChild(body);
       bodies.push(body);
@@ -330,23 +323,33 @@ export default function ProjectsStage({
       list.style.cursor = i >= 0 ? 'pointer' : '';
     };
 
-    const activate = (i: number, coarse: boolean) => {
-      // First tap on a coarse pointer names the window instead of entering it: a phone has
-      // no hover, so without this the visitor leaves for a URL that nothing on the page
-      // ever described. Second tap on the same window enters. A mouse is unaffected.
-      if (coarse && tapped.current !== i) {
-        disarm();
-        tapped.current = i;
-        lights[i]?.(true);
-        return;
-      }
+    const open = (i: number) => {
       const href = cards[i]?.dataset.href;
       if (href) window.open(href, '_blank', 'noopener,noreferrer');
     };
 
-    // Which device produced THIS press, read off the event rather than a media query - for
-    // the same reason `mouseSeen` exists above. A `click` carries no pointerType of its own,
-    // so it is recorded on the press that precedes it.
+    const activate = (i: number, coarse: boolean) => {
+      // Touch is the hover it does not have. A tap on a preview shows that project's words;
+      // tapping the SAME preview again takes them away, which is what leaving it would do
+      // with a mouse. It no longer enters the project - the owner's ruling is that a tap
+      // toggles the text - so the way in on a phone is a tap on the words themselves, which
+      // is wired at the panel (see `onPanelClick`).
+      if (coarse) {
+        const was = tapped.current;
+        disarm();
+        if (was !== i) {
+          tapped.current = i;
+          lights[i]?.(true);
+        }
+        return;
+      }
+      open(i);
+    };
+
+    // Which device produced THIS press, read off the event rather than a media query: a
+    // `(hover: hover)` test is false in a headless browser, which has no input device at
+    // all, and is famously wrong on hybrid laptops. A `click` carries no pointerType of its
+    // own, so it is recorded on the press that precedes it.
     let coarse = false;
     let downX = 0;
     let downY = 0;
@@ -375,7 +378,20 @@ export default function ProjectsStage({
       if (Math.hypot(e.clientX - downX, e.clientY - downY) > 10) return;
       const i = windowAt(e.clientX, e.clientY);
       if (i >= 0) activate(i, coarse);
+      // Tapping ANYWHERE that is not a preview closes the open words. Half of the owner's
+      // "tapping elsewhere or the same window again closes it" - the other half is in
+      // `activate`.
+      else if (coarse) disarm();
     };
+    // Tapping the visit line opens the project the words describe. Only ever reachable on
+    // touch, because its `pointerEvents` is only turned on for a tap-armed panel.
+    const onVisitClick = (e: MouseEvent) => {
+      e.stopPropagation();
+      if (tapped.current >= 0) open(tapped.current);
+    };
+    panelVisit.addEventListener('click', onVisitClick);
+    unbind.push(() => panelVisit.removeEventListener('click', onVisitClick));
+
     list.addEventListener('pointerdown', onListDown, { passive: true });
     list.addEventListener('pointermove', onListMove, { passive: true });
     list.addEventListener('pointerleave', onListLeave);
@@ -467,12 +483,11 @@ export default function ProjectsStage({
           mark.setAttribute('x', m.rContent.toFixed(1));
           mark.setAttribute('y', '0');
           mark.setAttribute('font-size', Math.max(22, Math.min(64, m.contentHalf * 1.5)).toFixed(0));
-          // The ring-plane matrix can have a NEGATIVE determinant - here it does, because
-          // the plane is seen from below and its `v` points up the screen. Letters render
-          // back to front under it; flipping about the text's own baseline undoes that
-          // without moving it.
-          const det = m.matrix[0] * m.matrix[3] - m.matrix[1] * m.matrix[2];
-          mark.setAttribute('transform', det < 0 ? `translate(0,0) scale(1,-1)` : '');
+          // The monogram's TRANSFORM is not written here. It used to be - a bare
+          // `scale(1,-1)` that undid the plane's mirror and nothing else - and that is
+          // exactly why the letters stood on their heads: the flip is not the whole
+          // correction, and what is missing from it is per-window and per-frame. It now
+          // shares the photo's solved upright correction in the frame loop below.
         }
         const g = grads[i];
         g.setAttribute('x1', gx0.toFixed(1));
@@ -533,29 +548,23 @@ export default function ProjectsStage({
       if (mouseIn && Math.abs(shown - lastShown) > 0.5) setHover(windowAt(mouseX, mouseY));
       lastShown = shown;
 
-      // Which window is nearest the fan's centre. It is what the panel falls back to, and
-      // the guarantee that SOMETHING is named when the clamp has left almost no fan at all.
-      // Computed before the guard below because the panel follows it: a hover changes no
-      // geometry, so a signature made only of geometry would hold the panel a frame behind.
+      // Which window is nearest the fan's centre. It is NOT what the panel falls back to -
+      // there is no fallback any more (NEW-4) - it is only which window is drawn fully
+      // present rather than faded, so the ring still has a focal point with nothing
+      // pointed at. Computed before the guard below because the panel follows `active`: a
+      // hover changes no geometry, so a signature made only of geometry would hold the
+      // panel a frame behind.
       let centred = -1;
       let bestA = Infinity;
       for (let i = 0; i < n; i++) {
         const a = windowArc(i, n, shown, m);
         if (Math.abs(a) < Math.abs(bestA)) { bestA = a; centred = i; }
       }
-      // The armed tap comes BEFORE the mouse fallback. On a hybrid - a laptop with both a
-      // trackpad and a touchscreen - `mouseSeen` is true the moment the mouse twitches, and
-      // ordering it first meant a touch tap armed a window and then showed nothing at all,
-      // so the first tap gave no feedback and the second opened a project the visitor had
-      // never seen named.
+      // Pointed at, or nothing. Hover and focus are the same thing here (`onFocus` calls
+      // `setHover`'s twin), and an armed tap is touch's stand-in for hover. There is no
+      // fourth branch: with no pointer, no focus and no tap, the panel is empty.
       const active =
-        hovered.current >= 0
-          ? hovered.current
-          : tapped.current >= 0
-            ? tapped.current
-            : mouseSeen
-              ? -1
-              : centred;
+        hovered.current >= 0 ? hovered.current : tapped.current >= 0 ? tapped.current : -1;
 
       // Where the panel wants to sit: alongside the window it is describing, ON the disc.
       // The owner's ruling - the words stay on the planet, and slide along it toward the
@@ -684,10 +693,20 @@ export default function ProjectsStage({
         //
         // The correction is the rotation ONLY. The plane's squash stays - it is what makes
         // the window sit in the rings rather than float over them - and so does the mirror
-        // when the plane is seen from below, which is undone here for the same reason the
-        // monogram undoes it.
+        // when the plane is seen from below, which is undone here too.
+        //
+        // BOTH kinds of preview content go through this, and that is the fix for the
+        // monograms. They used to carry a bare `scale(1,-1)`, written once when the ring's
+        // SHAPE changed, on the theory that undoing the plane's mirror was the whole
+        // correction. It is not: the mirror is not the rotation, and the rotation is
+        // per-window and per-frame. Measured on production before this change, the painted
+        // monograms sat at 158.1deg and 146.5deg at 1440x900 (en and ru), 25.4deg in he,
+        // and 90deg on every phone in all three locales - while every painted PHOTO, which
+        // already had this correction, measured 0deg. So the letters were the thing
+        // standing on their heads, and the pictures never were.
         const photoEl = photos[i];
-        if (photoEl) {
+        const markEl = marks[i];
+        if (photoEl || markEl) {
           // SOLVED, not guessed. Simply counter-rotating by the screen angle of the image's
           // x axis is only correct when the transform above it is a similarity, and the
           // plane matrix is not one - it squashes one axis to put the window in the rings.
@@ -709,10 +728,17 @@ export default function ProjectsStage({
           // Two angles satisfy that; take the one that leaves the image reading left to
           // right rather than backwards.
           if (a11 * Math.cos(phi) + a12 * Math.sin(phi) < 0) phi += Math.PI;
-          // And when the plane is seen from below the whole space is mirrored, which the
-          // monogram already undoes for itself. det(A * R * F) = -det(A), so the flip is
-          // exactly what puts it back.
+          // And when the plane is seen from below the whole space is mirrored.
+          // det(A * R * F) = -det(A), so the flip is exactly what puts it back.
           const det = a11 * a22 - a12 * a21;
+          /** Turn the content upright about a point of its own, in canonical space. The
+           *  point differs - a photo turns about its box's centre, a monogram about the
+           *  glyph - but the correction is the same one, which is the point. */
+          const uprightAbout = (ux: number, uy: number) =>
+            `translate(${ux.toFixed(1)} ${uy.toFixed(1)}) ` +
+            `rotate(${((phi * 180) / Math.PI).toFixed(2)}) ` +
+            (det < 0 ? 'scale(1,-1) ' : '') +
+            `translate(${(-ux).toFixed(1)} ${(-uy).toFixed(1)})`;
           const cxImg = photoBox.x + photoBox.w / 2;
           const cyImg = photoBox.y + photoBox.h / 2;
           // A rectangle rotated inside its own bounds does not cover them: measured with a
@@ -724,21 +750,21 @@ export default function ProjectsStage({
           // Exactly that, and no more. A square on the diagonal also covers every angle, and
           // was the first attempt, but it throws away most of the screenshot: at 390x844 it
           // cropped a 1280x720 page down to one bar of a test marker.
-          const ac = Math.abs(Math.cos(phi));
-          const as = Math.abs(Math.sin(phi));
-          const iw = photoBox.w * ac + photoBox.h * as;
-          const ih = photoBox.w * as + photoBox.h * ac;
-          photoEl.setAttribute('x', (cxImg - iw / 2).toFixed(1));
-          photoEl.setAttribute('y', (cyImg - ih / 2).toFixed(1));
-          photoEl.setAttribute('width', iw.toFixed(1));
-          photoEl.setAttribute('height', ih.toFixed(1));
-          photoEl.setAttribute(
-            'transform',
-            `translate(${cxImg.toFixed(1)} ${cyImg.toFixed(1)}) ` +
-              `rotate(${((phi * 180) / Math.PI).toFixed(2)}) ` +
-              (det < 0 ? 'scale(1,-1) ' : '') +
-              `translate(${(-cxImg).toFixed(1)} ${(-cyImg).toFixed(1)})`
-          );
+          if (photoEl) {
+            const ac = Math.abs(Math.cos(phi));
+            const as = Math.abs(Math.sin(phi));
+            const iw = photoBox.w * ac + photoBox.h * as;
+            const ih = photoBox.w * as + photoBox.h * ac;
+            photoEl.setAttribute('x', (cxImg - iw / 2).toFixed(1));
+            photoEl.setAttribute('y', (cyImg - ih / 2).toFixed(1));
+            photoEl.setAttribute('width', iw.toFixed(1));
+            photoEl.setAttribute('height', ih.toFixed(1));
+            photoEl.setAttribute('transform', uprightAbout(cxImg, cyImg));
+          }
+          // The monogram is anchored at (rContent, 0) in the window's own space - middle
+          // anchor, central baseline - so that IS its centre, and turning about it leaves
+          // the letter where the sector put it.
+          if (markEl) markEl.setAttribute('transform', uprightAbout(m.rContent, 0));
         }
         g.style.opacity = opacity.toFixed(3);
         // The window IS the preview, so the preview has to read as one. This line was
@@ -768,9 +794,7 @@ export default function ProjectsStage({
       }
 
       // B8d - the words live on the planet. Which project they describe is `active`, decided
-      // above: the hovered or focused window, else the one a first tap armed, else - with no
-      // pointer - the one at the centre of the fan. A phone has no hover, and twelve pictures
-      // with no way to learn what any of them is would be the whole design's failure mode.
+      // above: the hovered or focused window, or the one a tap armed, or NOTHING.
       if (active !== shownActive.current) {
         shownActive.current = active;
         const src = active >= 0 ? cards[active] : null;
@@ -778,6 +802,20 @@ export default function ProjectsStage({
         panelDesc.textContent = src?.dataset.desc ?? '';
         panelTech.textContent = src?.dataset.tech ?? '';
         panel.style.opacity = src ? '1' : '0';
+        // The way into a project on a phone. A tap on the preview now TOGGLES the words
+        // rather than entering (NEW-4), so without this a touch visitor could read about
+        // twelve projects and open none of them.
+        //
+        // The control is this ONE LINE, never the whole panel. Making the panel itself the
+        // target was the obvious version and it was wrong: the panel is a third of the fan's
+        // area on a 390px phone, so it sat on top of the previews and ATE the second tap -
+        // measured in ru, whose longer copy makes the panel tall enough to cover the point
+        // the first tap had used, so the preview could be opened and then never closed, and
+        // the tap meant to close it opened a popup instead. A small line, only while a tap
+        // is what opened the words, leaves the previews reachable.
+        const armed = src && tapped.current === active && src.dataset.href;
+        panelVisit.textContent = armed ? panel.dataset.visitLabel ?? '' : '';
+        panelVisit.style.pointerEvents = armed ? 'auto' : 'none';
       }
       // Over the disc, on the side of it the windows are not on, and never under the
       // navbar however the planet drifts.
@@ -793,13 +831,41 @@ export default function ProjectsStage({
       // of snapping, and it is bounded so the words never leave the planet.
       const px = (m.portrait ? (vw - pw) / 2 : m.cx - m.sweep * (m.R * 0.3) - pw / 2)
         + (m.portrait ? slide.current : 0);
-      const py = (m.portrait ? m.cy + m.R * 0.55 : m.cy - 60)
-        + (m.portrait ? 0 : slide.current);
       panel.style.width = `${pw.toFixed(0)}px`;
-      panel.style.left = `${clamp(px, 12, Math.max(12, vw - pw - 12)).toFixed(1)}px`;
-      panel.style.top = `${clamp(py, 88, vh - 180).toFixed(1)}px`;
       panel.style.setProperty('--panel-title', m.portrait ? '1.1rem' : '1.6rem');
       panel.style.setProperty('--panel-body', m.portrait ? '0.8125rem' : '0.9375rem');
+
+      // THE WORDS MUST NOT SIT ON THE PICTURES.
+      //
+      // Measured at 390x844 before this: the panel ran y=287..584 while the fan's box ran
+      // y=361..691, so 74.8% of the panel (70.9% in en, 74.8% in ru) was laid over the
+      // previews. Two things went wrong because of it. It reads as clutter - text and
+      // photograph competing for the same strip of a small screen. And it broke the touch
+      // rule outright: the visit chip landed inside the fan, so in ru the second tap hit the
+      // chip instead of the preview, the words could be opened and never closed, and the tap
+      // meant to close them opened the project instead.
+      //
+      // Portrait therefore keeps the panel in the strip between the navbar and the fan -
+      // which is still ON the planet, since the disc runs to y=400 and the fan starts at 361
+      // - and the description is clamped so the panel fits that strip instead of growing
+      // into it. Landscape is untouched: it measures 0% overlap already, the fan being
+      // beside the planet rather than under it.
+      const gap = 12;
+      panelDesc.style.display = m.portrait ? '-webkit-box' : '';
+      panelDesc.style.overflow = m.portrait ? 'hidden' : '';
+      panelDesc.style.setProperty('-webkit-box-orient', m.portrait ? 'vertical' : '');
+      // Three lines is what the strip holds at 0.8125rem/1.65 once the title, the tech line
+      // and the chip have taken theirs. The full description is still in the DOM on the real
+      // anchor, which is what a screen reader and a crawler read.
+      panelDesc.style.setProperty('-webkit-line-clamp', m.portrait ? '3' : '');
+      // The height is read only when the panel's CONTENT or the frame changed, which is what
+      // this whole update is guarded on - not once per rendered frame.
+      const ph = m.portrait ? panel.offsetHeight : 0;
+      const py = m.portrait
+        ? clamp(m.cy + m.R * 0.55, 88, Math.max(88, box.y - gap - ph))
+        : clamp(m.cy - 60 + slide.current, 88, vh - 180);
+      panel.style.left = `${clamp(px, 12, Math.max(12, vw - pw - 12)).toFixed(1)}px`;
+      panel.style.top = `${py.toFixed(1)}px`;
 
       list.dataset.ready = '1';
       if (probe) {
@@ -836,7 +902,6 @@ export default function ProjectsStage({
     };
   }, [portrait, children]);
 
-  const back = t('contact.back', locale);
   const departureLabel = t('world.departure', locale);
 
   return (
@@ -855,15 +920,8 @@ export default function ProjectsStage({
           <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl">{title}</h1>
           <p className="world-body mt-2 text-[var(--color-star-white)]/55">{tagline}</p>
         </div>
-        <Link
-          href={homePath(locale)}
-          data-world-back=""
-          onClick={(e) => { e.preventDefault(); returnHome(); }}
-          className="pointer-events-auto mt-1 inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-[rgba(5,7,20,0.6)] px-3 py-1 text-xs text-[var(--color-star-white)]/75 transition-colors hover:border-[var(--color-core-gold)]/60 hover:text-[var(--color-core-gold)]"
-        >
-          <span aria-hidden>↩</span>
-          {back}
-        </Link>
+        {/* The shared back control - see WorldBackLink for why there is exactly one. */}
+        <WorldBackLink locale={locale} onBack={returnHome} className="mt-1" />
       </header>
 
       {/* The shapes. Screen-space px (no viewBox), under the content, never interactive. */}
@@ -885,11 +943,18 @@ export default function ProjectsStage({
         <div ref={railRef} aria-hidden />
       </div>
 
-      {/* The project's words, on the planet. Styles are inline rather than in a class
-          because globals.css belongs to the other session's lane this round. */}
+      {/* The project's words, on the planet.
+          The styles are inline because they are all DRIVEN - the width, the position, the
+          two font sizes and the pointer-events are written by the frame loop above, off the
+          same ring metrics as the windows. A class could not carry any of that, so this is
+          the element's real home rather than a stopgap.
+          `aria-hidden` because this is the painted face of a project, not its accessible
+          copy: that is the real off-screen <a> in ProjectsWorld, which carries the same
+          title, description and link and is what a screen reader and a crawler read. */}
       <div
         ref={panelRef}
         aria-hidden
+        data-visit-label={t('projects.visit', locale)}
         className="pointer-events-none absolute"
         style={{
           opacity: 0,
@@ -920,6 +985,14 @@ export default function ProjectsStage({
           data-panel-tech
           className="mt-2.5 text-[var(--color-core-gold)]/85"
           style={{ fontSize: '0.75rem', letterSpacing: '0.04em' }}
+        />
+        {/* Empty except on a tap-armed panel that has somewhere to go - see the frame loop.
+            It is the ONLY part of the words that is ever a click target, and only on touch;
+            `:empty` keeps it from drawing a chip around nothing the rest of the time. */}
+        <div
+          data-panel-visit
+          className="mt-3 inline-flex items-center rounded-full border border-[var(--color-core-gold)]/45 px-3 py-1 text-[var(--color-core-gold)] empty:hidden"
+          style={{ fontSize: '0.8125rem', letterSpacing: '0.06em', pointerEvents: 'none' }}
         />
       </div>
 
