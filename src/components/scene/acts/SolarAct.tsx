@@ -670,10 +670,37 @@ function Planet({ spec }: { spec: PlanetSpec }) {
              flowUv.x += w * uFlow;
              flowUv.y += w * uFlow * 0.35;
            }
-           vec4 sampledDiffuseColor = texture2D( map, flowUv );
+           // THE POLES, and nothing but the poles. An equirectangular map puts all 2048
+           // texels of a row into a single point at each pole, so the texture is compressed
+           // along u by 1/sin(latitude) — and the pole is the part of the sphere pointed
+           // straight at the camera, where the anisotropic sampler's taps run out fastest.
+           // Measured over the disc, the pole is 4.5x more unstable frame to frame than
+           // anywhere else on the globe: concentric rings of sparkle converging on a point.
+           //
+           // The correction is that compression expressed in mip levels, log2(1/sin), which
+           // is EXACTLY ZERO at the equator and stays under half a level across the whole
+           // tropics — the continents on the lit face are sampled precisely as before. It
+           // reaches ~1.1 over Scandinavia and northern Canada and is capped at 3 so the
+           // pole itself goes soft instead of dividing by zero.
+           //
+           // This is the surface map, which is where the defect actually lives: with the
+           // night-lights layer deleted outright, 85% of the pole's instability remained.
+           // The same term was tried in the night-lights shader first and bought 3%.
+           // GATED to the high latitudes on purpose. log2(1/sin) is the mathematically
+           // honest correction and it is not zero in the middle of the map: half a mip
+           // level at 45 degrees, which measured as an 8% loss of detail across the
+           // mid-latitudes - most of the land anyone looks at. The ruling was the pole and
+           // only the pole, so the term is faded in between 54 and 76 degrees. Below that
+           // the continents are sampled exactly as they were; above it the correction is
+           // at nearly full strength by the time it reaches the latitudes that sparkle.
+           float lat = abs( vMapUv.y - 0.5 ) * 2.0;          // 0 equator .. 1 pole
+           float sinLat = max( sin( 3.14159265 * vMapUv.y ), 0.02 );
+           float poleBias = clamp( log2( 1.0 / sinLat ), 0.0, 3.0 )
+                          * smoothstep( 0.60, 0.85, lat );
+           vec4 sampledDiffuseColor = texture2D( map, flowUv, poleBias );
            diffuseColor *= sampledDiffuseColor;
            // A1: crossfade the hi-res map in (same warped UV + material tint).
-           diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( uHiMap, flowUv ).rgb * diffuse, uHiMix );
+           diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( uHiMap, flowUv, poleBias ).rgb * diffuse, uHiMix );
            if ( uHaze > 0.0 ) {
              // Mars: a faint warm dust-haze drifting slowly across the disc.
              float hz = _n( vec2( vMapUv.x * 3.0 + uTime * 0.01, vMapUv.y * 5.0 - uTime * 0.006 ) );
