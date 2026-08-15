@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation, SMAA } from '@react-three/postprocessing';
 import * as THREE from 'three';
+import { GODRAY_WEIGHT } from '@/lib/photometry';
 import { useScene } from '@/lib/sceneStore';
 import { HUD_AVAILABLE } from './DebugHud';
 import ExposureToneMap from './ExposureToneMap';
@@ -48,20 +49,7 @@ const GALAXY_SAT = 0.08; // A6: the same gentle grade enriches the galaxy arms (
 // overview keeps its unconditional mount so that a drag-rotate which swings the sun off
 // the edge fades the rays without recompiling the composer mid-gesture.
 const SUN_POS = new THREE.Vector3(0, 0, 0);
-// SUN-3: 0.16 -> 0.05, and this is the number that was flattening the sun.
-//
-// GodRays smears the source RADIALLY outward, so on a source that fills a third of the
-// frame the "shafts" are a wide smear laid back over the disc it came from - brightest
-// where the bright centre spills across the dim limb. Measured with the pass toggled off
-// and everything else held: it was adding ~0.6 of linear red at the limb, against the
-// surface's own 0.53 there. More than the sun. That is what filled the limb darkening back
-// in, and it is what the earlier rounds kept attributing to Bloom - which, measured the
-// same way, was contributing nothing at all at its 0.94 threshold.
-//
-// It also washed the whole sky: with the pass off the corners go from warm brown haze to
-// deep indigo. RULING 2 stands and the mount logic is untouched - a shaft when the sun
-// crosses frame is still composition. It just no longer outshines the star.
-const GODRAY_WEIGHT = 0.05;
+// God-ray weight and its light-budget rationale live in @/lib/photometry.
 const RAY_FADE_IN = 0.9;   // × half-diagonal fov - full weight inside this
 const RAY_FADE_OUT = 1.7;  // × half-diagonal fov - zero weight beyond this
 const RAY_MOUNT = 2.2;     // × half-diagonal fov - mounted out to here (hysteresis below)
