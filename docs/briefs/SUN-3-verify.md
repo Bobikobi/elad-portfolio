@@ -77,6 +77,27 @@ resolution.
 
 ---
 
+---
+
+## Found later, and not by any of the three routes above
+
+**SUN-3 changed a number it never mentioned.** Found 2026-08-16 while moving the bloom
+constants into the photometry module: `0fcf349` moved the overview bloom threshold from
+**0.94 to 0.33** - and left the SUN-2 comment above it, which explains at length why the
+value is 0.94, completely untouched. The commit message does not mention the change.
+
+It is the only number SUN-3 moved silently, and the stale comment is the second instance in
+this stage of the same failure mode as P0b: a recorded conclusion that outlived the thing it
+described. The comment is corrected in place; the value is left alone, because the bloom
+threshold is knob two of P6's first judgement call and re-tuning it here would be deciding
+that call by accident.
+
+**This matters for the criteria above.** C1, C2 and C5 all measure the disc after bloom.
+They were measured with the threshold at 0.33, and the reason it is at 0.33 is not recorded
+anywhere - so the alias re-measurement should record it explicitly rather than inherit it.
+
+---
+
 ## What has to happen before this can be signed
 
 1. Re-measure C1, C2, C3, C5 on a **deployed preview alias**, and confirm they match localhost

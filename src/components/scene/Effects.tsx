@@ -252,6 +252,20 @@ export default function Effects() {
         levels={high ? 7 : 6}
         // SUN-2: the OVERVIEW threshold goes 0.72 -> 0.94 and its intensity 0.6 -> 0.5.
         //
+        // STALE, CORRECTED 2026-08-16. The overview threshold is NOT 0.94. SUN-3
+        // (`0fcf349`) changed it to 0.33 and left this comment untouched, so everything
+        // below describes a value that has not been in the file since. The change is not
+        // mentioned in that commit's message either - it is the only number SUN-3 moved
+        // silently. Read the paragraph below as the reasoning for 0.94, which is history,
+        // and not as a description of what runs today.
+        //
+        // Not yet measured, so stated as a hypothesis rather than a fact: SUN-3 dimmed the
+        // disc from sRGB (216,141,87) to (186,124,89), and a threshold set against the
+        // brighter sun would leave almost nothing above the bar once the sun came down.
+        // 0.33 against a dimmer disc is a much lower bar than 0.94 was against a brighter
+        // one, and P3's albedo work moves the same goalposts again. This is knob two of
+        // P6's first judgement call and should not be re-tuned before then.
+        //
         // Bloom runs after tone mapping, and at 0.72 most of the sun's disc - not just its
         // hottest cells - was over the bar. The glow was therefore being laid over the
         // surface itself: measured, a 48% limb darkening arrived at the screen as 8%,
