@@ -68,7 +68,7 @@ export interface HudData {
   // renderer DOES per frame.
   calls: number;
   tris: number;
-  planets: { key: string; px: number }[]; // on-screen diameter in px
+  planets: { key: string; px: number; x: number; y: number }[]; // diameter + centre, in CSS px
   fps: number;
   corners: [number, number, number, number]; // TL, TR, BL, BR luminance %
   vw: number;
@@ -111,6 +111,7 @@ const CORNER_BLOCK = 10;
 
 const _sun = new THREE.Vector3();
 const _p = new THREE.Vector3();
+const _pp = new THREE.Vector3();
 
 /** Lives INSIDE the Canvas — reads camera + renderer each frame and fills `hudData`. */
 export function HudProbe() {
@@ -159,12 +160,21 @@ export function HudProbe() {
       hudData.sunX = ((_p.x + 1) / 2) * vw;
       hudData.sunY = ((1 - _p.y) / 2) * vh;
 
-      const planets: { key: string; px: number }[] = [];
+      const planets: { key: string; px: number; x: number; y: number }[] = [];
       planetPositions.forEach((pos, key) => {
         const R = planetRadii.get(key) ?? 0;
         _p.copy(pos);
         const d = cam.position.distanceTo(_p);
-        planets.push({ key, px: heightFraction(R, d, fovYrad) * vh });
+        // SUN-3: the disc's CENTRE as well as its size. Without it a harness measuring
+        // per-body exposure has to guess which blob is which planet from colour and width,
+        // and two of them differ by 1px of diameter.
+        _pp.copy(pos).project(cam);
+        planets.push({
+          key,
+          px: heightFraction(R, d, fovYrad) * vh,
+          x: ((_pp.x + 1) / 2) * vw,
+          y: ((1 - _pp.y) / 2) * vh,
+        });
       });
       planets.sort((a, b) => a.key.localeCompare(b.key));
       hudData.planets = planets;

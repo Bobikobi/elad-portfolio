@@ -137,19 +137,52 @@ const sunFrag = /* glsl */ `
     // flat plate.
     float gr = grain(p*13.6 + vec3(uTime*0.09, -uTime*0.06, uTime*0.04));
     n += (gr - 0.5) * 0.13;
-    // B3: these were mixed for a frame that had NO tone mapper, where anything over 1
-    // simply clamped and (1.0, 0.5, 0.11) stayed vividly gold. ACES desaturates its
-    // highlights toward white on the way up, so the same values came out pale butter.
-    // Pushing the source far more saturated keeps the star burning gold AFTER the curve —
-    // measured, the mid tone now lands at sRGB (254, 218, 124) instead of a washed cream —
-    // while the HDR magnitude stays high, which is what Bloom and God Rays read.
-    vec3 dark = vec3(0.60, 0.13, 0.015);
-    vec3 mid  = vec3(1.00, 0.30, 0.030);
-    vec3 hot  = vec3(1.00, 0.74, 0.300);
+    // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
+    // it was in these nine numbers.
+    //
+    // Measured on the render: the sun's red channel came out 225 of 255 across ONE HUNDRED
+    // PERCENT of the disc, standard deviation 0.31. Every bit of shading the shader
+    // computes - the granulation, the limb darkening below, the plasma flow - existed only
+    // in green and blue, because red had no room left to move in. A sphere whose brightest
+    // channel is a flat plateau cannot read as a sphere, and that is the whole of "it looks
+    // clunky": not the silhouette (measured at 0.97% rms, which is what it should be), not
+    // the granulation (which is there), but a face with no falloff across it.
+    //
+    // Two things did it, and B3 set up both while chasing a real problem:
+    //
+    //  - the mid and hot stops BOTH had red at 1.00, so from the mid stop upward the ramp
+    //    had no red gradient left to give at all;
+    //  - at 1.5x exposure that put the exposed red at 1.16-1.85, which is deep in ACES's
+    //    shoulder. Simulated over the pipeline, a 10% brightness change there moves the
+    //    output 3 of 255; at 0.6 linear the same change moves 7. The limb darkening below
+    //    really does cut linear red by 37% from centre to limb - and 37% arrived at the
+    //    screen as 0.2%.
+    //
+    // B3's reasoning was sound for the frame it was written against ("ACES desaturates its
+    // highlights toward white, so push the source more saturated"). The step it missed is
+    // that pushing a colour PAST the shoulder does not keep it saturated, it freezes it:
+    // the gold stops being a colour the surface has and becomes a ceiling it rests on.
+    //
+    // So the stops are desaturated to 62% and scaled to 56%, which puts the whole disc back
+    // on the part of the curve that has slope. Measured on the render: the disc's mean moves
+    // from sRGB (216, 141, 87) to (186, 124, 89) and, far more to the point, red stops being
+    // a plateau - it now runs 208 at the centre to 174 at the limb where it used to run 225
+    // to 225. Dimmer, and for the first time shaded.
+    //
+    // The dimming is not a side effect to be tuned away, it IS the fix: on this pipeline a
+    // sun bright enough to sit in ACES's shoulder is a sun with no shading, and the two
+    // cannot both be had. How bright it should be from here is the owner's call, not a
+    // measurement - the criteria constrain the gradient, never the level.
+    vec3 dark = vec3(0.255, 0.092, 0.052);
+    vec3 mid  = vec3(0.439, 0.196, 0.102);
+    // The hot stop is the one place red should NOT lead: a hotter patch of a photosphere is
+    // whiter, not redder. Red barely rises from the mid stop while green doubles.
+    vec3 hot  = vec3(0.510, 0.419, 0.267);
     // SUN-2: the lanes between the cells go deeper and the ramp starts earlier, so the dark
     // stop is actually reached somewhere on the disc instead of being a limit the surface
-    // approaches. The HOT stop is untouched - B3 measured the gold that survives ACES at
-    // exactly these values, and the tone-map discipline is not what this stage is changing.
+    // approaches. (SUN-3 note: that pass left the HOT stop alone on the grounds that B3 had
+    // measured the gold surviving ACES at exactly those values. It had - but "survives ACES"
+    // and "is past the point where ACES still has slope" turned out to be the same place.)
     // The ramp's windows move UP. n centres near 0.5, so with the old windows almost the
     // whole disc sat at or past the mid stop and the surface came out one flat cream tone -
     // "not rich enough", and correctly so: a photographed sun is mostly deep amber with the
@@ -163,30 +196,40 @@ const sunFrag = /* glsl */ `
     // 0.6 the darkening is spread across the disc, which is the term that makes a flat
     // circle read as a ball.
     float ndv = max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0);
-    // Depth 32% -> 48%. Measured on the preview, a 32% darkening arrived at the screen as a
-    // 6% one: bloom spills off the bright interior and fills the limb back in. The term has
-    // to be stronger than the result we want, because something downstream is subtracting
-    // from it - which is a statement about the composite, not about physics.
-    float limb = pow(ndv, 0.6);
-    // Exposure, on the owner's ruling. At 2.2 every radial bin of the disc measured between
-    // 205 and 230 of 255 - the top fifth of the range, where ACES compresses hardest and
-    // desaturates toward white. The grain was being drawn and then flattened, a 32% limb
-    // darkening was arriving as 2%, and the gold B3 locked was coming out chalk. Measured at
-    // 1.4 the grain became visible and the mid tone's red-to-blue gap doubled; 1.5 keeps
-    // that and gives back a little of the brightness.
-    // Depth 48% -> 74%, and this needs saying plainly: the criterion was written in the
-    // wrong colour space. A real sun's limb sits at 65-75% of its centre in LINEAR
-    // intensity; the screenshot it is measured in is tone-mapped and display-encoded, where
-    // that same ratio reads around 0.85, not 0.70. Measured here the curve is far more
-    // compressive than gamma alone - a linear 0.72 came back as 0.91 - so hitting 0.85 on
-    // screen needs about 0.57 linear, and that is where this number comes from.
-    col *= (1.5 + uPulse) * mix(0.26, 1.0, limb);
+    // SUN-3: exponent 0.6 -> 1.0, floor 0.26 -> 0.32.
+    //
+    // The earlier note here blamed Bloom for the darkening "arriving as 6%". It was not
+    // Bloom - toggled off with everything else held, Bloom moved the limb ratio by 0.001.
+    // It was GOD RAYS, which smear the source radially and so paint the bright centre back
+    // out across the limb; see the weight constant in Effects.tsx. Worth recording because
+    // the wrong culprit had this term chasing a number it could not reach, which is how it
+    // ended up as a cliff in the last tenth of the radius with the inner 70% varying by 2%.
+    //
+    // With the real cause fixed and red free to move, the exponent does what it says: near
+    // 1.0 this is close to the linear I(mu) = a + b*mu a real photosphere follows, and the
+    // falloff is spread across the whole face instead of piled at the edge.
+    //
+    // NOTE on how this is measured: the visible limb is NOT ndv = 0. For a sphere of radius
+    // 1.5 seen from 10.65 the tangent point sits at ndv = r/d = 0.141, so the disc spans
+    // 1.0 down to 0.141 and no further. Reading it as the orthographic sqrt(1 - r^2) makes
+    // the predicted limb far darker than the renderer's, and that error spent a round
+    // looking like a mystery term somewhere in the post chain.
+    float limb = pow(ndv, 1.0);
+    // Exposure stays at 1.5. It is NOT the lever it looks like: simulated across the whole
+    // pipeline, dialling it down moves red hardly at all (red is in the shoulder, that is
+    // the defect) while crushing green and blue, which sit on the steep part - at 0.55 the
+    // limb/centre red ratio was still 0.878 and the sun had turned a hard orange with blue
+    // at 22 of 255. The exposure was never what pinned red; the stops above were.
+    col *= (1.5 + uPulse) * mix(0.32, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 const SUN_R = 1.5;
-const PROM_COUNT = 7;
+// SUN-3: 7 -> 5. Seven arcs at the old width and length covered 8.9% of the silhouette
+// with spikes reaching 1.76 sun-radii; five shorter, narrower ones measure 1.1% and 1.09 R.
+// A limb with a few things happening on it reads more alive than one with a ring of them.
+const PROM_COUNT = 5;
 
 // R2.2 milky-halo fix. A bisection (Debug HUD + corner luminance) showed the washed
 // "milky halo" around the sun on arrival — worst on mobile — came from the additive gold
@@ -245,17 +288,28 @@ function Prominences() {
       const burst = Math.max(0, Math.sin(t * pr.speed * 0.5 + pr.phase * 1.7) - 0.72) * 3.4;
       const e = Math.min(1.4, base * 0.5 + burst);
       const s = g.children[i] as THREE.Sprite;
-      const l = SUN_R * (0.30 + pr.len * 0.34 * e);
+      // SUN-3. These are the "weird sparkles", and the numbers say why: at 0.30 + len*0.34*e
+      // a fully-erupted arc put its tip at 2.19 SUN_R, i.e. it stuck a sun-and-a-bit out
+      // past the limb. Measured on the render the visible reach was 1.74 R - the faint tip
+      // does not register - and at that length a tapered sprite has stopped being a flame
+      // and become a straight hard-edged ray, which is exactly what it looked like.
+      //
+      // A real prominence is a few percent of the solar radius; even the record ones are
+      // well under half. These now top out at 0.19 R of arc, tip at 1.19 SUN_R, which is
+      // still far more than nature and is the point - it has to be seen at a 350px disc.
+      const l = SUN_R * (0.06 + pr.len * 0.075 * e);
       // The flame's BASE is at v=0, i.e. the bottom edge of the sprite, so the sprite's
       // centre has to sit half a length outboard for the base to land on the limb.
       const anchor = SUN_R * 0.985 + l * 0.5;
       s.position.set(pr.x * anchor, pr.y * anchor, 0);
-      s.scale.set(SUN_R * (0.16 + 0.10 * e), l, 1);
+      // Narrower too, and for the other half of C3: width is what decides how much of the
+      // silhouette is covered, and five arcs at the old width still spanned ~15%.
+      s.scale.set(SUN_R * (0.10 + 0.07 * e), l, 1);
       // SUN-2: the arcs sat at 0.05-0.25 on additive blending, against a rim the bloom has
       // already lit - close to invisible, so the limb read as a clean circle with nothing
       // happening on it. Raised enough to be seen against dark space at the silhouette,
       // still driven entirely by each arc's own eruption envelope.
-      (s.material as THREE.SpriteMaterial).opacity = 0.08 + 0.30 * e;
+      (s.material as THREE.SpriteMaterial).opacity = 0.07 + 0.26 * e;
       s.material.rotation = pr.a - Math.PI / 2;
     }
   });
