@@ -3,7 +3,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation, SMAA } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { GODRAY_WEIGHT } from '@/lib/photometry';
+import {
+  BLOOM_FOCUSED_WORLD_INTENSITY,
+  BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD,
+  BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY,
+  BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING,
+  BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD,
+  BLOOM_SOLAR_LUMINANCE_SMOOTHING,
+  BLOOM_SOLAR_OVERVIEW_INTENSITY,
+  BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD,
+  GODRAY_WEIGHT,
+} from '@/lib/photometry';
 import { useScene } from '@/lib/sceneStore';
 import { HUD_AVAILABLE } from './DebugHud';
 import ExposureToneMap from './ExposureToneMap';
@@ -276,9 +286,9 @@ export default function Effects() {
         //
         // This can only make the halo TIGHTER, which is the direction R2.2 wanted - but the
         // corner luminance is re-measured anyway rather than argued about.
-        intensity={solar ? (focused ? 0.34 : 0.5) : 0.5}
-        luminanceThreshold={solar ? (focused ? 0.86 : 0.33) : 0}
-        luminanceSmoothing={solar ? 0.22 : 0}
+        intensity={solar ? (focused ? BLOOM_FOCUSED_WORLD_INTENSITY : BLOOM_SOLAR_OVERVIEW_INTENSITY) : BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY}
+        luminanceThreshold={solar ? (focused ? BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD : BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD) : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD}
+        luminanceSmoothing={solar ? BLOOM_SOLAR_LUMINANCE_SMOOTHING : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING}
         radius={solar ? 0.45 : 0.5}
       />
       {/* THE APERTURE + THE TONE MAPPER. Must sit after God Rays and Bloom (they want the

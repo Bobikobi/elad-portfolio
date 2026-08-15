@@ -31,3 +31,13 @@ export const SUN_LAMP_DECAY = 2;
 // deep indigo. RULING 2 stands and the mount logic is untouched - a shaft when the sun
 // crosses frame is still composition. It just no longer outshines the star.
 export const GODRAY_WEIGHT = 0.05;
+
+// Bloom thresholds and strengths; the reasoning for these values lives at the call site.
+export const BLOOM_FOCUSED_WORLD_INTENSITY = 0.34;
+export const BLOOM_SOLAR_OVERVIEW_INTENSITY = 0.5;
+export const BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY = 0.5;
+export const BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD = 0.86;
+export const BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD = 0.33;
+export const BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD = 0;
+export const BLOOM_SOLAR_LUMINANCE_SMOOTHING = 0.22;
+export const BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING = 0;
