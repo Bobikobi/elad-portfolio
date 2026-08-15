@@ -44,11 +44,18 @@ import { Uniform, type WebGLRenderer } from 'three';
  * gradient. Rust stays rust; it simply stops being redder than it can be.
  *
  * It is scaled by the channel SPREAD, and that is what makes it safe to apply globally
- * rather than per-object. A neutral highlight — the sun's core, the gold curtain at full
- * coverage, a white star — has its channels close together, so the spread term is ~0 and it
- * is passed through untouched. Only a colour that is both bright AND lopsided, which is the
+ * rather than per-object. Only a colour that is both bright AND lopsided, which is the
  * exact condition for a lone channel clipping, is touched at all. Nothing here changes
  * exposure: the aperture is still the per-world number CameraRig drives, per the ruling.
+ *
+ * CORRECTED 2026-08-15 (SUN-3). This comment used to claim that a neutral highlight — the
+ * sun's core, the gold curtain, a white star — has its channels close together, so the
+ * spread term is ~0 and it "is passed through untouched". That is false, and it hid a real
+ * defect for two stages. The sun's core is NOT neutral: its measured spread is 0.97, so the
+ * rolloff was desaturating the centre of the disc by 49% and the limb by 11% — i.e. actively
+ * cancelling the limb darkening SUN-2 was trying to produce. The pass is global, so this
+ * applies to every planet, star and the gold curtain too, not only to Mars, which is what it
+ * was written for. Re-scoping it is P4 of PHOTOMETRY-megaplan.md and is only safe after P3.
  */
 const fragmentShader = /* glsl */ `
 uniform float exposure;
