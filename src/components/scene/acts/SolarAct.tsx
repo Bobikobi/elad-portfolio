@@ -12,6 +12,7 @@ import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
 import { makeRng, SEED } from '@/lib/rng';
+import { AMBIENT_FILL_INTENSITY } from '@/lib/photometry';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
@@ -868,7 +869,7 @@ export default function SolarAct() {
   });
   return (
     <>
-      <ambientLight intensity={0.06} />
+      <ambientLight intensity={AMBIENT_FILL_INTENSITY} />
       {/* Star sphere + nebulae come from the shared SceneRoot sky (one universe). */}
       <group ref={root} rotation={[0.42, 0, 0]} name="solarRoot">
         <Sun />
