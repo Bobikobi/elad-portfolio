@@ -18,7 +18,7 @@ import { FramePacer, ResolutionScaler } from './PerfPacer';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
-import { HudProbe, DebugHudOverlay, HUD_AVAILABLE, useHudEnabled } from './DebugHud';
+import { ClockFreezeProbe, HudProbe, DebugHudOverlay, HUD_AVAILABLE, useHudEnabled } from './DebugHud';
 
 /**
  * The single WebGL canvas — fixed, full-bleed, behind the DOM. `dynamic(ssr:false)`
@@ -125,6 +125,10 @@ export default function SceneRoot() {
         {/* Priority 2 → the last thing in the frame, after the composer has drawn it, so
             every pill lands on the exact pixels of the body it names (R5.4). */}
         <PlanetLabelDriver />
+        {/* Unlike the visible HUD, the measurement seam is available without ?hud=1 so its
+            own overlay never contaminates a screenshot. The build-time flag is the outer
+            guard: production neither mounts the probe nor publishes anything to window. */}
+        {HUD_AVAILABLE && <ClockFreezeProbe />}
         {HUD_AVAILABLE && hudOn && <HudProbe />}
       </Canvas>
       <DragControls />

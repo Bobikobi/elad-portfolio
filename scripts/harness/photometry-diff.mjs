@@ -39,6 +39,7 @@ const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
 const OUT = process.env.OUT || path.join(process.cwd(), '.harness-out', 'photometry-diff');
 const SETTLE = Number(process.env.SETTLE || 14000);
 const TAG = process.env.TAG;
+const FREEZE = process.env.FREEZE === '1';
 if (!TAG) {
   console.error('TAG is required, e.g. TAG=before node scripts/harness/photometry-diff.mjs');
   process.exit(2);
@@ -148,6 +149,26 @@ for (const view of VIEWS) {
     console.error(`NOT canvas-only on ${view.id}: ${leaks.join(', ')} - refusing to measure`);
     await browser.close();
     process.exit(2);
+  }
+
+  // FREEZE=1 pins the scene clock, so the two shots below are the same instant and the
+  // noise floor should collapse to zero. Awaited on purpose: the handle resolves from
+  // inside a scene frame, so by the time this returns every subscriber has already seen
+  // delta 0. Refusing rather than warning - a frozen run that silently did not freeze
+  // would report a floor of zero for the wrong reason.
+  if (FREEZE) {
+    const frozen = await page.evaluate(async () => {
+      const w = window.__clock;
+      if (!w) return null;
+      return await w.freeze();
+    });
+    if (!frozen?.frozen) {
+      console.error(`freeze requested but window.__clock did not report frozen on ${view.id}`);
+      await browser.close();
+      process.exit(2);
+    }
+    report.frozenAt = frozen.elapsedTime;
+    await wait(300);
   }
   // Two shots from the same build: the pair IS the noise floor.
   fs.writeFileSync(path.join(OUT, `${TAG}-${view.id}-0.png`), await page.screenshot({ type: 'png' }));

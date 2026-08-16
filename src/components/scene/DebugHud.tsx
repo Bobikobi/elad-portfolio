@@ -113,6 +113,143 @@ const _sun = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _pp = new THREE.Vector3();
 
+export interface ClockFreezeState {
+  frozen: boolean;
+  elapsedTime: number;
+}
+
+export interface ClockFreezeHandle {
+  freeze: () => Promise<ClockFreezeState>;
+  unfreeze: () => Promise<ClockFreezeState>;
+  state: () => ClockFreezeState;
+}
+
+type PendingClockFreeze = {
+  frozen: boolean;
+  resolve: (state: ClockFreezeState) => void;
+};
+
+/**
+ * Lives INSIDE the Canvas and installs the debug harness's clock seam. This is deliberately
+ * separate from {@link HudProbe}: the numbers overlay is opt-in on preview builds, but a
+ * screenshot harness must be able to freeze any HUD-capable page without also painting the
+ * overlay into the image.
+ *
+ * The installed @react-three/fiber 9.6.1 frame loop calls `state.clock.getDelta()` exactly
+ * once at the start of `update()`, before it visits any `useFrame` subscriber. The installed
+ * three.js `Clock.getDelta()` both returns that frame's delta AND advances `elapsedTime`.
+ * Wrapping that one method therefore reaches both animation laws in the scene: accumulators
+ * receive zero, while shaders and transforms reading `state.clock.elapsedTime` see the same
+ * value on every render. Freezing individual callbacks would miss one law or the other and
+ * would inevitably drift as new animated components were added.
+ *
+ * Resume resets only `oldTime`, the wall-clock sampling cursor used by Three's next delta.
+ * Without that resync, the first live frame would include the whole measurement pause as one
+ * enormous delta; restarting the Clock instead would reset `elapsedTime` and re-phase every
+ * elapsed-time shader. Keeping the accumulated time and moving only the cursor gives the next
+ * frame its ordinary post-resume delta, so OFF is indistinguishable from a normal pause.
+ */
+export function ClockFreezeProbe() {
+  const get = useThree((s) => s.get);
+  const control = useRef({
+    frozen: false,
+    frozenAt: 0,
+    pending: [] as PendingClockFreeze[],
+  });
+
+  // Resolving from a scene frame makes `await window.__clock.freeze()` a real render barrier:
+  // by the time its continuation runs, every subscriber has seen delta 0 and the composer has
+  // rendered the pinned elapsed time. A plain synchronous toggle would leave the harness
+  // guessing whether requestAnimationFrame had consumed it yet.
+  useFrame((state) => {
+    const c = control.current;
+    if (!c.pending.length) return;
+    const ready = c.pending.filter((p) => p.frozen === c.frozen);
+    c.pending = c.pending.filter((p) => p.frozen !== c.frozen);
+    for (const p of ready) {
+      p.resolve({
+        frozen: c.frozen,
+        elapsedTime: c.frozen ? c.frozenAt : state.clock.elapsedTime,
+      });
+    }
+  });
+
+  useEffect(() => {
+    // SceneRoot also guards the mount. Keeping the availability check at the side-effect
+    // boundary makes the invariant explicit: a production build cannot patch the clock or
+    // publish a window handle even if this component is accidentally rendered elsewhere.
+    if (!HUD_AVAILABLE) return;
+
+    // Reach through R3F's imperative getter because this probe intentionally patches store
+    // machinery; a value selected directly by a React hook is correctly treated as immutable.
+    const clock = get().clock;
+    const c = control.current;
+    const originalGetDelta = clock.getDelta;
+    const originalGetDeltaDescriptor = Object.getOwnPropertyDescriptor(clock, 'getDelta');
+    const snapshot = (): ClockFreezeState => ({
+      frozen: c.frozen,
+      elapsedTime: c.frozen ? c.frozenAt : clock.elapsedTime,
+    });
+    const afterFrame = (frozen: boolean) => new Promise<ClockFreezeState>((resolve) => {
+      c.pending.push({ frozen, resolve });
+    });
+    const frozenGetDelta = () => {
+      if (!c.frozen) return originalGetDelta.call(clock);
+      // FramePacer can change R3F's frameloop while the page becomes idle, and R3F resets
+      // its clock while doing so. Reasserting the captured value here keeps even that frame
+      // at the promised phase; this remains the single pre-subscriber intervention point.
+      clock.elapsedTime = c.frozenAt;
+      return 0;
+    };
+    const restoreGetDelta = () => {
+      if (clock.getDelta !== frozenGetDelta) return;
+      if (originalGetDeltaDescriptor) {
+        Object.defineProperty(clock, 'getDelta', originalGetDeltaDescriptor);
+      } else {
+        // `getDelta` normally comes from Clock.prototype. Deleting our temporary own
+        // property restores that original shape as well as the original implementation.
+        Reflect.deleteProperty(clock, 'getDelta');
+      }
+    };
+    const handle: ClockFreezeHandle = {
+      freeze: () => {
+        if (!c.frozen) {
+          c.frozenAt = clock.elapsedTime;
+          c.frozen = true;
+          clock.getDelta = frozenGetDelta;
+        }
+        return afterFrame(true);
+      },
+      unfreeze: () => {
+        if (c.frozen) {
+          clock.elapsedTime = c.frozenAt;
+          if (clock.running) clock.oldTime = performance.now();
+          c.frozen = false;
+          restoreGetDelta();
+        }
+        return afterFrame(false);
+      },
+      state: snapshot,
+    };
+
+    (window as unknown as { __clock?: ClockFreezeHandle }).__clock = handle;
+
+    return () => {
+      if (c.frozen) {
+        clock.elapsedTime = c.frozenAt;
+        if (clock.running) clock.oldTime = performance.now();
+      }
+      c.frozen = false;
+      for (const p of c.pending.splice(0)) p.resolve(snapshot());
+      restoreGetDelta();
+      const debugWindow = window as unknown as { __clock?: ClockFreezeHandle };
+      if (debugWindow.__clock === handle) delete debugWindow.__clock;
+    };
+  }, [get]);
+
+  return null;
+}
+
 /** Lives INSIDE the Canvas — reads camera + renderer each frame and fills `hudData`. */
 export function HudProbe() {
   const gl = useThree((s) => s.gl);
