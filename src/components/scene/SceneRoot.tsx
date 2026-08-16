@@ -18,7 +18,14 @@ import { FramePacer, ResolutionScaler } from './PerfPacer';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
-import { ClockFreezeProbe, HudProbe, DebugHudOverlay, HUD_AVAILABLE, useHudEnabled } from './DebugHud';
+import {
+  ClockFreezeProbe,
+  HudProbe,
+  DebugHudOverlay,
+  HUD_AVAILABLE,
+  installFixedStepClock,
+  useHudEnabled,
+} from './DebugHud';
 
 /**
  * The single WebGL canvas — fixed, full-bleed, behind the DOM. `dynamic(ssr:false)`
@@ -87,7 +94,11 @@ export default function SceneRoot() {
         dpr={1}
         camera={{ position: [0, 2.6, 9], fov: 55, near: 0.1, far: 200 }}
         shadows={false}
-        onCreated={({ gl }) => {
+        onCreated={({ gl, clock }) => {
+          // R3F 9.6.1 calls onCreated after the scene graph commit but before its first
+          // requestAnimationFrame update. Fixed-step must be installed here: mounting the
+          // probe below in an effect would make first-frame coverage depend on scheduling.
+          if (HUD_AVAILABLE) installFixedStepClock(clock);
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1;
         }}
