@@ -82,6 +82,7 @@ P3  albedo + falloff              <- OWNER     pixels change
 P4  re-scope highlightRolloff                  pixels change, small
 P5  close the holes in the criteria            harness only
 P6  the two open judgement calls   <- OWNER    pixels change
+P7  richness: what the bodies should LOOK like <- OWNER    pixels change
 ```
 
 **P0 first** because SUN-3 is sitting in the lane unverified under rule 2, and every number
@@ -339,6 +340,87 @@ the file next.
    sun-radii over 8.9% of the silhouette to 1.09 R over 1.1%. That is inside the criterion
    with room to spare, and may be too subtle - SUN-2 explicitly wanted a limb that was not
    "a clean circle with nothing happening on it".
+
+---
+
+## The criteria in this plan are guards, not goals
+
+Added 2026-08-16, after the owner looked at the post-SUN-3 sun on a preview alias and said
+it was bad. It is worth writing down because it is not about the sun, and it will happen
+again inside this plan if nothing changes.
+
+**Read every acceptance criterion here and notice what shape they all have:**
+
+| stage | its criteria say |
+|---|---|
+| P1 | the frame did not change |
+| P3 | no body clips · no body disappears · the ordering does not invert · the worlds do not shift · cost is unchanged |
+| P4 | clipping stays at zero · chroma does not fall |
+| SUN-2, SUN-3 | grain EXISTS · the ratio is in a band · the spikes are not too long |
+
+Every one is of the form *nothing got worse*. Not one says what the result should **be**. A
+scene can satisfy the whole list and be correct, safe, cheap - and lifeless. That is exactly
+what happened to the sun: C1, C2, C3 and C5 all passed, and the disc reads as a matte
+salmon ball with cells the size of continents. SUN-2's C1 asked for high-frequency energy at
+2.5x production and never asked what SIZE the grain should be, so a golf-ball texture passes
+a granulation criterion.
+
+**Where this bites next, and it is not hypothetical:**
+
+- **P3** hands every body a physically correct albedo. Correct albedo on a flat white
+  diffuser is a flat correctly-dimmed diffuser. Every P3 criterion would pass.
+- **P4** raises the rolloff knee and its acceptance is "chroma rises or holds" - a number
+  that goes up while the planet still reads as plastic.
+- **P6** already admits this by parking two questions as unmeasurable. There are more than
+  two.
+
+**The rule this plan adopts from here:** every stage that changes pixels carries at least
+one criterion that states what should be TRUE of the result, not only what must not get
+worse - and it is measured against a named reference, not against the previous build. A
+guard set alone is how a project measures its way to something nobody wants to look at.
+
+---
+
+## P7 - richness: what the bodies should look like  *(owner approval required)*
+
+**Status: criteria PROPOSED, not approved. No pixel moves until they are.**
+Raised by the owner on 2026-08-16 with a reference image (a NASA 4K solar photograph) and
+one sentence that widens it past the sun: *the other objects should be rich like that too.*
+
+### The sun
+
+What is deliberate: SUN-3 dimmed the disc from sRGB (216,141,87) to (186,124,89), and that
+is the recorded trade - on this pipeline a sun bright enough to sit in the ACES shoulder is
+a sun with no shading. The LEVEL was always the owner's call and is P6's first judgement
+call. He has now made it: too dim.
+
+What was never deliberate, and never measured by anything:
+
+| # | criterion | proposed target |
+|---|---|---|
+| **S1** | granulation is FINE - typical cell diameter against disc diameter | **under 3% of the diameter**. Today it reads in the tens of percent |
+| **S2** | the core is HOT - peak channel inside r < 0.25 | **>= 240 of 255**, with blown pixels staying under 1% of the disc |
+| **S3** | there is a corona - median luminance in the annulus 1.1-2.0 R against the sky | **at least 2x the sky**, without reviving R2.2's milky wash |
+| **S4** | the limb still falls away - limb/centre on the TRUE silhouette | **<= 0.75** |
+
+**S2 and S4 are in direct conflict, and that is the real content of this stage.** SUN-3
+measured that brightening cannot buy both: exposure moves red hardly at all because red sits
+in the shoulder, while crushing green and blue on the steep part. So a hot core with a dark
+limb is not an exposure change - it is the colour ramp or the tone response. P1 is what makes
+that tractable: those numbers now live together instead of being calibrated against each
+other across six files.
+
+### The other bodies
+
+Same question, unanswered, for every planet: what makes a body read as rock, gas or ice
+rather than as a correctly-lit sphere. This needs its own reference per body before it can
+have criteria. Not started.
+
+### Sequencing
+
+P7 sits after P3 and P4 on purpose. P3 decides how much light each body receives and P4
+gives back the saturation the rolloff is taking; both change what "rich" even looks like.
+Tuning appearance before them means tuning it twice.
 
 ---
 
