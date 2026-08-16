@@ -17,6 +17,13 @@ export const SUN_LAMP_INTENSITY = 650;
 export const SUN_LAMP_DISTANCE = 90;
 export const SUN_LAMP_DECAY = 2;
 
+// Exposure stays at 1.5. It is NOT the lever it looks like: simulated across the whole
+// pipeline, dialling it down moves red hardly at all (red is in the shoulder, that is
+// the defect) while crushing green and blue, which sit on the steep part - at 0.55 the
+// limb/centre red ratio was still 0.878 and the sun had turned a hard orange with blue
+// at 22 of 255. The exposure was never what pinned red; the stops in Sun.tsx were.
+export const SUN_EMISSIVE_EXPOSURE = 1.5;
+
 // SUN-3: 0.16 -> 0.05, and this is the number that was flattening the sun.
 //
 // GodRays smears the source RADIALLY outward, so on a source that fills a third of the

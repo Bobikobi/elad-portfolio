@@ -3,9 +3,28 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
-import { SUN_LAMP_DECAY, SUN_LAMP_DISTANCE, SUN_LAMP_INTENSITY } from '@/lib/photometry';
+import {
+  SUN_EMISSIVE_EXPOSURE,
+  SUN_LAMP_DECAY,
+  SUN_LAMP_DISTANCE,
+  SUN_LAMP_INTENSITY,
+} from '@/lib/photometry';
 import { softSprite, flameSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
+
+/**
+ * Print a TS number as a GLSL float literal.
+ *
+ * Two hazards, and both are invisible to the type system because they live inside a
+ * template string. This shader is GLSL ES 1.00 - it writes gl_FragColor - and that dialect
+ * has no implicit int-to-float conversion, so an interpolated `2` fails to compile and the
+ * sun vanishes. But `toFixed(1)`, the obvious way to force the decimal point, silently
+ * ROUNDS: it turns 1.55 into "1.6" and 0.06 into "0.1". photometry.ts exists precisely so
+ * these numbers can be tuned, so a rounding trap in the interpolation is a wrong value
+ * waiting for the first person who tunes one. Full precision, and a decimal point only
+ * where JavaScript would not print one.
+ */
+const glslFloat = (v: number) => (Number.isInteger(v) ? v.toFixed(1) : String(v));
 
 // Shared compact value-noise (used by both the surface colour and the edge wobble).
 const NOISE_GLSL = /* glsl */ `
@@ -216,12 +235,10 @@ const sunFrag = /* glsl */ `
     // the predicted limb far darker than the renderer's, and that error spent a round
     // looking like a mystery term somewhere in the post chain.
     float limb = pow(ndv, 1.0);
-    // Exposure stays at 1.5. It is NOT the lever it looks like: simulated across the whole
-    // pipeline, dialling it down moves red hardly at all (red is in the shoulder, that is
-    // the defect) while crushing green and blue, which sit on the steep part - at 0.55 the
-    // limb/centre red ratio was still 0.878 and the sun had turned a hard orange with blue
-    // at 22 of 255. The exposure was never what pinned red; the stops above were.
-    col *= (1.5 + uPulse) * mix(0.32, 1.0, limb);
+    // Exposure rationale lives with SUN_EMISSIVE_EXPOSURE in photometry.ts.
+    // glslFloat, not toFixed: see its comment - one guarantees the decimal point, the
+    // other also rounds the value away.
+    col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.32, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
