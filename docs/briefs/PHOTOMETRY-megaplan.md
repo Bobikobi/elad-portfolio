@@ -155,14 +155,33 @@ quietly changes one. So the criterion is not "it still looks right":
 
 | # | criterion | how | target |
 |---|---|---|---|
-| **P1-1** | the frame does not change | capture the solar overview and all five worlds before and after, same seed, same tier, real GPU, DOM hidden; per-pixel absolute difference | **mean < 0.5 of 255, max < 4** on every one of the six frames. Not zero: the scene animates on a clock and the two captures cannot be the same instant. |
+| **P1-1** | the frame does not change | capture the solar overview and all five worlds before and after, same seed, same tier, real GPU, DOM hidden, **fixed-step clock and frame-anchored capture**; per-pixel absolute difference | **exactly zero** on every one of the six frames - mean 0.0000, max 0. TIGHTENED 2026-08-16, see below. |
 | **P1-2** | nothing got more expensive | `renderer.info.render.calls` / `.triangles`, 120 frames, both tiers | **identical**, median frame time within 1ms |
 | **P1-3** | no number was left behind | grep: no literal `intensity=`, `toneMappingExposure`, `luminanceThreshold`, or exposure constant outside the module | zero hits in `src/components/scene/**` |
 
-**Risk:** P1-1 is only as good as the capture being deterministic. The scene has a seeded RNG
-but a live clock, so the two captures differ by animation phase. Mitigation: freeze
-`uTime`/`elapsedTime` for the capture via the existing HUD hooks, or accept the stated
-tolerance and inspect the difference image rather than trusting the scalar.
+**Risk, and how it was closed (2026-08-16).** P1-1 is only as good as the capture being
+deterministic, and as written it was not meetable at all. Measured before anything was
+built: two captures of the SAME build differ by mean 1.4-9.6 with up to 48% of pixels
+moving, against a target of mean < 0.5 and max < 4. The tolerance was a guess, and it was a
+guess about the thing under test - the same error as SUN-3's disc threshold.
+
+Three things were needed, in this order:
+
+1. **The DOM was leaking into every measured frame.** `hideDom` wrote inline styles, and
+   React put them straight back on the next re-render, so `PlanetLabels`' pills stayed
+   visible. Hidden by stylesheet with `!important` now, and asserted rather than assumed.
+2. **A clock freeze** (debug-only, `HUD_AVAILABLE`, inside the Canvas). R3F calls
+   `clock.getDelta()` once per frame before any subscriber, and three's `getDelta` both
+   returns the delta and advances elapsed time - so wrapping that one method reaches both of
+   this scene's animation laws. Two shots in one run then match byte for byte.
+3. **A fixed step, armed at load** (`?fixedStep`), because two RUNS still froze at different
+   instants - 11.480s against 11.381s - and pinning a clock VALUE cannot rewind accumulators
+   that integrate delta. Same delta every frame, and the harness waits for a FRAME NUMBER
+   rather than a wall-clock moment. Both anchors must sit past the settle wait: 14s is
+   already ~840 frames, so an anchor at 300 anchors nothing.
+
+**Result: two separate page loads are byte-identical on all six views.** The criterion above
+is therefore exact, not a tolerance, and any non-zero difference is the code.
 
 ---
 

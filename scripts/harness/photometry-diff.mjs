@@ -1,9 +1,16 @@
 /**
  * P1-1 - capture. The measurement lives in `photometry-diff.py` next to this file.
  *
- *   TAG=before node scripts/harness/photometry-diff.mjs
- *   TAG=after  node scripts/harness/photometry-diff.mjs
+ *   FIXEDSTEP=1 FREEZE=1 TAG=before node scripts/harness/photometry-diff.mjs
+ *   FIXEDSTEP=1 FREEZE=1 TAG=after  node scripts/harness/photometry-diff.mjs
  *   python3 scripts/harness/photometry-diff.py before after
+ *
+ * ALWAYS run it with both flags. Without them the scene's live clock puts a floor of
+ * mean 1.4-9.6 under every measurement and the criterion cannot be met by anything,
+ * including a change that does nothing. With them, two SEPARATE page loads come back
+ * byte-identical on all six views - measured, mean 0.0000 and max 0 - so any non-zero
+ * difference afterwards is the code and nothing else. The flags are opt-in only because
+ * the un-flagged path is what proves the floor is real when someone doubts it.
  *
  * P1 moves the numbers that decide every pixel into one module and is required to change
  * none of them. "It still looks right" cannot show that, so this captures the solar overview
@@ -40,6 +47,17 @@ const OUT = process.env.OUT || path.join(process.cwd(), '.harness-out', 'photome
 const SETTLE = Number(process.env.SETTLE || 14000);
 const TAG = process.env.TAG;
 const FREEZE = process.env.FREEZE === '1';
+// FIXEDSTEP=1 arms the scene's fixed-step clock and captures at a FRAME NUMBER rather
+// than a wall-clock moment, which is what makes two separate page loads comparable.
+// The target is far past the settle so every texture has landed before it: async asset
+// arrival is not clock-driven and is the one thing fixed stepping cannot make identical.
+const FIXEDSTEP = process.env.FIXEDSTEP === '1';
+// Both anchors must sit PAST the settle wait, or they are no-ops: 14s at ~60fps is
+// already ~840 frames, so anchoring the scroll at 300 anchored nothing and the overview
+// stayed irreproducible (mean 0.69-0.81, max ~180) while the other five views were
+// already exact. 1000 and 1600 are the first pair measured byte-identical on all six.
+const TARGET_FRAME = Number(process.env.TARGET_FRAME || 1600);
+const SCROLL_FRAME = Number(process.env.SCROLL_FRAME || 1000);
 if (!TAG) {
   console.error('TAG is required, e.g. TAG=before node scripts/harness/photometry-diff.mjs');
   process.exit(2);
@@ -113,11 +131,17 @@ let failed = false;
 for (const view of VIEWS) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
-  await page.goto(`${BASE}${view.path}?hud=1&tier=high`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  const q = `?hud=1&tier=high${FIXEDSTEP ? '&fixedStep' : ''}`;
+  await page.goto(`${BASE}${view.path}${q}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await wait(SETTLE);
   if (view.scrollToBottom) {
+    // Anchor the scroll to a FRAME, not to a moment. It is the only per-view action that
+    // changes scene state, and doing it on a wall-clock timer lands it on a different
+    // frame in every run - which left the overview as the last view that could not
+    // reproduce (mean 0.69, max 180) while the other five were already byte-identical.
+    if (FIXEDSTEP) await page.evaluate((f) => window.__clock?.waitForFrame(f), SCROLL_FRAME);
     await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
-    await wait(SETTLE);
+    await wait(FIXEDSTEP ? 500 : SETTLE);
   }
 
   const gpu = await page.evaluate(() => {
@@ -156,6 +180,21 @@ for (const view of VIEWS) {
   // inside a scene frame, so by the time this returns every subscriber has already seen
   // delta 0. Refusing rather than warning - a frozen run that silently did not freeze
   // would report a floor of zero for the wrong reason.
+  if (FIXEDSTEP) {
+    const at = await page.evaluate(async (target) => {
+      const w = window.__clock;
+      if (!w) return null;
+      const s = await w.waitForFrame(target);
+      return { frame: w.frame, elapsed: s.elapsedTime, fixed: s.fixedStep };
+    }, TARGET_FRAME);
+    if (!at?.fixed) {
+      console.error(`fixedStep requested but the scene did not report it on ${view.id}`);
+      await browser.close();
+      process.exit(2);
+    }
+    report.views[view.id] = { ...(report.views[view.id] || {}), reachedFrame: at.frame, elapsed: at.elapsed };
+  }
+
   if (FREEZE) {
     const frozen = await page.evaluate(async () => {
       const w = window.__clock;
