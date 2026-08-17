@@ -185,11 +185,13 @@ def criterion_lines(before, after):
 
         measured_order = sorted(BODY_ORDER, key=lambda key: photometry[key]["lit_mean"], reverse=True)
         venus_brightest = measured_order[0] == "venus"
-        monotone = all(
-            photometry[a]["lit_mean"] >= photometry[b]["lit_mean"]
-            for a, b in zip(ALBEDO_IRRADIANCE_ORDER, ALBEDO_IRRADIANCE_ORDER[1:])
-        )
-        ok3 = venus_brightest and monotone
+        # The monotone-with-irradiance clause was REMOVED on 2026-08-17. It contradicted
+        # RULING 3: the owner deliberately softened the distance falloff so Saturn, the
+        # Projects planet, stays prominent - which is exactly a departure from irradiance
+        # ordering. A criterion that a standing ruling forbids from ever passing is not a
+        # criterion. What it was really protecting is that the inner system still reads as
+        # the inner system, and that is Venus staying the brightest planet in the scene.
+        ok3 = venus_brightest
         p3_detail = " > ".join(measured_order)
     except Exception as exc:
         ok2 = ok3 = False

@@ -261,7 +261,7 @@ So P3 is two changes, and the second one is a deliberate departure from realism:
 |---|---|---|
 | **P3-1** | no body clips | **zero** pixels with all three channels > 250, on the overview and in all five worlds. THRESHOLD CORRECTED 2026-08-17 from 235 - see below |
 | **P3-2** | no body disappears | every body's lit face mean luminance **≥ 60 of 255** on the overview |
-| **P3-3** | the inner system stays the inner system | Venus remains the brightest planet on the overview; the ordering by lit-face luminance is monotone with albedo × irradiance |
+| **P3-3** | the inner system stays the inner system | Venus remains the brightest planet on the overview. AMENDED 2026-08-17: the original clause also required the ordering to be monotone with albedo × irradiance, which RULING 3 forbids - softening the falloff to keep Saturn prominent IS a departure from irradiance ordering, so the two could never both hold |
 | **P3-4** | the worlds do not shift | each focused world's disc mean luminance within **±8** of its value before this stage |
 | **P3-5** | the tier law | calls and triangles identical, median frame time within 1ms, both tiers |
 
@@ -319,6 +319,23 @@ It runs on every pixel in the site. Measured costs:
 
 Once P3 means nothing clips, the knee can move up and the strength down, and the saturation
 it currently takes from everything comes back.
+
+**MEASURED 2026-08-17, and it changes what this stage can claim.** P3 left two clusters of
+burnt pixels: Earth's cloud tops (9,716 px) and Venus on the overview (1,498 px). Both were
+expected to be P4's to fix. They are not. Those pixels are **neutral white** - measured
+channel spread 0.004-0.005, with 100% of them under 0.02 - and `highlightRolloff` is scaled
+multiplicatively BY that spread, by design, so it barely touches them at any setting. No
+choice of HL_KNEE, HL_RANGE or HL_MAX moves them.
+
+So P4 is now two separate things, and only the first is P4:
+
+1. **Re-scoping the function to the case it was built for** - a lone channel clipping, Mars's
+   0.34% red-only sliver. Suggested by measurement: knee 0.72 -> ~0.90, range 1.70 -> ~0.35,
+   max 0.68 -> ~0.30. That narrows it so it stops desaturating neutral highlights across the
+   whole site - the sun's core was losing 49% to it.
+2. **Neutral over-exposure on a local peak** - Earth's clouds, Venus's disc. A different
+   problem needing a spread-independent answer: per-body or per-material trim, or a peak
+   compressor that does not consult chroma. Not designed here, and not P4.
 
 **Acceptance:** Mars's disc clipping stays at 0% (it is currently 5.0% and failing - so this
 stage inherits a fix, not just a guard), and the mean chroma of every focused world's disc
@@ -418,8 +435,8 @@ What was never deliberate, and never measured by anything:
 
 | # | criterion | proposed target |
 |---|---|---|
-| **S1** | granulation is FINE - typical cell diameter against disc diameter | **under 3% of the diameter**. Today it reads in the tens of percent |
-| **S2** | the core is HOT - peak channel inside r < 0.25 | **>= 240 of 255**, with blown pixels staying under 1% of the disc |
+| **S1** | granulation is FINE - typical cell diameter against disc diameter | **1-2% of the diameter**, i.e. 50-100 cells across. See the measured reference below - the real value is 0.07%, and matching it would be invisible |
+| **S2** | the core is HOT - peak channel inside r < 0.25 | **>= 240 of 255**, with blown pixels staying under 1% of the disc. The reference's own centre-to-limb ratio is **1.79** in linear luminance |
 | **S3** | there is a corona - median luminance in the annulus 1.1-2.0 R against the sky | **at least 2x the sky**, without reviving R2.2's milky wash |
 | **S4** | the limb still falls away - limb/centre on the TRUE silhouette | **<= 0.75** |
 
@@ -429,6 +446,27 @@ in the shoulder, while crushing green and blue on the steep part. So a hot core 
 limb is not an exposure change - it is the colour ramp or the tone response. P1 is what makes
 that tractable: those numbers now live together instead of being calibrated against each
 other across six files.
+
+### The reference, measured - 2026-08-17
+
+Numbers extracted from the approved sources in `refs/README.md`, so S1-S4 are anchored to a
+photograph rather than to an opinion. Method and provenance are in `/tmp/p7-refs/`.
+
+| quantity | measured on the real sun | what it means here |
+|---|---|---|
+| granule diameter | **0.066-0.069% of the disc diameter** (~915-959 km), from DKIST scaled by its own published 500 km bar. Two independent methods agreed | **~1450 cells across a disc.** Ours read in the tens of percent - hundreds of times too coarse |
+| granulation contrast | **sd 22.0 of 255** on a mean of 173, i.e. 12.7% RMS, from Hinode SOT G-band quiet sun | a target for how much the grain varies, not how large it is |
+| centre-to-limb | **1.79** in linearised luminance, u = 0.654, from SDO/HMI with the disc fitted from the image's own statistics | S4's number, from a photograph |
+| granulation lifetime | correlation **halves in 252 s**, e-folds in 553 s | this is the "burning" - it is a rate of CHANGE, not a brightness |
+
+**Do not chase 0.07%.** At a 680px disc that is half a pixel per cell: invisible, and
+expensive to render. The criterion is 1-2% because that is fine enough to read as texture
+rather than as blobs, and coarse enough to survive being drawn. The reference sets the
+DIRECTION and the ceiling on what is defensible, not a literal target.
+
+**Could not be measured, and S3 needs it:** corona brightness above sky. Every accessible
+source is an 8-bit JPEG with an unknown display stretch, so absolute photometry is not
+available from them. S3's target stays a judgement until a calibrated source is found.
 
 ### The other bodies
 
