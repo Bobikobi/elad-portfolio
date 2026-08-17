@@ -265,7 +265,27 @@ So P3 is two changes, and the second one is a deliberate departure from realism:
 | **P3-4** | the worlds do not shift | each focused world's disc mean luminance within **±8** of its value before this stage |
 | **P3-5** | the tier law | calls and triangles identical, median frame time within 1ms, both tiers |
 
-### The conflict the owner has to rule on
+### RULING 3 - appearance beats physical accuracy, 2026-08-17
+
+Asked to choose between a physically faithful Saturn and a prominent one, the owner ruled:
+**"keep it prominent and beautiful - physical accuracy is less critical than appearance."**
+
+So P3 change 2 is approved: the falloff softens, `decay` moves off 2, and RULING 1's spirit
+gives way where the two collide. This is not licence to invent numbers. It means:
+
+- physical constants stay the DEFAULT and the starting point - albedo is still real albedo
+- where a physical value produces something the owner does not want to look at, the
+  departure is deliberate, named, and written down next to the number
+- every departure is one line and reversible, per the risk table below - so a later stage
+  can put realism back without archaeology
+
+The reason this is defensible rather than sloppy: the orbits are already compressed 30:1.
+Venus sits 1.7 solar radii out where the real value is 78. Inverse-square over a geometry
+that was never real is not physics either - it is a coincidence that looked plausible. The
+scene chose readability the first time anyone laid out those orbits; this only says so out
+loud.
+
+### The conflict this ruling settles
 
 **Saturn drops from 0.48 to 0.20 relative** - it is the Projects planet and the most
 prominent body on the right of the overview. Softening the falloff (change 2) is what
