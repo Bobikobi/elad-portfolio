@@ -6,6 +6,17 @@
 /** Low ambient fill that keeps unlit surfaces from falling completely black. */
 export const AMBIENT_FILL_INTENSITY = 0.06;
 
+// Linear material-colour multipliers: real geometric albedo divided by each texture's
+// linear mean, from the P3 measurements in docs/briefs/PHOTOMETRY-megaplan.md.
+export const MERCURY_ALBEDO_MULTIPLIER = 0.60;
+export const VENUS_ALBEDO_MULTIPLIER = 2.76;
+export const EARTH_ALBEDO_MULTIPLIER = 2.17;
+export const MARS_ALBEDO_MULTIPLIER = 0.75;
+export const JUPITER_ALBEDO_MULTIPLIER = 1.45;
+export const SATURN_ALBEDO_MULTIPLIER = 0.90;
+export const URANUS_ALBEDO_MULTIPLIER = 0.89;
+export const NEPTUNE_ALBEDO_MULTIPLIER = 4.38;
+
 // Per-planet ORBIT exposure. The system is spatially compressed, so irradiance falls off
 // 25× between the innermost and outermost world; at a single aperture the near planets
 // clip while the far ones go muddy. This is the aperture per world, and it is the only

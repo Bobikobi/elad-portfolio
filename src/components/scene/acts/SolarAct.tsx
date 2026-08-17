@@ -12,7 +12,17 @@ import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
 import { makeRng, SEED } from '@/lib/rng';
-import { AMBIENT_FILL_INTENSITY } from '@/lib/photometry';
+import {
+  AMBIENT_FILL_INTENSITY,
+  EARTH_ALBEDO_MULTIPLIER,
+  JUPITER_ALBEDO_MULTIPLIER,
+  MARS_ALBEDO_MULTIPLIER,
+  MERCURY_ALBEDO_MULTIPLIER,
+  NEPTUNE_ALBEDO_MULTIPLIER,
+  SATURN_ALBEDO_MULTIPLIER,
+  URANUS_ALBEDO_MULTIPLIER,
+  VENUS_ALBEDO_MULTIPLIER,
+} from '@/lib/photometry';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
@@ -261,6 +271,17 @@ const PLANETS: PlanetSpec[] = [
   { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 8.9, size: 0.44, speed: 0.0074, phase: 3.0, incl: 2.0, node: 1.65, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
   { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 9.8, size: 0.42, speed: 0.0062, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
 ];
+
+const BODY_ALBEDO_MULTIPLIER: Record<string, number> = {
+  mercury: MERCURY_ALBEDO_MULTIPLIER,
+  venus: VENUS_ALBEDO_MULTIPLIER,
+  earth: EARTH_ALBEDO_MULTIPLIER,
+  mars: MARS_ALBEDO_MULTIPLIER,
+  jupiter: JUPITER_ALBEDO_MULTIPLIER,
+  saturn: SATURN_ALBEDO_MULTIPLIER,
+  uranus: URANUS_ALBEDO_MULTIPLIER,
+  neptune: NEPTUNE_ALBEDO_MULTIPLIER,
+};
 
 // A3 / B13: atmospheric limb scattering, driven by the IMPACT PARAMETER rather than by a
 // fresnel term.
@@ -544,7 +565,11 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   // always the floor; `uHiMap`/`uHiMix` crossfade the focused hi-res texture in on top of
   // it in the exact same UV space, so upgrade/downgrade is a fade, never a pop.
   const material = useMemo(() => {
-    const m = new THREE.MeshStandardMaterial({ map: texture, color: spec.bodyColor ?? '#ffffff', roughness: 0.9, metalness: 0.02 });
+    // THREE.Color converts the existing hex tint from sRGB to linear; scale that working
+    // colour directly so the albedo factor stays literal. Encoding the factor as hex would
+    // silently turn (for example) 0.5 into ~0.21. Values above 1 are intentional here.
+    const bodyColor = new THREE.Color(spec.bodyColor ?? '#ffffff').multiplyScalar(BODY_ALBEDO_MULTIPLIER[spec.key]);
+    const m = new THREE.MeshStandardMaterial({ map: texture, color: bodyColor, roughness: 0.9, metalness: 0.02 });
     m.onBeforeCompile = (shader) => {
       shader.uniforms.uHiMap = { value: white1() };
       shader.uniforms.uHiMix = { value: 0 };
@@ -648,7 +673,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       hiShader.current = shader;
     };
     return m;
-  }, [texture, spec.bodyColor, spec.flow, spec.shear, spec.haze]);
+  }, [texture, spec.key, spec.bodyColor, spec.flow, spec.shear, spec.haze]);
   useEffect(() => () => material.dispose(), [material]);
   // Procedural ring strip (colour + alpha vs radius), drawn to a 1-D canvas and mapped
   // radially. Deterministic and CSP-safe — avoids the saturn_ring.png alpha-layout that
