@@ -33,6 +33,7 @@ from PIL import Image
 OUT = os.environ.get("OUT", os.path.join(os.getcwd(), ".harness-out", "sun-3"))
 TAG = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("TAG", "now")
 LUMA = np.array([0.2126, 0.7152, 0.0722])
+BODY_ORDER = ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"]
 
 
 def load(name):
@@ -166,6 +167,124 @@ def blobs(mask):
         out.append(pts)
     out.sort(key=len, reverse=True)
     return out
+
+
+def srgb_to_linear(v):
+    """Invert the IEC sRGB transfer curve for a value expressed in 0-255 units."""
+    v = v / 255.0
+    return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+
+def otsu(values):
+    """The valley separating a body's lit face from its night side, from its own image.
+
+    A fixed luminance cut is invalid here for the same reason a fixed sun-edge threshold
+    was invalid: Neptune's lit face can be darker than Venus's night-side bloom. Otsu's
+    between-class variance finds the split in EACH disc's own histogram. The only fixed
+    numbers below describe the 8-bit encoding (256 bins), not brightness under test.
+    """
+    hist, _ = np.histogram(values, bins=256, range=(0, 256))
+    weight = np.cumsum(hist).astype(float)
+    mean = np.cumsum(hist * np.arange(256)).astype(float)
+    total = weight[-1]
+    if total == 0:
+        return None
+    denom = weight * (total - weight)
+    score = np.divide(
+        (mean[-1] * weight - mean * total) ** 2,
+        denom,
+        out=np.zeros_like(denom),
+        where=denom > 0,
+    )
+    return int(np.argmax(score))
+
+
+def body_photometry(cap):
+    """Measure the eight HUD-located bodies in the dedicated wide overview capture.
+
+    The HUD circle is the instrument's geometry. We stay inside 95% of its radius so bloom,
+    antialiasing and Saturn's rings beyond the sphere cannot manufacture a peak. Within that
+    circle, the lit face is the brighter class in the disc's own luminance histogram. Peak
+    and p99 then come from ONE channel: whichever of R/G/B owns the single brightest sample.
+
+    "Blown" deliberately retains C4's established definition (all channels > 235) and uses
+    the whole measured disc as its denominator, including the night side. That is why its
+    percentage is independent of the adaptive lit-face split.
+    """
+    section = cap.get("photometry") or {}
+    name = section.get("capture")
+    hud = section.get("hud") or {}
+    planets = {p.get("key"): p for p in (hud.get("planets") or [])}
+    dpr = float((section.get("viewport") or {}).get("dpr", 2.0))
+    rows = []
+
+    if not name or not os.path.exists(os.path.join(OUT, name)):
+        reason = "NOT MEASURED: P2 panorama is missing"
+        return name or "(missing)", [(key, None, reason) for key in BODY_ORDER]
+
+    image = Image.open(os.path.join(OUT, name)).convert("RGB")
+    W, H = image.size
+    for key in BODY_ORDER:
+        p = planets.get(key)
+        if not p:
+            rows.append((key, None, "NOT MEASURED: no HUD circle"))
+            continue
+
+        cx, cy = p["x"] * dpr, p["y"] * dpr
+        R = p["px"] * dpr / 2
+        edge = R * 0.95
+        if cx - edge < 0 or cx + edge >= W or cy - edge < 0 or cy + edge >= H:
+            rows.append((key, None, "NOT MEASURED: disc is cut by capture edge"))
+            continue
+
+        # PIL crops before conversion: the panorama is ~10 MP, but no measurement needs to
+        # hold that whole frame as a float array. This also makes the per-body geometry easy
+        # to audit in the local coordinates below.
+        pad = R * 1.02
+        x0, y0 = int(np.floor(cx - pad)), int(np.floor(cy - pad))
+        x1, y1 = int(np.ceil(cx + pad)) + 1, int(np.ceil(cy + pad)) + 1
+        crop = np.asarray(image.crop((x0, y0, x1, y1)), dtype=np.uint8)
+        yy, xx = np.mgrid[0:crop.shape[0], 0:crop.shape[1]]
+        disc = np.hypot(xx + x0 - cx, yy + y0 - cy) <= edge
+        rgb = crop[disc]
+        expected = np.pi * edge * edge
+        if len(rgb) < expected * 0.98:
+            rows.append((key, None, "NOT MEASURED: incomplete HUD disc"))
+            continue
+
+        lum = rgb.astype(float) @ LUMA
+        threshold = otsu(lum)
+        lit = lum > threshold if threshold is not None else np.zeros(len(lum), dtype=bool)
+        # This is a sampling/reliability guard, not a brightness threshold: a class smaller
+        # than 1% of the known disc cannot support a stable 99th percentile. The absolute
+        # floor merely requires enough independent pixels for the percentile to exist.
+        need = max(100, int(np.ceil(len(rgb) * 0.01)))
+        if lit.sum() < need:
+            rows.append((key, None,
+                         f"NOT MEASURED: lit-face class has only {lit.sum()} of {len(rgb)} px"))
+            continue
+
+        lit_rgb = rgb[lit]
+        channel_max = lit_rgb.max(axis=0)
+        ch = int(np.argmax(channel_max))
+        peak = int(channel_max[ch])
+        p99 = float(np.percentile(lit_rgb[:, ch], 99))
+        blown = float((rgb.min(axis=1) > 235).mean() * 100)
+        data = {
+            "diameter": p["px"],
+            "channel": "RGB"[ch],
+            "peak": peak,
+            "peak_linear": srgb_to_linear(peak),
+            "p99": p99,
+            "p99_linear": srgb_to_linear(p99),
+            "blown": blown,
+            "pixels": len(rgb),
+            "lit_share": float(lit.mean() * 100),
+            "threshold": threshold,
+        }
+        rows.append((key, data, f"OK: {lit.sum()} lit-face px ({data['lit_share']:.1f}% of disc)"))
+    image.close()
+    return name, rows
 
 
 def main():
@@ -329,6 +448,21 @@ def main():
     else:
         print("REGRESSION mars   NOT MEASURED - the capture said the probe was unusable")
         fails.append("mars-unmeasured")
+
+    # ---------------------------------------------------------------- P2 body peaks
+    capture_name, body_rows = body_photometry(cap)
+    print()
+    print(f"P2 body photometry   capture {capture_name}   source {cap.get('base', 'unknown')}   "
+          f"build {cap.get('build', 'unknown')}")
+    print("body      diam px  ch  peak  peak linear   p99  p99 linear   blown disc   status")
+    print("--------- -------  --  ----  -----------  ----  ----------   ----------   ------")
+    for key, data, status in body_rows:
+        if data is None:
+            print(f"{key:<9} {'-':>7}  {'-':>2}  {'-':>4}  {'-':>11}  {'-':>4}  {'-':>10}   {'-':>10}   {status}")
+            continue
+        print(f"{key:<9} {data['diameter']:7.1f}  {data['channel']:>2}  {data['peak']:4d}  "
+              f"{data['peak_linear']:11.4f}  {data['p99']:4.1f}  {data['p99_linear']:10.4f}   "
+              f"{data['blown']:9.2f}%   {status}")
 
     print()
     print("ALL PASS" if not fails else "FAILED: " + ", ".join(fails))
