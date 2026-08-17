@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import SeededStars from './SeededStars';
 import * as THREE from 'three';
+import { NEUTRAL_APERTURE } from '@/lib/photometry';
 import { useScene } from '@/lib/sceneStore';
 import { sparkleClock } from '@/lib/spaceMaterials';
 import GalaxyAct from './acts/GalaxyAct';
@@ -100,7 +101,7 @@ export default function SceneRoot() {
           // probe below in an effect would make first-frame coverage depend on scheduling.
           if (HUD_AVAILABLE) installFixedStepClock(clock);
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1;
+          gl.toneMappingExposure = NEUTRAL_APERTURE;
         }}
       >
         <color attach="background" args={['#050714']} />

@@ -9,6 +9,7 @@ import { RING_OUTER_R } from '@/lib/planetPositions';
 import { SECTIONS } from '@/lib/sections';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect, livePlanetPlane } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
+import { NEUTRAL_APERTURE, ORBIT_APERTURE } from '@/lib/photometry';
 import { HUD_AVAILABLE } from './DebugHud';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -19,23 +20,6 @@ const clampUnit = (x: number) => (x < -1 ? -1 : x > 1 ? 1 : x);
 const DEV = process.env.NODE_ENV !== 'production';
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
-
-// Per-planet ORBIT exposure. The system is spatially compressed, so irradiance falls off
-// 25× between the innermost and outermost world; at a single aperture the near planets
-// clip while the far ones go muddy. This is the aperture per world, and it is the only
-// lever that works — albedo cannot rescue a diffuse radiance already well above 1.
-//
-// B3 retune, measured on the alias: at the old values Jupiter had 6.1% of its disc at
-// 250+ (p99 luminance 250.6, i.e. a white field, not a planet) and Mars 10.4% clipped in
-// the RED channel alone with mean blue at 0.2/255 — the "neon yellow". Values below put
-// each world's peak just under the roll-off instead of through it.
-// Calibrated by sweeping the aperture on the alias and measuring each disc, once the tone
-// mapper was actually switched on (see ExposureToneMap — before that none of these numbers
-// reached a pixel). At exposure 1.0 the measured discs came out at mean luminance
-// jupiter 140 / clip 0%, saturn 93 / 0%, mars 95 / 0.9%, earth 211 / 19.5% — Earth is the
-// outlier because its cloud and night-lights shells stack on top of an already close-lit
-// body. These values land every world in the 90-135 band with clipping at zero.
-const ORBIT_EXPOSURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
 
 // --- The ORBIT vantage is SOLVED, not dialled in --------------------------------------
 // The old construction was "sit A radians off the lit direction, then add a fixed vertical
@@ -1101,8 +1085,8 @@ export default function CameraRig() {
     // as the departure meter scrubs back toward the overview, ease exposure back to 1.
     const fp = useScene.getState().focusedPlanet;
     const dep = fp ? clamp01(useScene.getState().departure) : 0;
-    const orbitExpo = fp ? ORBIT_EXPOSURE[fp] ?? 1 : 1;
-    const expoTarget = act === 'solar' && fp ? orbitExpo + (1 - orbitExpo) * dep : 1;
+    const orbitExpo = fp ? ORBIT_APERTURE[fp] ?? NEUTRAL_APERTURE : NEUTRAL_APERTURE;
+    const expoTarget = act === 'solar' && fp ? orbitExpo + (NEUTRAL_APERTURE - orbitExpo) * dep : NEUTRAL_APERTURE;
     damp(state.gl, 'toneMappingExposure', expoTarget, 0.4, dt);
 
     cam.updateProjectionMatrix();
