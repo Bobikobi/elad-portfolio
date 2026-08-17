@@ -130,7 +130,7 @@ const requireRealGpu = async (page) => {
   const gpu = await gpuRenderer(page);
   if (!/angle|vulkan/i.test(gpu) || /swiftshader/i.test(gpu)) {
     console.error(`NO REAL GPU (${gpu}) - refusing to measure`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
   return gpu;
@@ -150,7 +150,7 @@ const waitForFixedFrame = async (page, target, id) => {
   }, target);
   if (!at?.fixedStep || at.actualFrame < target) {
     console.error(`fixedStep did not reach frame ${target} on ${id}`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
   return at;
@@ -163,7 +163,7 @@ const freeze = async (page, id) => {
   });
   if (!frozen?.fixedStep || !frozen?.frozen) {
     console.error(`fixedStep clock did not freeze on ${id}`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
   return frozen;
@@ -175,16 +175,36 @@ const mode = (values) => {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
 };
 
-const browser = await puppeteer.launch({
-  executablePath: CHROME,
-  headless: 'new',
-  protocolTimeout: 240000,
-  userDataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'p3-albedo-')),
-  args: [
-    '--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars',
-    '--use-gl=angle', '--use-angle=vulkan', '--disable-dev-shm-usage',
-  ],
-});
+/**
+ * CDP_URL attaches to a browser that is ALREADY RUNNING instead of starting one.
+ *
+ * That exists for one reason: an agent sandboxed away from this machine's GPU cannot
+ * launch a Chrome that has one, so every measurement it writes has to be run by someone
+ * else, and it hands back work it could not check. Pointing it at a browser that lives
+ * outside its sandbox removes that limit without giving it GPU access or any other
+ * privilege - it sends CDP commands to a local port, and the rendering happens out here.
+ *
+ *   ~/browser-agent/start-harness-browser.sh          # once, real GPU, invisible
+ *   CDP_URL=http://127.0.0.1:9223 TAG=x node scripts/harness/p3-albedo.mjs
+ *
+ * The GPU guard below is unchanged and still refuses to measure on SwiftShader, so an
+ * attached browser without acceleration fails exactly like a launched one would.
+ */
+const CDP_URL = process.env.CDP_URL;
+const browser = CDP_URL
+  ? await puppeteer.connect({ browserURL: CDP_URL, protocolTimeout: 240000 })
+  : await puppeteer.launch({
+    executablePath: CHROME,
+    headless: 'new',
+    protocolTimeout: 240000,
+    userDataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'p3-albedo-')),
+    args: [
+      '--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars',
+      '--use-gl=angle', '--use-angle=vulkan', '--disable-dev-shm-usage',
+    ],
+  });
+// Never close a browser we did not start - it is shared, and the next run needs it.
+const closeBrowser = async () => (CDP_URL ? browser.disconnect() : browser.close());
 
 // These objects are the single source of truth for both setViewport and the report.
 const OVERVIEW_VIEWPORT = { width: 3600, height: 900, dpr: 1 };
@@ -230,7 +250,7 @@ for (const view of VIEWS) {
     });
     if (!orbitSet) {
       console.error('overview setOrbit seam is unavailable - refusing to measure');
-      await browser.close();
+      await closeBrowser();
       process.exit(2);
     }
   }
@@ -238,13 +258,13 @@ for (const view of VIEWS) {
   const hidden = await hideDom(page);
   if (!hidden) {
     console.error(`no canvas on ${view.id} - refusing to measure`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
   const leaks = await assertCanvasOnly(page);
   if (leaks.length) {
     console.error(`NOT canvas-only on ${view.id}: ${leaks.join(', ')} - refusing to measure`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
 
@@ -253,7 +273,7 @@ for (const view of VIEWS) {
   const finalLeaks = await assertCanvasOnly(page);
   if (finalLeaks.length) {
     console.error(`NOT canvas-only at capture on ${view.id}: ${finalLeaks.join(', ')} - refusing to measure`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
   const probe = await page.evaluate(() => ({
@@ -263,12 +283,12 @@ for (const view of VIEWS) {
   }));
   if (probe.tier !== 'high' || probe.focusedPlanet !== view.focus) {
     console.error(`${view.id}: focus/tier is ${probe.focusedPlanet}/${probe.tier}, expected ${view.focus}/high - refusing to measure`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
   if (!probe.hud || probe.hud.vw !== viewport.width || probe.hud.vh !== viewport.height) {
     console.error(`${view.id}: HUD viewport ${probe.hud?.vw}x${probe.hud?.vh}, expected ${viewport.width}x${viewport.height} - refusing to measure`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
 
@@ -280,7 +300,7 @@ for (const view of VIEWS) {
     });
     if (planets.length !== 8 || outside.length) {
       console.error(`overview does not contain eight complete HUD discs (${planets.length}; outside: ${outside.map((p) => p.key).join(', ') || 'none'})`);
-      await browser.close();
+      await closeBrowser();
       process.exit(2);
     }
   } else {
@@ -289,7 +309,7 @@ for (const view of VIEWS) {
     if (!planet || planet.x - r < 0 || planet.x + r > probe.hud.vw ||
         planet.y - r < 0 || planet.y + r > probe.hud.vh) {
       console.error(`${view.id}: HUD probe body ${view.probeBody} is missing or cut by the capture edge - refusing to measure`);
-      await browser.close();
+      await closeBrowser();
       process.exit(2);
     }
   }
@@ -352,7 +372,7 @@ for (const requestedTier of ['high', 'low']) {
   }));
   if (state.tier !== requestedTier || sample.intervals.length !== PERF_SAMPLES) {
     console.error(`tier ${requestedTier} was not pinned or returned an incomplete frame sample - refusing to measure`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
   const sorted = [...sample.intervals].sort((a, b) => a - b);
@@ -360,7 +380,7 @@ for (const requestedTier of ['high', 'low']) {
   const triangles = sample.triangles.filter(Number.isFinite);
   if (!calls.length || !triangles.length) {
     console.error(`tier ${requestedTier}: renderer telemetry is unavailable - refusing to measure`);
-    await browser.close();
+    await closeBrowser();
     process.exit(2);
   }
   report.tiers[requestedTier] = {
@@ -383,4 +403,4 @@ for (const requestedTier of ['high', 'low']) {
 
 fs.writeFileSync(path.join(OUT, `${TAG}-capture.json`), JSON.stringify(report, null, 2));
 console.log(`\ncaptured P3 tag "${TAG}" -> ${OUT}`);
-await browser.close();
+await closeBrowser();

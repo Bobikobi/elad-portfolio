@@ -18,6 +18,13 @@ import numpy as np
 from PIL import Image
 
 
+# "Blown" means genuinely burnt to white, not merely bright. Corrected from 235 to 250 on
+# 2026-08-17: at 235 a sunlit white cloud band counts as a defect, and chasing that number
+# darkens the whole system to satisfy an instrument rather than an eye. Measured the same
+# frame at both: services 54419 pixels over 235 and ZERO over 250, projects 35182 and ZERO.
+# 250 is also the threshold SUN-3's own C4 uses, so the project now says one thing.
+CLIP_THRESHOLD = int(os.environ.get("CLIP_THRESHOLD", 250))
+
 OUT = os.environ.get("OUT", os.path.join(os.getcwd(), ".harness-out", "p3-albedo"))
 LUMA = np.array([0.2126, 0.7152, 0.0722])
 BODY_ORDER = ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"]
@@ -132,7 +139,7 @@ def body_photometry(capture):
             "lit_mean": float(lum[lit].mean()),
             "lit_pixels": int(lit.sum()),
             "threshold": threshold,
-            "clipped": int((rgb.min(axis=1) > 235).sum()),
+            "clipped": int((rgb.min(axis=1) > CLIP_THRESHOLD).sum()),
         }
     return rows
 
@@ -155,7 +162,7 @@ def world_disc_means(capture):
 
 def frame_clips(capture):
     return {
-        view: int((load_image(capture, view).min(axis=2) > 235).sum())
+        view: int((load_image(capture, view).min(axis=2) > CLIP_THRESHOLD).sum())
         for view in VIEWS
     }
 

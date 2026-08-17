@@ -33,7 +33,7 @@ export const NEPTUNE_ALBEDO_MULTIPLIER = 4.38;
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
 // The string index signature permits an unmapped focus; CameraRig owns its neutral fallback.
-export const ORBIT_APERTURE: Record<string, number> = { earth: 0.62, mars: 0.72, jupiter: 0.85, saturn: 1.0, belt: 1.0 };
+export const ORBIT_APERTURE: Record<string, number> = { earth: 0.45, mars: 0.92, jupiter: 0.50, saturn: 0.68, belt: 0.66 };
 
 /** Renderer aperture before a world is selected and after departure from one. */
 export const NEUTRAL_APERTURE = 1;
@@ -45,9 +45,22 @@ export const NEUTRAL_APERTURE = 1;
 // yellow" was made of. A G star is close to white; the gold identity of this
 // system comes from the sun's own emissive surface and its bloom, both of which
 // are toneMapped:false and untouched by this.
-export const SUN_LAMP_INTENSITY = 650;
+export const SUN_LAMP_INTENSITY = 200;
 export const SUN_LAMP_DISTANCE = 90;
-export const SUN_LAMP_DECAY = 2;
+// P3 change 2, and a DELIBERATE DEPARTURE FROM PHYSICS under RULING 3 (2026-08-17):
+// the owner ruled that appearance beats physical accuracy where the two collide.
+//
+// Physical inverse-square is decay 2. It is dropped to 1.3 so the outer system stays
+// visible - Saturn is the Projects planet and real albedo alone drops it from 0.48 to
+// 0.20 relative to Earth. Softening the falloff is what recovers it, and it is also what
+// stops Venus from being 2.7x Earth's brightness.
+//
+// This is defensible rather than sloppy because the geometry was never real either: the
+// orbits are compressed about 30:1, and Venus sits 1.7 solar radii out where the true
+// value is 78. Inverse-square over a fictional layout is not physics, it is a coincidence
+// that looked plausible. One number, one line, reversible - set it back to 2 and the
+// system is physically faithful and unreadable again.
+export const SUN_LAMP_DECAY = 1.3;
 
 // Exposure stays at 1.5. It is NOT the lever it looks like: simulated across the whole
 // pipeline, dialling it down moves red hardly at all (red is in the shoulder, that is

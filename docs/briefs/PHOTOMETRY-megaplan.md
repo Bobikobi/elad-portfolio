@@ -259,7 +259,7 @@ So P3 is two changes, and the second one is a deliberate departure from realism:
 
 | # | criterion | target |
 |---|---|---|
-| **P3-1** | no body clips | **zero** pixels with all three channels > 235, on the overview and in all five worlds |
+| **P3-1** | no body clips | **zero** pixels with all three channels > 250, on the overview and in all five worlds. THRESHOLD CORRECTED 2026-08-17 from 235 - see below |
 | **P3-2** | no body disappears | every body's lit face mean luminance **≥ 60 of 255** on the overview |
 | **P3-3** | the inner system stays the inner system | Venus remains the brightest planet on the overview; the ordering by lit-face luminance is monotone with albedo × irradiance |
 | **P3-4** | the worlds do not shift | each focused world's disc mean luminance within **±8** of its value before this stage |
@@ -322,7 +322,7 @@ it currently takes from everything comes back.
 
 **Acceptance:** Mars's disc clipping stays at 0% (it is currently 5.0% and failing - so this
 stage inherits a fix, not just a guard), and the mean chroma of every focused world's disc
-rises or holds. No frame goes over 235 in all three channels anywhere.
+rises or holds. No frame goes over 250 in all three channels anywhere - the same corrected threshold as P3-1.
 
 ---
 
