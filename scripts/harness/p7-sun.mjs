@@ -169,7 +169,14 @@ const activatePage = async (page, id) => {
   }
 };
 
-const fixedStepUrl = (tier) => `${BASE}/?hud=1&tier=${tier}&fixedStep`;
+// S5 asks how fast the SURFACE evolves, so the rigid spin has to be off for it: at
+// 0.03 rad/s a point travels ~3% of the radius per second, more than half a granule, and
+// the pattern is carried off the sample point long before it can change. Measured: with
+// the spin running, slowing every shader time term by twenty moved the half-life from
+// 0.657s to 0.568s - i.e. it was measuring rotation the whole time. `?pinSpin` is
+// debug-only and absent from production, like the fixed-step clock it sits beside.
+const fixedStepUrl = (tier, opts = {}) =>
+  `${BASE}/?hud=1&tier=${tier}&fixedStep${opts.pinSpin ? '&pinSpin' : ''}`;
 
 const waitForFixedFrame = async (page, target, id) => {
   const at = await page.evaluate(async (frame) => {
@@ -272,7 +279,7 @@ try {
     await raiseBrowserWindow(page);
     const viewport = SUN_VIEWPORT;
     await page.setViewport({ width: viewport.width, height: viewport.height, deviceScaleFactor: viewport.dpr });
-    await page.goto(fixedStepUrl('high'), { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await page.goto(fixedStepUrl('high', { pinSpin: true }), { waitUntil: 'domcontentloaded', timeout: 90000 });
     await activatePage(page, 'overview');
     await wait(SETTLE);
     const gpu = await requireRealGpu(page);

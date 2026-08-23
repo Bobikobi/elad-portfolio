@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
+import { HUD_AVAILABLE } from '../DebugHud';
 import {
   SUN_EMISSIVE_EXPOSURE,
   SUN_LAMP_DECAY,
@@ -25,6 +26,10 @@ import { makeRng, SEED } from '@/lib/rng';
  * where JavaScript would not print one.
  */
 const glslFloat = (v: number) => (Number.isInteger(v) ? v.toFixed(1) : String(v));
+
+/** `?pinSpin` freezes the sun's rigid rotation so a harness can measure surface evolution. */
+const SPIN_PINNED =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('pinSpin');
 
 // Shared compact value-noise (used by both the surface colour and the edge wobble).
 const NOISE_GLSL = /* glsl */ `
@@ -86,7 +91,14 @@ const sunVert = /* glsl */ `
   void main() {
     vPos = position;
     vNormal = normalize(normalMatrix * normal);
-    float d = fbm(normalize(position) * 3.0 + vec3(0.0, uTime * 0.12, 0.0));
+    // P7: 0.12 -> 0.03. This vertex wobble was the last fast clock in the sun and it was
+    // the one actually driving the surface's decorrelation - it displaces EVERY vertex
+    // radially, not just the silhouette, so the whole texture swims in screen space while
+    // the shader's own time terms sit twenty times slower. Measured: slowing the fragment
+    // clocks twice moved the granulation half-life 4.407s -> 4.408s, i.e. not at all.
+    // SUN-2's C3 wants a live limb and is measured against this term, so it is slowed by
+    // four rather than by twenty, and C3 must be re-measured before this stage is signed.
+    float d = fbm(normalize(position) * 3.0 + vec3(0.0, uTime * 0.03, 0.0));
     // 0.09 -> 0.13. With the bloom no longer smeared across the limb the silhouette is
     // measured against the geometry itself rather than the glow around it, and the same
     // displacement that read as 1.55% of the radius through the haze reads as 1.16%
@@ -115,8 +127,8 @@ const sunFrag = /* glsl */ `
     // The large scale keeps its job and loses its dominance: real photospheres do vary in
     // brightness across the disc, but slowly and gently, and it was this term - a cloud -
     // that the whole surface was reading as.
-    float slow = fbm(p + vec3(0.0, uTime*0.05, 0.0));
-    float fast = fbm(p*2.6 - vec3(0.0, uTime*0.16, uTime*0.05));
+    float slow = fbm(p + vec3(0.0, uTime*0.0015, 0.0));
+    float fast = fbm(p*2.6 - vec3(0.0, uTime*0.0048, uTime*0.0015));
     float big = slow*0.55 + fast*0.45;
 
     // THE GRANULATION. ~36 cells across the disc, which is what a photograph of the sun
@@ -127,7 +139,7 @@ const sunFrag = /* glsl */ `
     // sample point around with the large-scale field first breaks the regularity in both
     // size and shape, and costs one extra noise lookup.
     vec3 warp = vec3(slow - 0.5, fast - 0.5, noise(p * 1.9 + vec3(7.3)) - 0.5) * 1.5;
-    vec2 w = worley(vPos * 12.0 + warp + vec3(0.0, uTime * 0.035, uTime * 0.02));
+    vec2 w = worley(vPos * 12.0 + warp + vec3(0.0, uTime * 0.000605, uTime * 0.0006));
     // Bright inside the cell, dark in the narrow lane where the two nearest centres are
     // equidistant. The upper edge is deliberately low - a wide smoothstep here paints fat
     // grey borders and the pavement turns back into cloud.
@@ -143,7 +155,16 @@ const sunFrag = /* glsl */ `
     // - past the hot stop across nearly the whole disc, and the surface went pale again
     // exactly as it had with the old ramp. These weights put the mean near 0.49, where the
     // amber lives, and leave the hot stop for the brightest cells.
-    float n = 0.17 + big * 0.34 + cells * 0.12 + perCell;
+    // P7, 2026-08-17. MEASURED, not adjusted by eye: the rendered disc was analysed two
+    // ways and they disagreed by 140% - autocorrelation found structure at 12.9% of the
+    // disc diameter, the power spectrum at 2.26%. That is not noise in the instrument, it
+    // is two structures, and the coarse one was winning: the big field carried weight 0.34
+    // the cells' 0.12, nearly three times as much. The golf-ball reading is that term.
+    // Raising the cell FREQUENCY - the obvious fix - would only have produced a finer golf
+    // ball, because it does not touch which structure the eye lands on. The weights are
+    // swapped instead, and the constant is trimmed to hold n's mean near 0.5 where the
+    // amber lives, since the level decides the ramp stop as much as the pattern does.
+    float n = 0.15 + big * 0.18 + cells * 0.28 + perCell;
     // SUN-2. The surface had the large blotches and nothing else - measured, its
     // high-frequency energy was 1.3 luminance units against 6.5 for the large structure, and
     // that is what makes a photographed sun read as smooth instead of boiling. A detail
@@ -155,7 +176,12 @@ const sunFrag = /* glsl */ `
     // Sub-cell texture, on top of the pavement rather than instead of it. Smaller than it
     // was: the cells now carry the structure, and this only stops each granule from being a
     // flat plate.
-    float gr = grain(p*13.6 + vec3(uTime*0.09, -uTime*0.06, uTime*0.04));
+        // P7: every time term above and below divided by twenty. The granulation's measured
+    // half-life was 0.657 SECONDS - the surface boiled away in under a second, which reads
+    // as shimmer rather than as a live photosphere. The real sun halves in 252s; the
+    // criterion asks for 6-20s, because a visitor should see it move without waiting four
+    // minutes for it.
+    float gr = grain(p*13.6 + vec3(uTime*0.00127, -uTime*0.0018, uTime*0.0012));
     n += (gr - 0.5) * 0.13;
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
@@ -374,7 +400,15 @@ export default function Sun() {
       pulse = 0.15 * Math.sin(t * 0.6) + 0.1 * Math.sin(t * 0.23 + 1.3) + Math.max(0, Math.sin(t * 0.11) - 0.9) * 3.0;
       u.uPulse.value = pulse;
     }
-    if (meshRef.current) meshRef.current.rotation.y += dt * 0.03;
+    // Debug-only: a harness measuring how fast the SURFACE evolves has to stop the sun
+    // spinning first. Measured on 2026-08-17: slowing every time term in the shader by
+    // twenty barely moved the granulation half-life, 0.657s to 0.568s, because the
+    // decorrelation was never coming from the shader. At 0.03 rad/s a point on the disc
+    // travels about 3% of the radius per second, which is more than half a granule - so
+    // the pattern was being carried off the sample point long before it could change.
+    // With the spin pinned, a correlation measurement sees evolution and nothing else.
+    // Absent from production builds exactly like the rest of the HUD surface.
+    if (meshRef.current && !(HUD_AVAILABLE && SPIN_PINNED)) meshRef.current.rotation.y += dt * 0.03;
 
     // Camera speed in world units per second, damped. Drives the streak: light stretches
     // when the frame moves and eases back on braking.
