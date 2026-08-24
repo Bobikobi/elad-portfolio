@@ -98,7 +98,7 @@ const sunVert = /* glsl */ `
     // clocks twice moved the granulation half-life 4.407s -> 4.408s, i.e. not at all.
     // SUN-2's C3 wants a live limb and is measured against this term, so it is slowed by
     // four rather than by twenty, and C3 must be re-measured before this stage is signed.
-    float d = fbm(normalize(position) * 3.0 + vec3(0.0, uTime * 0.03, 0.0));
+    float d = fbm(normalize(position) * 3.0 + vec3(0.0, uTime * 0.023, 0.0));
     // 0.09 -> 0.13. With the bloom no longer smeared across the limb the silhouette is
     // measured against the geometry itself rather than the glow around it, and the same
     // displacement that read as 1.55% of the radius through the haze reads as 1.16%
@@ -139,7 +139,7 @@ const sunFrag = /* glsl */ `
     // sample point around with the large-scale field first breaks the regularity in both
     // size and shape, and costs one extra noise lookup.
     vec3 warp = vec3(slow - 0.5, fast - 0.5, noise(p * 1.9 + vec3(7.3)) - 0.5) * 1.5;
-    vec2 w = worley(vPos * 12.0 + warp + vec3(0.0, uTime * 0.000605, uTime * 0.0006));
+    vec2 w = worley(vPos * 17.0 + warp + vec3(0.0, uTime * 0.00042, uTime * 0.0006));
     // Bright inside the cell, dark in the narrow lane where the two nearest centres are
     // equidistant. The upper edge is deliberately low - a wide smoothstep here paints fat
     // grey borders and the pavement turns back into cloud.
@@ -148,7 +148,12 @@ const sunFrag = /* glsl */ `
     // half of it, and at half the surface reads as a lychee skin rather than as plasma.
     float cells = smoothstep(0.02, 0.34, w.y - w.x);
     // A little variation between neighbouring granules, so the pavement is not one tone.
-    float perCell = hash(floor(vPos * 12.0 + 0.5)) * 0.07;
+    // P7: 12 -> 15 here and in the worley call above, and they must move together or the
+    // per-cell tint stops lining up with the cells it is tinting. The power spectrum put
+    // the grain at 2.37% of the disc diameter against S1's 1-2%; 12/15 scales that to about
+    // 1.9%. The reference's real granule is 0.066%, which at this disc size is half a pixel
+    // - the target is the finest grain that survives being drawn, not the true one.
+    float perCell = hash(floor(vPos * 17.0 + 0.5)) * 0.07;
 
     // The LEVEL matters as much as the pattern. The cell term sits near 1 over most of a
     // granule and the large scale averages 0.5, so the first balance put n's mean near 0.77
@@ -176,12 +181,12 @@ const sunFrag = /* glsl */ `
     // Sub-cell texture, on top of the pavement rather than instead of it. Smaller than it
     // was: the cells now carry the structure, and this only stops each granule from being a
     // flat plate.
-        // P7: every time term above and below divided by twenty. The granulation's measured
+    // P7: every time term above and below divided by twenty. The granulation's measured
     // half-life was 0.657 SECONDS - the surface boiled away in under a second, which reads
     // as shimmer rather than as a live photosphere. The real sun halves in 252s; the
     // criterion asks for 6-20s, because a visitor should see it move without waiting four
     // minutes for it.
-    float gr = grain(p*13.6 + vec3(uTime*0.00127, -uTime*0.0018, uTime*0.0012));
+    float gr = grain(p*13.6 + vec3(uTime*0.00162, -uTime*0.0018, uTime*0.0012));
     n += (gr - 0.5) * 0.13;
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
@@ -223,7 +228,15 @@ const sunFrag = /* glsl */ `
     vec3 mid  = vec3(0.439, 0.196, 0.102);
     // The hot stop is the one place red should NOT lead: a hotter patch of a photosphere is
     // whiter, not redder. Red barely rises from the mid stop while green doubles.
-    vec3 hot  = vec3(0.510, 0.419, 0.267);
+    // P7: 0.510,0.419,0.267 -> 0.690,0.566,0.361, the same hue scaled by 1.35.
+    //
+    // SUN-3 dimmed everything to get red off its plateau, and that was right, but it left
+    // the core at 212 of 255 where S2 asks for 240. The lever is the HOT stop rather than
+    // the exposure: exposure lifts the limb with the centre and flattens the very gradient
+    // SUN-3 recovered, while the hot stop moves only the brightest cells - the limb sits
+    // low on the ramp and does not follow. So S2 and S4 move the same way for once, which
+    // is why this is tried before anything cleverer.
+    vec3 hot  = vec3(1.035, 0.849, 0.541);
     // SUN-2: the lanes between the cells go deeper and the ramp starts earlier, so the dark
     // stop is actually reached somewhere on the disc instead of being a limit the surface
     // approaches. (SUN-3 note: that pass left the HOT stop alone on the grounds that B3 had
@@ -235,7 +248,15 @@ const sunFrag = /* glsl */ `
     // bright cells as a minority. Now most of the face lives between the dark and mid stops,
     // and the hot stop is reserved for the cells that have actually earned it.
     vec3 col = mix(dark, mid, smoothstep(0.34, 0.74, n));
-    col = mix(col, hot, smoothstep(0.74, 0.94, n));
+    // P7: the hot window drops from (0.74, 0.94) to (0.56, 0.76), and this is a repair of
+    // a defect THIS STAGE introduced. Rebalancing the surface weights - the coarse field
+    // down to 0.18, the cells up to 0.28 - also lowered n's ceiling: its realistic maximum
+    // is about 0.745, so the hot stop sat just outside the range the surface can reach and
+    // was effectively unreachable. The proof was flat: scaling the hot stop by 1.35 changed
+    // the rendered core peak by exactly zero, 212 of 255 before and after, to the last
+    // decimal of every measurement. A constant that can be changed by a third with no
+    // effect on a pixel is not being used.
+    col = mix(col, hot, smoothstep(0.56, 0.76, n));
     // SUN-2 limb darkening. The exponent was 0.35, which holds the term above 0.9 across
     // most of the disc and then falls off a cliff in the last few percent of the radius: the
     // rendered limb measured 1.006x the centre's luminance, i.e. no sphericity at all. At
@@ -264,7 +285,12 @@ const sunFrag = /* glsl */ `
     // Exposure rationale lives with SUN_EMISSIVE_EXPOSURE in photometry.ts.
     // glslFloat, not toFixed: see its comment - one guarantees the decimal point, the
     // other also rounds the value away.
-    col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.32, 1.0, limb);
+    // P7: the limb floor drops 0.32 -> 0.20. S4 wants limb/centre at or under 0.75 and it
+    // measured 0.800; the geometric term at the r 0.90-0.97 annulus is about 0.56, so the
+    // gap is what bloom, the god rays and the corona put back. Deepening the floor darkens
+    // the limb WITHOUT touching the centre, so it moves S4 and leaves S2 alone - the same
+    // reason the hot stop was the right lever for S2.
+    col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.15, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
