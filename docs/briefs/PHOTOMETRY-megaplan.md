@@ -447,6 +447,20 @@ limb is not an exposure change - it is the colour ramp or the tone response. P1 
 that tractable: those numbers now live together instead of being calibrated against each
 other across six files.
 
+### RULING 4 - the limb, 2026-09-10
+
+SUN-2's C2 required limb/centre luminance in 0.80-0.88. P7's S4 requires <= 0.75. They measure
+the same quantity at the same two annuli, so both could not stand, and the contradiction was
+written into the P7 brief by mistake rather than by argument.
+
+**The owner retired C2's band.** The reference decides it: a real solar photograph measures
+centre-to-limb at 1.79 - a limb at **0.559** of the centre - darker than either criterion
+permitted. S4's 0.75 moves toward the photograph and still falls well short of it. Measured
+after P7: **0.743**.
+
+Where this differs from RULING 3: there, appearance was chosen OVER physics. Here the two
+agree, and it is the older number that was arbitrary.
+
 ### The reference, measured - 2026-08-17
 
 Numbers extracted from the approved sources in `refs/README.md`, so S1-S4 are anchored to a
