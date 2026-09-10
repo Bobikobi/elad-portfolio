@@ -36,7 +36,12 @@ const EMULATION = Object.freeze({
     mobile: true,
     touch: true,
   }),
-  cpuThrottlingRate: 4,
+  // Overridable, because 4x on this machine does not reproduce the problem. Measured
+  // 2026-09-10: PageSpeed reports 29,260ms of blocking on the deployed site, while the
+  // SAME deployed site measured here at 4x gives 1,248ms - 23 times better. PageSpeed runs
+  // on its own slow hardware and throttles 4x on top of that, so matching it means finding
+  // the rate where this machine reproduces the number, not assuming 4x is comparable.
+  cpuThrottlingRate: Number(process.env.CPU_THROTTLE || 4),
   network: Object.freeze({
     name: 'Slow 4G',
     offline: false,

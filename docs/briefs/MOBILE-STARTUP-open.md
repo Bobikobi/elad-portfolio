@@ -39,6 +39,54 @@ That is the same shape as the plan's other finding about criteria being guards r
 goals: the instrument answers a real question, and it is not the question a visitor cares
 about.
 
+---
+
+## MEASURED 2026-09-10 - the attribution exists now, and the first finding is about the instrument
+
+**PageSpeed's number cannot be reproduced on this machine at Lighthouse's own settings.**
+Measured with a local harness (`scripts/harness/mobile-startup.{mjs,py}`) emulating a Moto G
+Power at 412x915 DPR 2.6, CPU throttled 4x, slow 4G:
+
+| what was measured | total blocking time |
+|---|---|
+| PageSpeed, deployed site | **29,260 ms** |
+| this harness, deployed site, 4x | **1,248 ms** |
+| this harness, local production build, 4x | 1,385 ms |
+| this harness, local dev build, 4x | 2,054 ms |
+
+The deployed site and a local production build measure the same, so **the deployment is not
+the problem**. The 23x gap is the hardware: PageSpeed throttles 4x on top of its own slow
+machine, while 4x on an i5-13420H is still a fast device. Reproducing the failure needs a
+harsher rate, and at **20x** the deployed site gives **9,949 ms** of blocking with 42 tasks
+over 50 ms, the longest 1,710 ms. That is the reproduction to work against.
+
+### Where the time actually goes
+
+From the 20x trace of the live site, the six longest main-thread tasks and the whole-trace
+totals both point at the same thing - **synchronous JavaScript in animation frames and in
+script evaluation**, not at shader compilation, which barely registers.
+
+| the longest tasks | what is inside |
+|---|---|
+| **1,710 ms** | one `FireAnimationFrame` -> `FunctionCall`, including 214 ms blocked on the GPU command buffer |
+| **1,661 ms** | one `FunctionCall`, with a major GC inside it |
+| **1,556 ms** | `EvaluateScript`, of which 1,495 ms is microtasks |
+| **953 ms** | `EvaluateScript` again, 917 ms of microtasks |
+| **935 ms** | a frame callback containing **548 ms of image decoding** |
+
+Whole-trace totals: `FunctionCall` 11.0 s, `FireAnimationFrame` 6.0 s, `EvaluateScript`
+2.7 s, `RunMicrotasks` 2.8 s, `UpdateLayoutTree` 970 ms, `Decode Image` 566 ms.
+
+### Two things that are specific enough to act on
+
+1. **One animation frame costs 1.7 seconds.** The scene builds in a single frame instead of
+   spreading the work, so the main thread is unavailable for that entire time.
+2. **Image decoding runs inside a frame callback** - 548 ms of it. Decoding belongs off the
+   main thread, before the texture is needed.
+
+Shader compilation, the obvious suspect, measured **6.5 ms**. It is not the problem, and
+guessing would have sent the first round at it.
+
 ## What to do when this is picked up - do not start by fixing
 
 1. Measure where the 39 seconds actually go, on a throttled profile, and write it down
