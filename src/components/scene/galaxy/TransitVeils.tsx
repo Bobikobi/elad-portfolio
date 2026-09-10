@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import { featherSpriteProps } from '@/lib/spaceMaterials';
+import { loadBitmapTexture } from '@/lib/bitmapTexture';
 
 /**
  * Photographic nebula veils threaded along the dive corridor (T2.5). Real
@@ -96,17 +97,17 @@ function veilBase(v: VeilDef): THREE.Vector3 {
 
 export default function TransitVeils() {
   const group = useRef<THREE.Group>(null);
+  const gl = useThree((s) => s.gl);
 
-  const textures = useMemo(
+  const textureLoads = useMemo(
     () =>
-      VEILS.map((v) => {
-        const tx = new THREE.TextureLoader().load(`/textures/nebula/${v.slug}.webp`);
-        tx.colorSpace = THREE.SRGBColorSpace;
-        return tx;
-      }),
-    []
+      VEILS.map((v) =>
+        loadBitmapTexture(`/textures/nebula/${v.slug}.webp`, gl, { colorSpace: THREE.SRGBColorSpace })
+      ),
+    [gl]
   );
-  useEffect(() => () => textures.forEach((t) => t.dispose()), [textures]);
+  const textures = textureLoads.map((load) => load.texture);
+  useEffect(() => () => textureLoads.forEach((load) => load.dispose()), [textureLoads]);
 
   const bases = useMemo(() => VEILS.map(veilBase), []);
 

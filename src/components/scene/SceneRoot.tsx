@@ -19,6 +19,7 @@ import { FramePacer, ResolutionScaler } from './PerfPacer';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
+import StartupReveal from './StartupReveal';
 import {
   ClockFreezeProbe,
   HudProbe,
@@ -69,8 +70,11 @@ function Warmup() {
       return;
     }
     frames.current += 1;
-    if (frames.current === 3) useScene.getState().setSceneReady(true);
-  });
+    // StartupReveal spreads first uploads/draws across the opening frames, and the galaxy
+    // generator uses twenty slices on the high tier. Keep the loader through all of those
+    // stages, then require the same three fully composited frames as before.
+    if (frames.current === 32) useScene.getState().setSceneReady(true);
+  }, -2);
   return null;
 }
 
@@ -118,18 +122,26 @@ export default function SceneRoot() {
         <CameraRig />
         {/* Shared SKY - lives outside both acts and never swaps, so the universe is
             continuous through the transition (only the "middle" changes). */}
-        <GradientSky solar={act === 'solar'} />
+        <StartupReveal after={0}>
+          <GradientSky solar={act === 'solar'} />
+        </StartupReveal>
         {/* Seeded (see SeededStars): drei's own Stars rolls this field fresh on every load, which
             G5 caught after the seeding pass had closed every Math.random() in our own files. */}
-        <SeededStars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.55} fade speed={0.5} />
-        <HeroStars />
+        <StartupReveal after={1}>
+          <SeededStars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.55} fade speed={0.5} />
+        </StartupReveal>
+        <StartupReveal after={2}>
+          <HeroStars />
+        </StartupReveal>
         {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
             In the solar act the veils drop to a faint backdrop so they read as distant
             nebulosity, not the milky haze that used to wash the poster frame - corners
             stay <10% brightness but never empty (stars + a nebula touch everywhere). */}
         {/* B4: 0.28 left the solar sky effectively empty, which is most of why the worlds
             read as faded. The veils are a BACKDROP, not a rumour of one. */}
-        <Nebula intensity={act === 'solar' ? 0.5 : 1} />
+        <StartupReveal after={3}>
+          <Nebula intensity={act === 'solar' ? 0.5 : 1} />
+        </StartupReveal>
         {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
         {/* In-world swap curtain - persists across the act swap, covers the seam. */}
         <SwapMask />

@@ -12,6 +12,7 @@ import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
 import { makeRng, SEED } from '@/lib/rng';
+import { loadBitmapTexture } from '@/lib/bitmapTexture';
 import {
   AMBIENT_FILL_INTENSITY,
   EARTH_ALBEDO_MULTIPLIER,
@@ -27,6 +28,7 @@ import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
 import ZodiacalDust from '../solar/ZodiacalDust';
+import StartupReveal from '../StartupReveal';
 
 const _wp = new THREE.Vector3();
 const DEG2RAD = Math.PI / 180;
@@ -86,19 +88,13 @@ function hiTierFor(): HiTier {
 }
 
 /** Fetch + decode a tier texture off the critical path and pre-upload it to the GPU so the
- *  material swap never stalls the flight. flipY handled to match the base TextureLoader map. */
+ *  material swap never stalls the flight. The shared loader owns the flipY contract. */
 async function loadHiRes(key: string, tier: HiTier, gl: THREE.WebGLRenderer): Promise<THREE.Texture | null> {
-  const res = await fetch(`/textures/hi/${key}.${tier}.webp`);
-  if (!res.ok) return null;
-  const bitmap = await createImageBitmap(await res.blob(), { imageOrientation: 'flipY' });
-  const tex = new THREE.Texture(bitmap);
-  tex.flipY = false; // bitmap already flipped → matches the base map's orientation
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
-  tex.wrapS = THREE.RepeatWrapping; // match the base map (A2 band shear)
-  tex.needsUpdate = true;
-  gl.initTexture(tex);
-  return tex;
+  return loadBitmapTexture(`/textures/hi/${key}.${tier}.webp`, gl, {
+    colorSpace: THREE.SRGBColorSpace,
+    anisotropy: Math.min(8, gl.capabilities.getMaxAnisotropy()),
+    wrapS: THREE.RepeatWrapping, // match the base map (A2 band shear)
+  }).ready;
 }
 
 /** A radial ring strip (colour + alpha vs radius) on a 1-D canvas — mapped radially by
@@ -418,15 +414,18 @@ const earthCloudFrag = /* glsl */ `
 
 function EarthLayers({ radius }: { radius: number }) {
   const clouds = useRef<THREE.Mesh>(null);
-  const cloudTex = useMemo(() => {
-    const tx = new THREE.TextureLoader().load('/textures/earth_clouds.webp');
-    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
-  }, []);
-  const nightTex = useMemo(() => {
-    const tx = new THREE.TextureLoader().load('/textures/earth_night.webp');
-    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
-  }, []);
-  useEffect(() => () => { cloudTex.dispose(); nightTex.dispose(); }, [cloudTex, nightTex]);
+  const gl = useThree((s) => s.gl);
+  const cloudLoad = useMemo(
+    () => loadBitmapTexture('/textures/earth_clouds.webp', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: 8 }),
+    [gl]
+  );
+  const nightLoad = useMemo(
+    () => loadBitmapTexture('/textures/earth_night.webp', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: 8 }),
+    [gl]
+  );
+  const cloudTex = cloudLoad.texture;
+  const nightTex = nightLoad.texture;
+  useEffect(() => () => { cloudLoad.dispose(); nightLoad.dispose(); }, [cloudLoad, nightLoad]);
   const cloudUniforms = useMemo(() => ({ uMap: { value: cloudTex } }), [cloudTex]);
   const nightUniforms = useMemo(() => ({ uMap: { value: nightTex } }), [nightTex]);
   useFrame((_, dt) => { if (clouds.current) clouds.current.rotation.y += dt * 0.045; });
@@ -466,13 +465,13 @@ const _mearth = new THREE.Vector3();
 function EarthMoon({ planetSize }: { planetSize: number }) {
   const pivot = useRef<THREE.Group>(null);
   const body = useRef<THREE.Mesh>(null);
-  const tex = useMemo(() => {
-    const tx = new THREE.TextureLoader().load('/textures/moon.jpg');
-    tx.colorSpace = THREE.SRGBColorSpace;
-    tx.anisotropy = 8;
-    return tx;
-  }, []);
-  useEffect(() => () => { tex.dispose(); }, [tex]);
+  const gl = useThree((s) => s.gl);
+  const textureLoad = useMemo(
+    () => loadBitmapTexture('/textures/moon.jpg', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: 8 }),
+    [gl]
+  );
+  const tex = textureLoad.texture;
+  useEffect(() => () => { textureLoad.dispose(); }, [textureLoad]);
   const r = planetSize * MOON_DIST;
   useFrame((state) => {
     const a = (state.clock.elapsedTime / MOON_PERIOD) * Math.PI * 2;
@@ -554,13 +553,16 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   };
   useCursor(hovered && (!!page || decorative));
 
-  const texture = useMemo(() => {
-    const tx = new THREE.TextureLoader().load(spec.tex);
-    tx.colorSpace = THREE.SRGBColorSpace;
-    tx.anisotropy = 8;
-    tx.wrapS = THREE.RepeatWrapping; // let the A2 band shear scroll U seamlessly
-    return tx;
-  }, [spec.tex]);
+  const textureLoad = useMemo(
+    () =>
+      loadBitmapTexture(spec.tex, gl, {
+        colorSpace: THREE.SRGBColorSpace,
+        anisotropy: 8,
+        wrapS: THREE.RepeatWrapping, // let the A2 band shear scroll U seamlessly
+      }),
+    [spec.tex, gl]
+  );
+  const texture = textureLoad.texture;
   // Albedo material. Page planets get a mix-in hi-res sampler (A1): the base 2K map is
   // always the floor; `uHiMap`/`uHiMix` crossfade the focused hi-res texture in on top of
   // it in the exact same UV space, so upgrade/downgrade is a fade, never a pop.
@@ -719,11 +721,11 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     if (HUD_AVAILABLE) phaseSetters[spec.key] = (a: number) => { angle.current = a; };
     return () => {
       delete phaseSetters[spec.key];
-      texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose();
+      textureLoad.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose();
       planetPositions.delete(spec.key); planetRadii.delete(spec.key); planetRingNormal.delete(spec.key);
       if (useScene.getState().hoveredBody === spec.key) useScene.getState().setHoveredBody(null);
     };
-  }, [texture, ringTex, ringGeo, spec.key, spec.size]);
+  }, [textureLoad, ringTex, ringGeo, spec.key, spec.size, spec.rings]);
 
   // A1: lazily upgrade this planet's albedo the moment it becomes the focused world, and
   // fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
@@ -897,16 +899,26 @@ export default function SolarAct() {
       <ambientLight intensity={AMBIENT_FILL_INTENSITY} />
       {/* Star sphere + nebulae come from the shared SceneRoot sky (one universe). */}
       <group ref={root} rotation={[0.42, 0, 0]} name="solarRoot">
-        <Sun />
-        <ZodiacalDust count={high ? 5200 : 1900} />
-        {PLANETS.map((p) => (
-          <Planet key={p.key} spec={p} />
+        <StartupReveal after={0}>
+          <Sun />
+        </StartupReveal>
+        <StartupReveal after={1}>
+          <ZodiacalDust count={high ? 5200 : 1900} />
+        </StartupReveal>
+        {PLANETS.map((p, i) => (
+          <StartupReveal key={p.key} after={i + 2}>
+            <Planet spec={p} />
+          </StartupReveal>
         ))}
         {/* Cost-only tier split (the composition LAW): identical belt, fewer bodies. */}
-        <AsteroidBelt count={high ? 17000 : 6000} />
+        <StartupReveal after={PLANETS.length + 2}>
+          <AsteroidBelt count={high ? 17000 : 6000} />
+        </StartupReveal>
       </group>
       {/* A4: per-world nebula backdrop (world-fixed, shows only while a world is focused). */}
-      <WorldBackdrop />
+      <StartupReveal after={PLANETS.length + 3}>
+        <WorldBackdrop />
+      </StartupReveal>
       {/* Section pills, the belt marker and the decorative-body tooltips all live in the
           DOM overlay now (PlanetLabels) - see the note there on frame ordering. */}
     </>
