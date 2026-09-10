@@ -18,6 +18,25 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+/**
+ * Vercel's preview deployments sit behind SSO, which an automated harness cannot pass. The
+ * project's standing rule 2 says numbers only count from a deployed alias, so without this
+ * every stage is measured on localhost and stays unsigned. A Protection Bypass for
+ * Automation secret opens exactly those deployments to a header.
+ *
+ * The secret is read from a file rather than an argument or an env var written inline: it
+ * must not end up in shell history, a command log, or a committed script.
+ */
+const BYPASS_FILE = process.env.VERCEL_BYPASS_FILE
+  || path.join(os.homedir(), '.claude', 'secrets', 'vercel-bypass.txt');
+const VERCEL_BYPASS = (() => {
+  try { return fs.readFileSync(BYPASS_FILE, 'utf8').trim() || null; } catch { return null; }
+})();
+const applyBypass = async (page) => {
+  if (!VERCEL_BYPASS || !/vercel\.app/.test(BASE)) return;
+  await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': VERCEL_BYPASS });
+};
+
 const BASE = process.env.BASE || 'http://localhost:3112';
 const BYPASS = process.env.BYPASS || '';
 const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
@@ -274,6 +293,7 @@ try {
   // Guard before any trace/profile starts. A fresh target in this browser uses the same GPU
   // process and ANGLE backend as the measurement target.
   const guardPage = await browser.newPage();
+  await applyBypass(page);
   const gpu = await guardPage.evaluate(() => {
     const gl = document.createElement('canvas').getContext('webgl2');
     if (!gl) return 'NO WEBGL2 CONTEXT';
@@ -287,6 +307,8 @@ try {
   }
 
   page = await browser.newPage();
+  await applyBypass(page);
+  
   await page.setViewport({
     width: EMULATION.viewport.width,
     height: EMULATION.viewport.height,

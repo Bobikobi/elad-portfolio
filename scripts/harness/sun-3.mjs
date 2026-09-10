@@ -30,6 +30,25 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+/**
+ * Vercel's preview deployments sit behind SSO, which an automated harness cannot pass. The
+ * project's standing rule 2 says numbers only count from a deployed alias, so without this
+ * every stage is measured on localhost and stays unsigned. A Protection Bypass for
+ * Automation secret opens exactly those deployments to a header.
+ *
+ * The secret is read from a file rather than an argument or an env var written inline: it
+ * must not end up in shell history, a command log, or a committed script.
+ */
+const BYPASS_FILE = process.env.VERCEL_BYPASS_FILE
+  || path.join(os.homedir(), '.claude', 'secrets', 'vercel-bypass.txt');
+const VERCEL_BYPASS = (() => {
+  try { return fs.readFileSync(BYPASS_FILE, 'utf8').trim() || null; } catch { return null; }
+})();
+const applyBypass = async (page) => {
+  if (!VERCEL_BYPASS || !/vercel\.app/.test(BASE)) return;
+  await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': VERCEL_BYPASS });
+};
+
 const BASE = process.env.BASE || 'http://localhost:3112';
 const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
 const OUT = process.env.OUT || path.join(process.cwd(), '.harness-out', 'sun-3');
@@ -93,6 +112,8 @@ const report = { base: BASE, tag: TAG, when: new Date().toISOString(), build };
 // ---------------------------------------------------------------- A: solar overview
 {
   let page = await browser.newPage();
+  await applyBypass(page);
+  
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 });
   await page.goto(`${BASE}/?hud=1&tier=high`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await wait(SETTLE);
@@ -149,6 +170,8 @@ const report = { base: BASE, tag: TAG, when: new Date().toISOString(), build };
   const PANORAMA = { width: 3600, height: 900, dpr: 1 };
   await page.close();
   page = await browser.newPage();
+  await applyBypass(page);
+  
   await page.setViewport({ width: PANORAMA.width, height: PANORAMA.height, deviceScaleFactor: PANORAMA.dpr });
   await page.goto(`${BASE}/?hud=1&tier=high`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await wait(SETTLE);
@@ -224,6 +247,8 @@ const report = { base: BASE, tag: TAG, when: new Date().toISOString(), build };
 // ---------------------------------------------------------------- B: the Mars world
 {
   const page = await browser.newPage();
+  await applyBypass(page);
+  
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await page.goto(`${BASE}/contact?hud=1&tier=high`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await wait(SETTLE);
