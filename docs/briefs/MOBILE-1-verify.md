@@ -1,0 +1,179 @@
+# MOBILE-1 verify - M3 and M4 pass, M1 and M2 do not, and the eye finds a regression
+
+Measured 2026-09-11 against [MOBILE-1-brief.md](MOBILE-1-brief.md), on branch
+`mobile-1-wip` at `e8c7a74`, baseline `codex/p1-pilot` at `64f4efd`.
+
+> `codex/p1-pilot@64f4efd` differs from `fb7d269` - the commit the brief's baseline numbers
+> came from - only in `docs/` and `scripts/harness/`. No `src/` change, so the bundle under
+> test is the same one the brief measured.
+
+## Verdict
+
+| # | criterion | target | measured | verdict |
+|---|---|---|---|---|
+| **M1** | total blocking time | <= 5,000 ms | **10,114 ms** (median of 3; baseline 10,188) | **FAIL** |
+| **M2** | longest main-thread task | <= 600 ms | **1,600 ms** (median of 3; baseline 1,734) | **FAIL** |
+| **M3** | the settled scene is byte-identical | mean 0.0000, max 0, six views | **0.0000 / 0 on all six** | **PASS** |
+| **M4** | the tier law | calls, triangles, medians unchanged | calls 69/64, tris 167,134/146,549, medians 16.700/16.700 - **identical to P7** | **PASS** |
+| risk clause | look at the first two seconds by eye | no visible regression | **the loader lifts before the galaxy exists** | **REGRESSION** |
+
+The stage does not close. M3 was the blocker and is now fixed; M1 and M2 are the point of
+the stage and are untouched by the work done so far.
+
+---
+
+## M3 - what was actually wrong, and the two rounds it took to stop bisecting
+
+The previous commit recorded six different changes that all produced the identical failing
+number (mean 2.115, max 248 on the overview, five views already at zero) and correctly
+concluded that the variable being changed was not in the causal path. It localised the cause
+to `SolarAct.tsx` and ruled out the base texture loader's options.
+
+**The cause is in `src/lib/bitmapTexture.ts`, which `SolarAct.tsx` calls** - so the bisect
+pointed at the right call site and the wrong file, and "not the loader options" was true
+while "not the loader" was not.
+
+### The symptom was misread as darkening
+
+The recorded symptom was "darker in 88,727 pixels". Looking at the frames rather than the
+scalar: the planets are not dimmer, they are **untextured**. Saturn's globe is black inside
+intact rings, Earth is a black disc behind its atmosphere rim, Mars is a dark teal ball. The
+albedo map never arrives, `texture2D(map, uv)` returns black, and `diffuseColor *= 0`.
+
+Confirmed directly rather than inferred - `window.__three`, overview, after the scroll:
+
+    11 of 11 planet/cloud/night maps:  image = null, version = 0
+    every /textures/*.jpg|webp request: issued twice, one of each pair net::ERR_ABORTED
+
+### Why the five worlds passed and the overview did not
+
+`uHiMix` crossfades the focused world's hi-res map over the base one in the same UV space.
+In all five worlds the black base map is covered. On the overview nothing covers it. That is
+also the explanation for the previous commit's most confusing observation - *"the same
+planets in their own focused worlds are byte-identical, where the hi-res map replaces the
+base one."* It was the answer, written down as a puzzle.
+
+### The mechanism
+
+The loader shell is built in a `useMemo` and released in a `useEffect` cleanup, and React
+does not pair those one-for-one. Traced on the overview: two shells exist per URL and
+`Planet.useEffect`'s cleanup disposes **the one the material is holding**.
+
+`dispose()` was terminal - it aborted the fetch, closed the bitmap, and gated the upload
+behind a `disposed` flag - so that shell could never come back.
+
+`TextureLoader.load()`, which it replaced, has the opposite property: `Texture.dispose()`
+frees the GPU copy and nothing else, and the next draw re-uploads from `texture.image`.
+**That property is what let the old code survive React's scheduling.** The loader now keeps
+it: the fetch always finishes, the decode always lands in the shell, and `dispose()` frees
+the GPU copy without making the shell unusable.
+
+### The instrument, first
+
+Per the standing rule, before judging anything: `m1-before` vs `m1-repro` on **unchanged**
+code reproduced the failure to the last decimal - overview 2.115/248, floor 0.000/0, the
+other five views 0.000/0. So the instrument was sound and the branch state matched.
+
+After the fix, `m1-before` vs `m1-fix5`:
+
+    view            floor mean/max     diff mean/max   >1 of 255  verdict
+    overview               0.000/0           0.000/0       0.00%  PASS
+    about                  0.000/0           0.000/0       0.00%  PASS
+    services               0.000/0           0.000/0       0.00%  PASS
+    projects               0.000/0           0.000/0       0.00%  PASS
+    technologies           0.000/0           0.000/0       0.00%  PASS
+    contact                0.000/0           0.000/0       0.00%  PASS
+
+---
+
+## M1 and M2 - the instrument was rebuilt first, and then the answer was no
+
+### The brief's numbers could not be recomputed from the run manifest
+
+The manifest's `longTasks` come from the `longtask` PerformanceObserver and give 8,659 ms
+for the deployed run the brief records as 9,949 ms - and 35 tasks where the brief says 42.
+The brief's numbers come from the **top-level `CrRendererMain` tasks in the trace**, the
+same denominator `mobile-startup.py` uses. Recomputed that way:
+
+| run | tasks >= 50 ms | TBT | longest | brief says |
+|---|---|---|---|---|
+| `prod20` (local prod, `fb7d269`) | 46 | **9,824** | **1,660** | 9,824 / 1,660 |
+| `live20` (deployed site) | 42 | **9,949** | **1,710** | 9,949 / 1,710 |
+
+Exact on both. The definition is settled and is written down here because it was not
+written down anywhere before.
+
+### Three runs of each build, so the spread is measured and not assumed
+
+Local production build, `NEXT_PUBLIC_VERCEL_ENV=production`, 20x CPU, slow 4G, Moto G Power
+profile, same machine, same session:
+
+| build | TBT (3 runs) | longest task (3 runs) | tasks >= 50 ms |
+|---|---|---|---|
+| baseline `64f4efd` | 9,978 · 10,188 · 10,366 | 1,651 · 1,734 · 1,795 | 46 · 52 · 53 |
+| `mobile-1-wip` `e8c7a74` | 10,050 · 10,249 · 10,114 | 1,599 · 1,600 · 1,643 | 99 · 70 · 75 |
+
+**M1: no movement.** Medians 10,188 -> 10,114, well inside a spread of ~390 ms on the
+baseline alone. The target is 5,000.
+
+**M2: 1,734 -> 1,600**, an 8% improvement against a 144 ms spread on the baseline. Real but
+marginal, and the target is 600.
+
+### And one number got materially worse
+
+Total main-thread time, same runs: **20,341 ms -> 30,946 ms**. The work was sliced into
+roughly half again as many tasks (46-53 -> 70-99) without being reduced, and the page stays
+busy about ten seconds longer. Spreading the build across frames did what it says; it did
+not make the build cheaper, and the criterion is about how long the thread is unavailable.
+
+The attribution says the same thing - the two things the stage was allowed to change did
+move, and they are not where the time is:
+
+| phase | baseline | wip |
+|---|---|---|
+| first-frame render | 1,562 ms | **1,020 ms** |
+| texture decode and upload | 955 ms | **805 ms** |
+| module evaluation | 2,740 ms | 2,773 ms |
+| everything else | 9,960 ms | **16,175 ms** |
+| unattributed | 4,992 ms | **10,025 ms** |
+
+Between them the two intended wins are worth ~690 ms against a 10,000 ms criterion.
+
+---
+
+## The risk clause, answered by eye
+
+The brief: *"M3 proves only the SETTLED frame. Whoever runs this must also look at the first
+two seconds by eye and say so."*
+
+Looked at, both builds, 6x CPU, filmstrip every 250 ms from navigation
+(`scripts/harness/startup-filmstrip.mjs`, artifacts in `.harness-out/startup-filmstrip`).
+
+**There is a regression, and it is the exact shape the brief predicted.** The baseline lifts
+its loader onto a finished spiral galaxy. The branch lifts it earlier, onto a sky with
+nebulae and stars and **no galaxy at all**; the spiral appears a second or more later.
+
+The cause is structural, not a tuning miss. `Warmup` now signals ready at frame 32, while
+`Galaxy` builds its 200,000 points in 20 slices of 10,000, one per `requestAnimationFrame`,
+and only attaches its attributes on the last slice. Those two counters are independent, the
+galaxy's frames are much more expensive than Warmup's, and nothing makes the reveal wait for
+the galaxy. The scene reveals on a frame count that no longer corresponds to the scene being
+built.
+
+M3 cannot see this: none of its six views is the galaxy act.
+
+---
+
+## What this leaves
+
+1. **M3's fix is a keeper and is independent of the rest.** It is a correctness fix to a
+   loader that would have shipped black planets on the home page.
+2. **M1 and M2 need a different lever.** 10,000 ms of blocking is not in first-frame render
+   or texture decode - together those are ~2,500 ms and the stage has already taken ~690 ms
+   out of them. The brief's two allowed changes cannot reach the target, so either the stage
+   gets a new allowance or the target moves. That is the owner's call, not this stage's.
+3. **The reveal gate needs to depend on the galaxy**, or the galaxy must not be sliced.
+4. **Rule 2 is not satisfied.** Every number here is localhost - M3/M4 on the dev server,
+   M1/M2 on a local production build. The brief establishes local-equals-deployed for M1/M2
+   (9,824 against 9,949), which is why the local build is the stated reproduction; M3 has
+   never been run against an alias.
