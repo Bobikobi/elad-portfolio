@@ -2,6 +2,7 @@
 import { forwardRef, useMemo } from 'react';
 import { Effect } from 'postprocessing';
 import { Uniform, type WebGLRenderer } from 'three';
+import { HUD_AVAILABLE } from './DebugHud';
 
 /**
  * The aperture + the tone mapper, as one fullscreen step inside the composer.
@@ -112,9 +113,37 @@ void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor
 }
 `;
 
+/**
+ * P4 measurement seam, HUD builds only (`?noRolloff`).
+ *
+ * P4 has to know how much `highlightRolloff` is taking from each body, and the shader gates
+ * itself on the PRE-ACES HDR colour while a screenshot is post-ACES and clipped at 255. So
+ * the spread the shader acts on cannot be recovered from a frame - a pixel that arrives at
+ * (255,255,255) tells you nothing about how lopsided it was going in. Holding everything
+ * else and switching the function off is the only measurement that needs no inversion and
+ * no proxy. It is the same method SUN-3 used to settle god rays against bloom.
+ *
+ * Built by string replacement from the shader above rather than by branching inside it, so
+ * that WITHOUT the flag the program text is byte-identical to what shipped - no new uniform,
+ * no new branch, nothing for a compiler to schedule differently. Verified, not assumed:
+ * `photometry-diff` against `m1-before` is mean 0.0000 / max 0 on all six views.
+ */
+const FRAGMENT_NO_ROLLOFF = (() => {
+  const marker = 'acesFilmic( highlightRolloff( exposed ) )';
+  if (!fragmentShader.includes(marker)) {
+    throw new Error('P4 seam: the highlightRolloff call site has moved - the ?noRolloff measurement would silently measure nothing');
+  }
+  return fragmentShader.replace(marker, 'acesFilmic( exposed )');
+})();
+
+const rolloffDisabled = () =>
+  HUD_AVAILABLE &&
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).has('noRolloff');
+
 class ExposureToneMapEffect extends Effect {
-  constructor() {
-    super('ExposureToneMap', fragmentShader, {
+  constructor(noRolloff = false) {
+    super('ExposureToneMap', noRolloff ? FRAGMENT_NO_ROLLOFF : fragmentShader, {
       uniforms: new Map([['exposure', new Uniform(1)]]),
     });
   }
@@ -127,7 +156,7 @@ class ExposureToneMapEffect extends Effect {
 
 /** Place AFTER God Rays / Bloom (those want HDR) and BEFORE the grade, grain and vignette. */
 const ExposureToneMap = forwardRef<ExposureToneMapEffect>(function ExposureToneMap(_props, ref) {
-  const effect = useMemo(() => new ExposureToneMapEffect(), []);
+  const effect = useMemo(() => new ExposureToneMapEffect(rolloffDisabled()), []);
   return <primitive ref={ref} object={effect} dispose={null} />;
 });
 

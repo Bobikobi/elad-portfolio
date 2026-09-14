@@ -337,6 +337,12 @@ So P4 is now two separate things, and only the first is P4:
    problem needing a spread-independent answer: per-body or per-material trim, or a peak
    compressor that does not consult chroma. Not designed here, and not P4.
 
+   > **CHALLENGED 2026-09-14, PROVISIONAL** - see [P4-brief.md](P4-brief.md), "STEP 1 RESULT".
+   > With the function held off and everything else fixed, Venus's all-channel clipping falls from
+   > 1,483 to 434 pixels and Earth's world from 9,712 to 7,786. The neutrality above was measured on
+   > the output, after `highlightRolloff` had already pushed those pixels toward white. Pending the
+   > repeatability control; not yet a correction.
+
 **Acceptance:** Mars's disc clipping stays at 0% (it is currently 5.0% and failing - so this
 stage inherits a fix, not just a guard), and the mean chroma of every focused world's disc
 rises or holds. No frame goes over 250 in all three channels anywhere - the same corrected threshold as P3-1.

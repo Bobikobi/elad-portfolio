@@ -149,6 +149,70 @@ I recommend deciding 2 and 3 **after step 1**, on the measurement, and deciding 
 
 ---
 
+## STEP 1 RESULT - 2026-09-14 - PROVISIONAL
+
+**Not yet valid.** One held pair, rolloff ON (`p4-on`) against OFF (`p4-off`, the `?noRolloff`
+seam, which is byte-identical when absent). The repeatability control - a second ON capture,
+`p4-on2`, which must read exactly zero against `p4-on` - was still running when this was
+written. If it does not read zero, everything below is withdrawn.
+
+`scripts/harness/p4-chroma.py p4-on p4-off`. "Reach" is the share of a disc whose pixels differ
+at all; "taken" is how much of the lit face's chroma the function removes.
+
+    view         body     disc px   reach   chroma on   off    taken   clip any on/off   all on/off
+    overview     mercury     1330   14.29%    0.0379  0.0411    7.74%        2/3              0/0
+    overview     venus       2081   97.36%    0.0126  0.0702   82.07%     1714/1852        1483/434
+    overview     earth      13140    0.57%    0.0388  0.0393    1.50%        0/0              0/0
+    overview     mars        1999   68.38%    0.1106  0.2938   62.34%        0/1020           0/0
+    overview     jupiter    23793   35.07%    0.0526  0.0690   23.74%        0/0              0/0
+    overview     saturn      6622   97.19%    0.0388  0.0746   48.04%      481/1502           0/0
+    overview     uranus      5236   94.81%    0.0290  0.0373   22.23%        0/0              0/0
+    overview     neptune     5926  100.00%    0.0271  0.0480   43.55%        0/0              0/0
+    about        earth     270482   50.22%    0.1096  0.1414   22.49%    21458/22966      9712/7786
+    services     jupiter   279400   48.45%    0.0720  0.0971   25.89%       24/434            0/0
+    projects     saturn    267230   76.99%    0.0744  0.1112   33.07%        0/0              0/0
+    technologies jupiter    46300   48.83%    0.0576  0.0776   25.82%     1627/2909         107/82
+    contact      mars      286936   75.38%    0.1348  0.3512   61.63%     5371/126345        0/0
+
+    sun, overview    core r<0.25  reach 22.66%  taken 0.35%    mid-disc 0.13%    limb r .90-.96 0.14%
+    frame pixels changed per view: overview 2.3%, about 12.3%, services 12.0%, projects 18.3%,
+                                   technologies 1.8%, contact 18.8%
+
+`technologies` tracks **Jupiter**, not the belt - that is the capture's own probe body.
+
+### What it overturns in this brief, if the control holds
+
+1. **The prize this brief named is gone.** It said the real reason to do P4 is the saturation
+   the sun loses - *"49% at the centre against 11% at the limb"*. On today's sun the function
+   takes **0.35% at the core and 0.14% at the limb.** That figure predates P3 and P7, which both
+   moved the sun; it was carried forward without being re-measured, and it was pitched to the
+   owner twice as the case for this stage. It should not have been.
+
+2. **Saturn is P4's.** The rolloff reaches 97% of its disc on the overview and takes 48% of its
+   chroma. Question 2 is answered: it belongs here.
+
+3. **The plan's "not P4" bucket was measured wrong.** The megaplan (2026-08-17) recorded Earth's
+   cloud tops and Venus as neutral white, spread 0.004-0.005, "so no choice of HL_KNEE, HL_RANGE
+   or HL_MAX moves them." With the function held OFF, **Venus clips in all three channels on
+   434 pixels instead of 1,483, and Earth's world on 7,786 instead of 9,712.** The rolloff mixes a
+   bright colour toward its own luminance - toward white - so it is what turns a coloured
+   highlight into the neutral burnt white. The spread was read off the output, after the function
+   had already neutralised those pixels: an instrument measuring its own subject's result, which
+   is standing rule 6's failure mode. Question 3 changes with it: P4-2 may be reachable.
+
+4. **And the trade is real.** Off, single-channel clipping jumps where the function was guarding a
+   channel - Mars's world goes from 5,371 to **126,345** pixels over 250 in some channel. Re-scoping
+   exchanges one kind of clipping for another; it is not free saturation.
+
+### Unresolved, and not to be papered over
+
+**Two instruments disagree 23-fold on Mars's world.** `sun-3.py` reads 0.08% of the disc over 250
+in any channel; this capture reads 5,371 of 286,936 disc pixels, 1.87%. They use different
+captures and different disc radii. The "Mars is at 0.08%" correction earlier in this brief rests
+on one of them. Which one is right is not known yet.
+
+---
+
 ## Out of scope
 
 The neutral-peak problem (Earth's clouds, Venus, and possibly Saturn). Any change to

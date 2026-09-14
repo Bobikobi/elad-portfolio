@@ -155,9 +155,13 @@ const requireRealGpu = async (page) => {
   return gpu;
 };
 
+// P4 measurement seam: extra query string, appended verbatim. Added 2026-09-14 so the
+// rolloff can be switched off (`EXTRA_QS=noRolloff`) with every other capture condition -
+// the fixed step, the frozen clock, the frame anchor - held exactly as they are.
+const EXTRA_QS = process.env.EXTRA_QS || '';
 const fixedStepUrl = (pathname, tier) => {
   const join = pathname.includes('?') ? '&' : '?';
-  return `${BASE}${pathname}${join}hud=1&tier=${tier}&fixedStep`;
+  return `${BASE}${pathname}${join}hud=1&tier=${tier}&fixedStep${EXTRA_QS ? `&${EXTRA_QS}` : ''}`;
 };
 
 const waitForFixedFrame = async (page, target, id) => {
