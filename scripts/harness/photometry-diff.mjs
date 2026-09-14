@@ -115,7 +115,15 @@ const hideDom = (page) =>
     const style = document.createElement('style');
     style.id = 'harness-hide-dom';
     style.textContent =
-      'body *:not([data-harness-keep]) { visibility: hidden !important; }' +
+      // transition/animation:none is load-bearing, not tidiness. `visibility` is a DISCRETE
+      // property: under `transition: all 0.3s` - which the site header carries - it does not
+      // flip until the transition's midpoint, so "hidden" arrives ~150ms late and later still
+      // when the main thread is busy settling the scene. The assert below waits 400ms, which
+      // was enough by luck on every run taken before 2026-09-14 and not enough on a tree
+      // whose first paint was slower. Killing the transition removes the race instead of
+      // widening the wait, which would only have made the race rarer.
+      'body *:not([data-harness-keep]) { visibility: hidden !important;' +
+      ' transition: none !important; animation: none !important; }' +
       'body [data-harness-keep] { visibility: visible !important; }';
     document.head.appendChild(style);
     return true;
