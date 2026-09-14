@@ -2,6 +2,8 @@
 
 Measured 2026-09-11 against [MOBILE-1-brief.md](MOBILE-1-brief.md), on branch
 `mobile-1-wip` at `e8c7a74`, baseline `codex/p1-pilot` at `64f4efd`.
+**Re-measured 2026-09-14 on the deployed preview aliases, so rule 2 is satisfied** - see
+"On the alias" at the end.
 
 > `codex/p1-pilot@64f4efd` differs from `fb7d269` - the commit the brief's baseline numbers
 > came from - only in `docs/` and `scripts/harness/`. No `src/` change, so the bundle under
@@ -11,9 +13,9 @@ Measured 2026-09-11 against [MOBILE-1-brief.md](MOBILE-1-brief.md), on branch
 
 | # | criterion | target | measured | verdict |
 |---|---|---|---|---|
-| **M1** | total blocking time | <= 5,000 ms | **10,114 ms** (median of 3; baseline 10,188) | **FAIL** |
-| **M2** | longest main-thread task | <= 600 ms | **1,600 ms** (median of 3; baseline 1,734) | **FAIL** |
-| **M3** | the settled scene is byte-identical | mean 0.0000, max 0, six views | **0.0000 / 0 on all six** | **PASS** |
+| **M1** | total blocking time | <= 5,000 ms | **10,114 ms** local (baseline 10,188) · **10,797** alias (baseline 10,816) | **FAIL** |
+| **M2** | longest main-thread task | <= 600 ms | **1,600 ms** local (baseline 1,734) · **1,664** alias (baseline 1,765) | **FAIL** |
+| **M3** | the settled scene is byte-identical | mean 0.0000, max 0, six views | **0.0000 / 0 on all six** - localhost AND alias-to-alias | **PASS, signed** |
 | **M4** | the tier law | calls, triangles, medians unchanged | calls 69/64, tris 167,134/146,549, medians 16.700/16.700 - **identical to P7** | **PASS** |
 | risk clause | look at the first two seconds by eye | no visible regression | **the loader lifts before the galaxy exists** | **REGRESSION** |
 
@@ -173,7 +175,58 @@ M3 cannot see this: none of its six views is the galaxy act.
    out of them. The brief's two allowed changes cannot reach the target, so either the stage
    gets a new allowance or the target moves. That is the owner's call, not this stage's.
 3. **The reveal gate needs to depend on the galaxy**, or the galaxy must not be sliced.
-4. **Rule 2 is not satisfied.** Every number here is localhost - M3/M4 on the dev server,
-   M1/M2 on a local production build. The brief establishes local-equals-deployed for M1/M2
-   (9,824 against 9,949), which is why the local build is the stated reproduction; M3 has
-   never been run against an alias.
+4. **Rule 2 is satisfied for M1, M2 and M3** (see below). M4 remains localhost: `p7-sun`
+   needs the debug HUD and the same numbers were signed under P7.
+
+---
+
+## On the alias - 2026-09-14
+
+`mobile-1-wip` was pushed and Vercel built it. Both lanes have a branch alias, so the
+before/after pair is alias-to-alias rather than alias-against-localhost:
+
+    baseline  https://elad-portfolio-git-codex-p1-pilot-bobikobis-projects.vercel.app
+    after     https://elad-portfolio-git-mobile-1-wip-bobikobis-projects.vercel.app
+
+### M3, signed
+
+    view            floor mean/max     diff mean/max   >1 of 255  verdict
+    overview               0.000/0           0.000/0       0.00%  PASS
+    about                  0.000/0           0.000/0       0.00%  PASS
+    services               0.000/0           0.000/0       0.00%  PASS
+    projects               0.000/0           0.000/0       0.00%  PASS
+    technologies           0.000/0           0.000/0       0.00%  PASS
+    contact                0.000/0           0.000/0       0.00%  PASS
+
+**And the localhost dev capture is byte-identical to the alias capture.** `m1-before`
+against `alias-before` - two different machines' worth of difference between them, a dev
+bundle against a production one - comes back mean 0.0000, max 0 on all six views. P3 and P7
+each reported alias numbers matching localhost; this is the third stage to find it, and the
+first to find it at zero rather than at the harness's resolution.
+
+That is worth keeping, because it means the photometry harness can be iterated on localhost
+without the alias round trip, and rule 2 costs one confirming run rather than every run.
+
+### M1 and M2, signed and still failing
+
+Preview aliases, 20x CPU, slow 4G, two runs each:
+
+| build | TBT | longest task | tasks >= 50 ms |
+|---|---|---|---|
+| baseline alias | 10,789 · 10,843 | 1,732 · 1,798 | 59 · 62 |
+| wip alias | 11,078 · 10,515 | 1,696 · 1,631 | 88 · 66 |
+
+Medians 10,816 -> 10,797 and 1,765 -> 1,664. The same verdict the local production build
+gave, against targets of 5,000 and 600. The deployed numbers also sit within ~6% of the
+local production build's, which is the brief's local-equals-deployed claim holding a second
+time.
+
+### One harness bug, found by being the first run to point at a vercel.app URL
+
+`mobile-startup.mjs` called `applyBypass(page)` on the guard page, where `page` is assigned
+twenty lines later and is `undefined`. Added in `64f4efd` with the bypass support and never
+exercised, because until now every run had been against localhost. Fixed in this lane.
+
+Also noted, not fixed: the harness records `build.revision` from the local working tree, so
+a run against a remote URL stamps the manifest with whatever is checked out here. The four
+alias runs above all say `c168582`. The `base` field is what distinguishes them.

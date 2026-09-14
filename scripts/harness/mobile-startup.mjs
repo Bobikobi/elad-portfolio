@@ -293,7 +293,9 @@ try {
   // Guard before any trace/profile starts. A fresh target in this browser uses the same GPU
   // process and ANGLE backend as the measurement target.
   const guardPage = await browser.newPage();
-  await applyBypass(page);
+  // guardPage, not page - `page` is assigned below and is undefined here. Added in 64f4efd
+  // and never exercised, because no run had pointed at a vercel.app URL until 2026-09-14.
+  await applyBypass(guardPage);
   const gpu = await guardPage.evaluate(() => {
     const gl = document.createElement('canvas').getContext('webgl2');
     if (!gl) return 'NO WEBGL2 CONTEXT';
