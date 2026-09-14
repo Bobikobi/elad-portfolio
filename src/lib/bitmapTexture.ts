@@ -5,6 +5,16 @@ export interface BitmapTextureOptions {
   anisotropy?: number;
   wrapS?: THREE.Wrapping;
   wrapT?: THREE.Wrapping;
+  /**
+   * Force the GPU upload as soon as the decode lands, instead of letting three do it at
+   * first bind. Default OFF, and it has to stay off for anything on the startup path -
+   * see the note at the upload site.
+   *
+   * The one caller that wants it is the hi-res world map, which is swapped into a live
+   * material mid-flight and must not stall when it is first drawn. That call pre-uploaded
+   * before this module existed; every base map did not.
+   */
+  preupload?: boolean;
 }
 
 export interface BitmapTextureLoad {
@@ -134,10 +144,14 @@ export function loadBitmapTexture(
       texture.flipY = !bitmapOrientation;
       applyOptions(texture, options);
       texture.needsUpdate = true;
-      // Pre-upload so the first draw never stalls. Safe after a dispose(): three re-creates
-      // the GPU texture from texture.image, which is the re-uploadable state this shell is
-      // required to stay in.
-      gl.initTexture(texture);
+      // NOT pre-uploaded by default. gl.initTexture forces the GPU upload synchronously on
+      // the main thread for every texture, whether or not anything is about to draw it, and
+      // measured 2026-09-14 that is a net LOSS at startup: with it on for every map, all
+      // three runs of the longest main-thread task (1,942 / 1,943 / 2,007 ms) sat above all
+      // three baseline runs (1,642 / 1,773 / 1,896). Three uploads lazily at first bind,
+      // which is what TextureLoader did here before. This stage's allowance is moving the
+      // DECODE off the main thread, and the decode is already off it by the time this runs.
+      if (options.preupload) gl.initTexture(texture);
     });
     return texture;
   })().catch((error: unknown) => {

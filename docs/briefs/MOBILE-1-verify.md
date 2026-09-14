@@ -230,3 +230,66 @@ exercised, because until now every run had been against localhost. Fixed in this
 Also noted, not fixed: the harness records `build.revision` from the local working tree, so
 a run against a remote URL stamps the manifest with whatever is checked out here. The four
 alias runs above all say `c168582`. The `base` field is what distinguishes them.
+
+---
+
+## The revert - 2026-09-14, owner approved
+
+Owner approved the recommendation: keep the loader fix, revert the frame-spreading, and
+re-brief M1/M2 with a wider allowance.
+
+**Reverted:** `StartupReveal.tsx` (deleted) and every use of it in `SceneRoot` and
+`SolarAct`; `Warmup`'s ready signal back from frame 32 to frame 3, and its `useFrame`
+priority back to the default; `Galaxy`'s 20-slice construction back to a single `useMemo`.
+
+**Kept:** the bitmap loader and the four call sites that decode off the main thread -
+`SolarAct`, `GalaxyNebulae`, `TransitVeils`, `WorldBackdrop`.
+
+### The galaxy comes back, and the reveal is EARLIER than the baseline
+
+Same filmstrip, 6x CPU. The baseline reveals a finished spiral at 7,571 ms; the branch used
+to reveal a galaxy-less sky at 5,897 ms; the reverted build reveals **a finished spiral at
+5,603 ms**. Better than both on this measure, which is a side effect of the loader and not
+of anything aimed at it.
+
+### The loader had its own startup regression, and it was the pre-upload
+
+The first measurement of the reverted build came back WORSE than the baseline recorded three
+days earlier. Rather than attribute that, the baseline was rebuilt and re-measured the same
+day, on the same machine, in the same session - machine state three days apart is not a
+control.
+
+Local production build, 20x, slow 4G, three runs each, all on 2026-09-14:
+
+| build | TBT | longest task |
+|---|---|---|
+| baseline `64f4efd` | 10,391 · 10,032 · 11,091 | 1,773 · 1,642 · 1,896 |
+| loader **with** `gl.initTexture` on every map | 11,201 · 10,979 · 11,820 | **1,943 · 2,007 · 1,942** |
+| loader **without** it (shipped) | 10,844 · 10,374 · 10,168 | 1,832 · 1,770 · 1,793 |
+
+The middle row's three runs all sit **above** all three baseline runs on the longest task -
+no overlap, which is what makes it a finding rather than noise. `gl.initTexture` forces the
+GPU upload synchronously on the main thread for every texture whether or not anything is
+about to draw it. Three uploads lazily at first bind, which is what `TextureLoader` did
+here before.
+
+Pre-upload is now opt-in and off by default. The one caller that keeps it is `loadHiRes`,
+which swaps a map into a live material mid-flight and must not stall - and which
+pre-uploaded before this module existed. Every base map did not.
+
+### Where that leaves the shipped branch
+
+| | baseline | shipped | target |
+|---|---|---|---|
+| M1 TBT (median of 3) | 10,391 | **10,374** | 5,000 |
+| M2 longest (median of 3) | 1,773 | **1,793** | 600 |
+| M3 | - | **0.0000 / 0, six views** | byte-identical |
+| M4 | - | **calls 69/64, tris 167,134/146,549, medians 16.700** | unchanged |
+
+**Moving the decode off the main thread bought nothing measurable.** M1 and M2 are inside
+the run-to-run spread of the baseline in both directions. That is the honest result of the
+brief's second allowed change, measured on its own with the first one removed, and it is
+what the re-brief should start from: neither of the two permitted levers moves this number.
+
+What the branch is now worth is the M3 fix - a loader that would otherwise have shipped
+black planets on the home page - at no startup cost.

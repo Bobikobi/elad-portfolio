@@ -28,7 +28,6 @@ import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
 import ZodiacalDust from '../solar/ZodiacalDust';
-import StartupReveal from '../StartupReveal';
 
 const _wp = new THREE.Vector3();
 const DEG2RAD = Math.PI / 180;
@@ -94,6 +93,7 @@ async function loadHiRes(key: string, tier: HiTier, gl: THREE.WebGLRenderer): Pr
     colorSpace: THREE.SRGBColorSpace,
     anisotropy: Math.min(8, gl.capabilities.getMaxAnisotropy()),
     wrapS: THREE.RepeatWrapping, // match the base map (A2 band shear)
+    preupload: true, // the swap happens mid-flight on a live material - it must not stall
   }).ready;
 }
 
@@ -899,26 +899,16 @@ export default function SolarAct() {
       <ambientLight intensity={AMBIENT_FILL_INTENSITY} />
       {/* Star sphere + nebulae come from the shared SceneRoot sky (one universe). */}
       <group ref={root} rotation={[0.42, 0, 0]} name="solarRoot">
-        <StartupReveal after={0}>
-          <Sun />
-        </StartupReveal>
-        <StartupReveal after={1}>
-          <ZodiacalDust count={high ? 5200 : 1900} />
-        </StartupReveal>
-        {PLANETS.map((p, i) => (
-          <StartupReveal key={p.key} after={i + 2}>
-            <Planet spec={p} />
-          </StartupReveal>
+        <Sun />
+        <ZodiacalDust count={high ? 5200 : 1900} />
+        {PLANETS.map((p) => (
+          <Planet key={p.key} spec={p} />
         ))}
         {/* Cost-only tier split (the composition LAW): identical belt, fewer bodies. */}
-        <StartupReveal after={PLANETS.length + 2}>
-          <AsteroidBelt count={high ? 17000 : 6000} />
-        </StartupReveal>
+        <AsteroidBelt count={high ? 17000 : 6000} />
       </group>
       {/* A4: per-world nebula backdrop (world-fixed, shows only while a world is focused). */}
-      <StartupReveal after={PLANETS.length + 3}>
-        <WorldBackdrop />
-      </StartupReveal>
+      <WorldBackdrop />
       {/* Section pills, the belt marker and the decorative-body tooltips all live in the
           DOM overlay now (PlanetLabels) - see the note there on frame ordering. */}
     </>
