@@ -38,6 +38,11 @@ corrected in place.
 
 ### 1. Mars is not at 5.0%. It is at 0.08%.
 
+> **CONTESTED 2026-09-14** - see "STEP 1 RESULT" below. `p3-albedo`'s capture of the same world
+> reads 1.87% over 250 in some channel against this section's 0.08% from `sun-3.py`. Both agree
+> Mars is far below 5.0%; they do not agree on where, and this section should not be read as
+> settled.
+
 The plan says: *"Mars's disc clipping stays at 0% (it is currently 5.0% and failing - so this
 stage inherits a fix, not just a guard)."*
 
@@ -68,6 +73,11 @@ practice that has caught something in this lane three times.
 ---
 
 ## What P4 is not, and this is already settled
+
+> **CORRECTED 2026-09-14 - it was not settled.** See "STEP 1 RESULT" below: held off, Venus's
+> all-channel clipping falls from 1,483 to 434 pixels and Earth's world from 9,712 to 7,786. The
+> neutrality recorded here was measured after the function had already pushed those pixels
+> toward white. The section is kept as written so the correction can be seen.
 
 Measured 2026-08-17 and recorded in the plan: P3 left two clusters of burnt pixels - Earth's
 cloud tops (9,716 px) and Venus on the overview (1,498 px). Both were expected to be P4's.
@@ -138,6 +148,11 @@ which any of the numeric criteria above look at.
    is the saturation the rolloff takes from the whole site - the sun's 49% - which is a
    **quality** goal, not a defect fix. That is the owner's call and the plan's framing no
    longer supports it on its own.
+
+   > **CORRECTED 2026-09-14:** the sun's 49% does not exist on today's sun - the function takes
+   > 0.35% of its core chroma. That figure predates P3 and P7 and was carried here unmeasured.
+   > The case for P4 now rests on Saturn, on Venus and Earth's burnt white, and on the trade
+   > against single-channel clipping - see "STEP 1 RESULT".
 2. **Does Saturn belong here?** If its 51.45% is neutral, P4 cannot touch it and Saturn joins
    the not-P4 bucket, which should then become a stage of its own rather than staying an
    unowned note in three documents.
@@ -149,12 +164,22 @@ I recommend deciding 2 and 3 **after step 1**, on the measurement, and deciding 
 
 ---
 
-## STEP 1 RESULT - 2026-09-14 - PROVISIONAL
+## STEP 1 RESULT - 2026-09-14 - VALID
 
-**Not yet valid.** One held pair, rolloff ON (`p4-on`) against OFF (`p4-off`, the `?noRolloff`
-seam, which is byte-identical when absent). The repeatability control - a second ON capture,
-`p4-on2`, which must read exactly zero against `p4-on` - was still running when this was
-written. If it does not read zero, everything below is withdrawn.
+**Valid.** One held pair, rolloff ON (`p4-on`) against OFF (`p4-off`, the `?noRolloff` seam, which
+is byte-identical when absent), and the repeatability control that decides whether it means
+anything: a second ON capture of the same build, `p4-on2`, compared against `p4-on`.
+
+    control, p4-on vs p4-on2:  reach 0.00% on all 13 bodies and all 3 sun regions
+                               chroma taken 0.00% everywhere, clipping identical everywhere
+                               frame pixels changed 0.000% on all six views, largest delta 0
+
+The capture is deterministic, so every difference in the table below is the function.
+
+One thing not to misread: "chroma on" for the same body differs slightly between this table and
+the control's (Venus 0.0126 here, 0.0131 there). `p4-chroma.py` takes the lit face from the SECOND
+capture it is given, so the two runs average over slightly different pixel sets. Reach, clipping
+and the frame figures do not use that mask and match exactly.
 
 `scripts/harness/p4-chroma.py p4-on p4-off`. "Reach" is the share of a disc whose pixels differ
 at all; "taken" is how much of the lit face's chroma the function removes.
@@ -180,7 +205,7 @@ at all; "taken" is how much of the lit face's chroma the function removes.
 
 `technologies` tracks **Jupiter**, not the belt - that is the capture's own probe body.
 
-### What it overturns in this brief, if the control holds
+### What it overturns in this brief
 
 1. **The prize this brief named is gone.** It said the real reason to do P4 is the saturation
    the sun loses - *"49% at the centre against 11% at the limb"*. On today's sun the function
