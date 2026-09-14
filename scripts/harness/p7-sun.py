@@ -10,6 +10,7 @@ change cannot silently move the instrument's radius. S1 and S5 subtract an indep
 estimated radial luminance profile before measuring structure.
 """
 import json
+import math
 import os
 import sys
 
@@ -323,6 +324,58 @@ def corner_luminance(lum):
     return {"blocksPercent": values, "meanPercent": float(np.mean(values)), "maxPercent": float(max(values))}
 
 
+def sky_radial_profile(lum, disc, bands=8):
+    """P5.1 - the metric R2.2 is blind to.
+
+    R2.2 samples four 10px blocks near the frame corners, and the vignette darkens those
+    regardless of what the scene is doing. So a god-ray wash sat in the MIDDLE of the frame
+    while the corner metric read 3.5% and passed, and the "milky halo" round chased the
+    wrong source three times.
+
+    This reports the SKY's median luminance in concentric bands measured from the FRAME
+    centre, with the sun and its corona excluded. The vignette's own falloff is then visible
+    as the profile's shape, and a wash on top of it is visible as the inner bands lifting.
+
+    No threshold here is calibrated against the thing under test, per the standing rule P5
+    adds: the bands come from the frame's geometry and the exclusion comes from the fitted
+    disc. Nothing is inherited from a previous run, and the vignette's own constants are not
+    consulted - reading `offset`/`darkness` out of Effects.tsx and inverting the library's
+    shader would be a threshold that expires silently the next time either moves.
+    """
+    height, width = lum.shape
+    yy, xx = np.mgrid[0:height, 0:width]
+    sun_rn = np.hypot(xx - disc["cx"], yy - disc["cy"]) / disc["radius"]
+    # Frame-centre distance, normalised so 1.0 is the corner.
+    fx, fy = (width - 1) / 2, (height - 1) / 2
+    frame_rn = np.hypot(xx - fx, yy - fy) / math.hypot(fx, fy)
+    sky_only = sun_rn > 2.0          # outside the corona S3 already measures
+    edges = np.linspace(0.0, 1.0, bands + 1)
+    out = []
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = sky_only & (frame_rn >= lo) & (frame_rn < hi)
+        count = int(m.sum())
+        out.append({
+            "from": round(float(lo), 3),
+            "to": round(float(hi), 3),
+            "medianPercent": float(np.median(lum[m]) / 255 * 100) if count >= 500 else None,
+            "pixels": count,
+        })
+    usable = [b for b in out if b["medianPercent"] is not None]
+    if len(usable) < 3:
+        raise ValueError("sky radial profile has fewer than three usable bands")
+    inner, outer = usable[0], usable[-1]
+    return {
+        "bands": out,
+        "innerPercent": inner["medianPercent"],
+        "outerPercent": outer["medianPercent"],
+        # >1 means the middle of the frame is brighter than its edge once the sun and its
+        # corona are out. That is the wash R2.2 cannot see. The vignette pushes this UP by
+        # construction, so the number is a baseline to compare against, not a pass/fail.
+        "innerOverOuter": (inner["medianPercent"] / outer["medianPercent"])
+        if outer["medianPercent"] > 0 else None,
+    }
+
+
 def s3_corona(lum, disc):
     height, width = lum.shape
     yy, xx = np.mgrid[0:height, 0:width]
@@ -340,6 +393,7 @@ def s3_corona(lum, disc):
         "skyMedian": sky_median,
         "ratio": corona_median / sky_median,
         "corners": corner_luminance(lum),
+        "skyRadialProfile": sky_radial_profile(lum, disc),
     }
 
 
@@ -575,10 +629,16 @@ def table_rows(results):
             )
         elif key == "S3":
             corners = data["corners"]
+            prof = data["skyRadialProfile"]
             detail = (
                 f"corona {data['coronaMedian']:.2f}, sky {data['skyMedian']:.2f}, "
                 f"ratio {data['ratio']:.3f}x; corners mean {corners['meanPercent']:.3f}% "
                 f"(need >=2x and <= R2.2 {R22_CORNER_BASELINE_PERCENT:.1f}%)"
+                # P5.1: printed next to the corner number on purpose. The two disagreeing is
+                # the whole finding - the corners are what R2.2 watches and the mid-frame is
+                # where the wash lived.
+                + f"; mid-frame sky {prof['innerPercent']:.3f}% vs edge "
+                  f"{prof['outerPercent']:.3f}% ({prof['innerOverOuter']:.1f}x)"
             )
         elif key == "S4":
             detail = (

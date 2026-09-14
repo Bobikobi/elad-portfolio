@@ -56,7 +56,7 @@ It reported a real improvement as a failure. Symmetrically, it would have report
 failure as progress. **This is the reason the correct number above is 0.873 and not a number
 derived from the stale radius.**
 
-The general form of this defect is now proposed as a standing rule in P5: *a threshold
+The general form of this defect is **now standing rule 6** (added 2026-09-14 by P5): *a threshold
 expressed as an absolute value of the quantity under test expires the first time that quantity
 changes. Derive it from the image or from the camera, never from a previous run.*
 
