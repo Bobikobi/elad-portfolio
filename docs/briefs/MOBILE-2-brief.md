@@ -7,6 +7,44 @@ Follows [MOBILE-1-brief.md](MOBILE-1-brief.md) / [MOBILE-1-verify.md](MOBILE-1-v
 which did not close. MOBILE-1 shipped one thing - a loader correctness fix - and proved that
 neither of the two changes it was allowed to make can reach its targets.
 
+## OWNER DIRECTION, 2026-09-14 - a new view for phones, designed after the current work
+
+Recorded verbatim in substance, and deliberately NOT designed here. The owner, after reading
+N0's result and the three options below:
+
+> We will invent a new view for mobile when we finish - maybe like a gallery: one planet at a
+> time, swiping reaches the next planet, and not a "free" camera.
+
+**Status: a direction, not a brief.** No criteria, no design, no code. It is to be picked up
+once the work in progress is finished, and it gets its own `<id>-brief.md` first like every
+other stage.
+
+What the owner said, and only that:
+- a separate view for phones, newly designed
+- one planet at a time, gallery-like
+- a swipe moves to the next planet
+- no free camera
+
+Why it fits the evidence (this paragraph is the implementer's note, not the owner's words):
+N0 found that startup cost is the scene building and drawing everything at once, and that no
+cheap lever exists inside the current approach. A view that holds one body at a time changes
+what has to exist at startup, which is the only lever this brief found with enough mass. It
+also removes the free camera, which is where the orbit-framing and drag-to-rotate cost live.
+
+Open questions for that brief - listed so they are asked, not decided now:
+- which bodies are in the sequence (the eight planets only, or also the sun and the belt)
+- whether each planet in the gallery maps to its section page, as the planets do today
+- what replaces the orbit view's framing when there is no free camera
+- which screens get it (all phones, or below a width), and how the tier law applies
+- whether MOBILE-2's N3 (byte-identical settled scene) still applies to a view that is new
+  by design - almost certainly not, so the new view needs its own "what should be TRUE"
+  criteria instead
+
+This supersedes the three options in "The M2 question" below as the direction for phones.
+The options are kept for the record.
+
+---
+
 ## Why MOBILE-1 did not close, in numbers
 
 | | baseline | MOBILE-1 shipped | target |
@@ -132,6 +170,9 @@ Three honest options, and this stage needs one chosen rather than inherited:
 
 I recommend deciding this **after N0**, not now - the 25% hole is big enough to change which
 option is right.
+
+**Decided 2026-09-14, after N0: none of the three as written.** See "OWNER DIRECTION" at the
+top - a new gallery-style view for phones, designed after the current work.
 
 ## The allowance, if the criteria are approved
 
