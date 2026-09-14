@@ -43,6 +43,11 @@ const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
 const OUT = process.env.OUT || path.join(process.cwd(), '.harness-out', 'mobile-startup');
 const TAG = process.env.TAG || 'now';
 const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 240_000);
+// GL_SYNC_PROBE=1 names the blocking GPU round trips. It is EXPENSIVE: measured 2026-09-14
+// on the same build back to back, total main-thread time goes 20,791 ms -> 27,114 ms, a 30%
+// tax on the number it is reporting on. Attribution only. Off by default so M1/M2 stay
+// comparable with every run taken before it existed, and never to be turned on for them.
+const GL_SYNC_PROBE = process.env.GL_SYNC_PROBE === '1';
 
 // This exact object drives CDP and is persisted in the run manifest. The Python report
 // reads it from there; it has no second copy of these settings.
@@ -71,6 +76,12 @@ const EMULATION = Object.freeze({
   }),
   quietWindowMs: 2_000,
   longTaskThresholdMs: 50,
+  // Recorded in the manifest so two runs measured with different instruments can never be
+  // compared by accident. Measured cost when on: total main-thread time 20,791 -> 27,114 ms
+  // on the same build, +30%. The first estimate of this was ~300 ms, taken from the probe's
+  // own `span` source alone, and it was wrong by twenty times - the wrapper's cost lands
+  // mostly in the native call it wraps, not in the wrapper.
+  glSyncQueryProbe: process.env.GL_SYNC_PROBE === '1',
   profilerSamplingIntervalUs: 100,
 });
 
@@ -122,7 +133,7 @@ const gitText = (args) => {
  * the configured two seconds. A live WebGL scene keeps scheduling short rAF work forever,
  * so requiring an empty task queue would never terminate.
  */
-const installStartupProbe = (longTaskThresholdMs) => {
+const installStartupProbe = (longTaskThresholdMs, wrapGlSyncQueries) => {
   const state = {
     installedAt: performance.now(),
     firstDrawAt: null,
@@ -249,6 +260,27 @@ const installStartupProbe = (longTaskThresholdMs) => {
     for (const operation of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
       wrap(prototype, operation, 'first-frame-render', true);
     }
+    // Synchronous queries. Every one of these flushes the command buffer and blocks the
+    // main thread on a round trip to the GPU process, and none of them was wrapped, so the
+    // time landed in V8's "(program)" sentinel with no JavaScript frame to name it and fell
+    // through to "unattributed". Measured 2026-09-14 in the longest task of the run: 107
+    // GetProgramiv and 22 GetShaderiv calls, plus 46 command-buffer waits.
+    // OFF unless GL_SYNC_PROBE=1. Wrapping these names them - they are the blocking round
+    // trips to the GPU process - but it costs 30% of the main thread, so the instrument
+    // would be a large part of what it measures. Attribution runs only, never M1/M2.
+    //
+    // Deliberately NOT getParameter, getError or flush. three calls those on a hot path and
+    // they are cheap individually, so wrapping them is nearly all overhead: the probe's own
+    // `span` source went 376 -> 787 ms when they were included.
+    if (wrapGlSyncQueries) {
+      for (const operation of [
+        'getProgramParameter', 'getShaderParameter', 'getProgramInfoLog', 'getShaderInfoLog',
+        'getActiveUniform', 'getActiveAttrib', 'getUniformLocation', 'getAttribLocation',
+        'checkFramebufferStatus', 'readPixels', 'finish', 'getSyncParameter', 'clientWaitSync',
+      ]) {
+        wrap(prototype, operation, 'gl-sync-query');
+      }
+    }
   }
 };
 
@@ -319,7 +351,7 @@ try {
     hasTouch: EMULATION.viewport.touch,
   });
   if (BYPASS) await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': BYPASS });
-  await page.evaluateOnNewDocument(installStartupProbe, EMULATION.longTaskThresholdMs);
+  await page.evaluateOnNewDocument(installStartupProbe, EMULATION.longTaskThresholdMs, GL_SYNC_PROBE);
 
   cdp = await page.createCDPSession();
   await cdp.send('Network.enable');

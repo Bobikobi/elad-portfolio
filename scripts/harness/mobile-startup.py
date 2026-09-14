@@ -29,8 +29,10 @@ PHASES = [
     "module evaluation",
     "geometry and buffer construction",
     "shader compile/link",
+    "synchronous GPU queries",
     "texture decode and upload",
     "first-frame render",
+    "native under JS (no sampled frame)",
     "everything else",
     "unattributed",
 ]
@@ -241,6 +243,7 @@ def trace_rule(event: dict) -> tuple[str, str, bool] | None:
             "geometry-buffer": "geometry and buffer construction",
             "texture-decode-upload": "texture decode and upload",
             "first-frame-render": "first-frame render",
+            "gl-sync-query": "synchronous GPU queries",
         }
         phase = mapping.get(instrument_phase)
         if phase:
@@ -332,6 +335,7 @@ overlays: dict[str, list[Interval]] = defaultdict(list)
 seen_instrumented_phases = set()
 phase_priority = {
     "shader compile/link": 0,
+    "synchronous GPU queries": 0,
     "texture decode and upload": 1,
     "geometry and buffer construction": 2,
     "module evaluation": 3,
@@ -364,12 +368,17 @@ probe_phase_names = {
     "geometry-buffer": "geometry and buffer construction",
     "texture-decode-upload": "texture decode and upload",
     "first-frame-render": "first-frame render",
+    "gl-sync-query": "synchronous GPU queries",
 }
 expected_instrumented_phases = {
     probe_phase_names[name]
     for name, values in probe_spans.items()
     if name in probe_phase_names and float(values.get("duration", 0)) > 0
 }
+# The GL sync-query wrapper is opt-in and costs ~300 ms of the thread it reports on, so a
+# run taken without it must not be expected to carry that phase.
+if not manifest.get("emulation", {}).get("glSyncQueryProbe"):
+    expected_instrumented_phases.discard("synchronous GPU queries")
 expected_instrumented_phases.add("first-frame render")
 missing_instrumentation = expected_instrumented_phases - seen_instrumented_phases
 if missing_instrumentation:
@@ -452,6 +461,38 @@ for phase, source in (
         phase_us[phase] += amount
         source_us[source] += amount
         residual = subtract(residual, overlay_pieces)
+# Busy time the CPU profile can only call "(program)" - V8 in native code with no
+# JavaScript frame on the stack. Measured 2026-09-14 on this project: that was 4,736 ms of a
+# 5,059 ms residual, 93.6%, and 100% of the residual sat inside trace events that DO have
+# names. Leaving it "unattributed" therefore threw away evidence that was already in hand.
+#
+# The trace is the only instrument with a name for it, so the innermost enclosing event
+# claims it - smallest-first, which is self time. Nothing is donated: an interval no event
+# covers is still unattributed, and that is reported rather than absorbed.
+native_claims = sorted(
+    (
+        (interval[1] - interval[0], interval, event)
+        for interval, event in (
+            (clipped(e, profile_start, profile_end), e) for e in main_events
+        )
+        if interval
+    ),
+    key=lambda item: item[0],
+)
+for _, interval, event in native_claims:
+    pieces = intersect_one(interval, residual)
+    amount = duration(pieces)
+    if amount <= 0:
+        continue
+    name = str(event.get("name", "?"))
+    data = (event.get("args") or {}).get("data") or {}
+    detail = data.get("functionName") or data.get("url") or ""
+    if detail:
+        detail = source_name({"functionName": data.get("functionName", ""), "url": data.get("url", "")})
+    phase_us["native under JS (no sampled frame)"] += amount
+    source_us[f"[native] {name}{(' — ' + detail) if detail else ''}"] += amount
+    residual = subtract(residual, pieces)
+
 residual_us = duration(residual)
 phase_us["unattributed"] += residual_us
 source_us["[unattributed]"] += residual_us
