@@ -427,12 +427,20 @@ def main():
     if cap.get("mars", {}).get("usable"):
         mim, mlum = load(f"{TAG}-mars.png")
         mh, mw = mlum.shape
-        # The DOM was hidden for this shot, so the frame is renderer output only: fit the
-        # disc from the silhouette, seeded from the diameter the camera reported.
+        # FIXED 2026-09-14. This used to fit the silhouette seeded from the FRAME CENTRE with an
+        # absolute luminance threshold of 40. Mars is not centred in its own world - the HUD puts
+        # it at x=1022 of 1440 - and it is half in shadow, so the fit locked onto (759,441) R 387,
+        # a region only 39% of which lay on Mars. Standing rule 6 forbids exactly that threshold.
+        # The camera already knows the sphere's projected centre and diameter, and p3-albedo takes
+        # its geometry from the same HUD, so the two harnesses now agree on where Mars is.
+        # It did not change the verdict on the captures it was found on - 0.08% in the wrong region,
+        # 0.09% in the right one - which was luck, not correctness. This shot is DPR 1, so the
+        # HUD's CSS pixels are device pixels.
         mhud = cap["mars"]["hud"]
-        px = next((p["px"] for p in (mhud.get("planets") or []) if p["key"] == "mars"), None)
-        seed = (px / 2) if px else mh * 0.3
-        mcx, mcy, mR = fit_disc(mlum, mw / 2, mh / 2, seed, 40.0)
+        mplanet = next((p for p in (mhud.get("planets") or []) if p["key"] == "mars"), None)
+        if not mplanet:
+            raise SystemExit("REGRESSION mars: the HUD did not publish Mars's disc - refusing to measure a guessed region")
+        mcx, mcy, mR = float(mplanet["x"]), float(mplanet["y"]), float(mplanet["px"]) / 2
         MY, MX = np.mgrid[0:mh, 0:mw]
         d = np.hypot(MX - mcx, MY - mcy) <= mR * 0.95
         mx = mim[d].max(axis=-1)
