@@ -1,7 +1,14 @@
-# SUN-3 verify - NOT SIGNED
+# SUN-3 verify - the three blockers are cleared, 2026-09-14
 
-> **Status: OPEN.** This stage cannot be signed PASS yet, for one reason that is not a
-> judgement call: **every SUN-3 number came from localhost.** Standing rule 2 requires the
+> **Status: the three items under "What has to happen before this can be signed" are all
+> done.** The alias re-measurement is below, route 2 turned out to be already implemented in
+> the harness, and route 3 was written and run. Read the caveat under the alias table first:
+> the sun measured today is the **P7 sun**, not the sun SUN-3 shipped.
+>
+> The original status note follows for the record.
+
+> ~~**Status: OPEN.** This stage cannot be signed PASS yet, for one reason that is not a
+> judgement call: every SUN-3 number came from localhost.~~ Standing rule 2 requires the
 > numbers to come from a deployed preview alias. Real GPU, pinned tier, DOM hidden - but
 > localhost. Written 2026-08-15 alongside the after-the-fact
 > [brief](SUN-3-brief.md), per P0a of [PHOTOMETRY-megaplan.md](PHOTOMETRY-megaplan.md).
@@ -107,3 +114,88 @@ anywhere - so the alias re-measurement should record it explicitly rather than i
 
 Until all three are done, SUN-3 is **implemented and unverified**, and any later stage that
 leans on its numbers - P1, P2 and P3 all do - inherits that uncertainty.
+
+---
+
+# Closed out - 2026-09-14
+
+## 1. The alias re-measurement
+
+`sun-3.mjs` against the deployed preview alias
+`https://elad-portfolio-git-codex-p1-pilot-bobikobis-projects.vercel.app`, and against
+localhost on the same code the same hour, so the comparison is like-for-like:
+
+| criterion | alias | localhost | delta |
+|---|---|---|---|
+| **C1** limb/centre red | **0.841** | 0.840 | 0.001 |
+| **C2** limb/centre luminance | **0.757** | 0.755 | 0.002 |
+| **C3** longest prominence · limb covered | **1.11 R · 1.4%** | 1.10 R · 1.4% | 0.01 R |
+| **C5** widest background sprite | **6 px** | 7 px | 1 px |
+| C4 blown px outside the sun (out of scope) | 8,472 | 8,550 | 78 |
+
+**The specific worry this stage recorded is answered.** The note at the top said rule 2
+matters more here than usual because "localhost and the alias differ in build (dev vs
+production bundle), and this stage's entire subject is the tone chain - exactly where a
+build difference could hide." Nothing hides there. Every delta above is inside the
+harness's own run-to-run noise: `sun-3.mjs` runs on the live clock with no fixed-step
+freeze, so the orbital phase differs between any two runs, which is also why the deltas are
+not exactly zero the way the frozen photometry harness's are.
+
+**The caveat, and it is not small.** P3, P4 and P7 all moved the sun after SUN-3. These
+numbers therefore describe **today's sun**, not the one `0fcf349` produced. They confirm
+that the criteria still hold on a deployed build; they are not a retroactive measurement of
+SUN-3's own output, and no such measurement is possible any more.
+
+**C2 reads 0.757 against its written band of 0.80-0.88, and that is correct.** RULING 4
+(2026-09-10) retired that band in favour of P7's S4, limb/centre <= 0.75, because a real
+solar photograph measures 0.559. P7's S4 measures the same quantity with the newer
+instrument on the true silhouette and reads **0.7425**. Both sit below the old band's floor,
+which is exactly what the ruling said should happen. C2's FAIL here is the retired
+criterion failing, not the sun.
+
+C4 was out of scope before this stage began and belongs to P3, which records it as still
+failing on Earth's cloud tops and Venus.
+
+## 2. Route 2 - already implemented, and it was run
+
+The route asked for C3 and C5 re-measured with known bodies excluded. `sun-3.py` already
+does it: `foreign_circles()` finds them from the image and `spike_extent(..., avoid=av)`
+excludes them, and the comment above that call records the defect the route names - the
+first reading "count[ed] Venus as a 2.6 R prominence while missing the real 1.7 R rays for
+being faint."
+
+Both runs above report **4 foreign objects excluded**, with C3 at 1.11 R over 1.4% of the
+limb against targets of 1.25 R and 15%. The pass condition is met: the numbers stay inside
+their targets and no body-shaped contributor remains.
+
+One difference from the route as written, and it is an improvement: the route proposed using
+`DebugHud`'s published body centres. The implementation derives the circles from the image
+instead, which is what the standing rule about instrument thresholds asks for.
+
+## 3. Route 3 - written and run
+
+`scripts/harness/sun-3-route3.py`. The route's pass condition, quoted: *monotone at 8 bins
+AND no non-decreasing run longer than 3% of the radius at full resolution.*
+
+| | alias | localhost |
+|---|---|---|
+| rises at 8 bins | **0** | 0 |
+| rises at 10 bins (what C2 uses) | 0 | 0 |
+| rises at 24 bins | 2 | 2 |
+| longest non-decreasing run, 337 rings | **1.78% of R** | 2.37% of R |
+| **verdict** | **PASS** | **PASS** |
+
+**C2's monotonicity is not an artifact of coarse binning.** At one ring per pixel of radius
+the longest stretch that fails to fall is 6 rings out of 337.
+
+Reported rather than buried: at 24 bins there are 2 rises, which would exceed C2's own
+"<= 1" allowance if that allowance were applied at that resolution. That is granulation
+showing through at a scale the criterion was never written for - the stage's granulation
+criterion wants exactly that structure to exist - and the route's own decisive test is the
+full-resolution run length, which passes with room.
+
+## What is still open
+
+Nothing in this file's own list. The stage's numbers now come from a deployed alias, both
+falsification routes are answered, and the one criterion that fails is a criterion the owner
+retired.

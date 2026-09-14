@@ -96,6 +96,27 @@ multiplicatively by that spread by design. No value of its three constants touch
 is recorded in the plan's P4 section, which now separates re-scoping the function (P4) from
 neutral peak compression (unassigned).
 
-**This stage is not signed under rule 2.** Every number here is from localhost. The preview
-alias is behind Vercel's SSO, so an automated harness cannot reach it without a protection
+**SIGNED UNDER RULE 2 on 2026-09-14.** Re-measured against a deployed preview alias with
+`p3-albedo.mjs`, tag `alias-p3`
+(`https://elad-portfolio-96e9pjogd-bobikobis-projects.vercel.app`, captured 2026-09-10), and
+reported with the same `p3-albedo.py`. **Every one of the five criterion lines is identical
+to the localhost run, number for number:**
+
+    P3-1 no body clips           FAIL  overview 1498, about 9716, services 0, projects 0, technologies 135, contact 0
+    P3-2 no body disappears      PASS  dimmest neptune 101.4/255
+    P3-3 inner system            PASS  venus > saturn > mercury > mars > uranus > jupiter > earth > neptune
+    P3-4 the worlds do not shift PASS  about -1.9, services -1.1, projects -6.1, technologies +1.2, contact -7.6
+    P3-5 the tier law            PASS  high 69/167134/16.700  low 64/146549/16.700
+
+The verdict is unchanged - 4 of 5, with P3-1 still failing on Earth's cloud tops and Venus.
+What the alias adds is that the failure is not a localhost artifact.
+
+P3-4 and P3-5 compare against the `before` tag, which is a localhost capture; there is no
+deployed "before". That mixing is sound because MOBILE-1 measured the same six views on
+localhost and on an alias and got **mean 0.0000, max 0** - the two are byte-identical.
+
+The original note follows for the record.
+
+~~This stage is not signed under rule 2. Every number here is from localhost. The preview
+alias is behind Vercel's SSO, so an automated harness cannot reach it without a protection~~
 bypass token, which is the owner's to enable.

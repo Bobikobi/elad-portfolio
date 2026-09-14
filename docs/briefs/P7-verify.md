@@ -78,6 +78,28 @@ displacing every vertex radially so the whole texture swam in screen space. Slow
 
 ---
 
+## SIGNED ON THE ALIAS - 2026-09-14
+
+Rule 2 is met. Captured against a deployed preview alias with `p7-sun.mjs`, tag `alias1`
+(`https://elad-portfolio-96e9pjogd-bobikobis-projects.vercel.app`, captured 2026-09-10) and
+measured with the same `p7-sun.py`. **Every one of the six criteria comes back identical to
+the localhost run to every decimal printed**, including the fitted disc radius:
+
+| | localhost `p7m` | alias `alias1` |
+|---|---|---|
+| disc radius | 337.16 px | **337.16 px** |
+| S1 autocorrelation / spectrum | 70.7227 px · 0.1049 / 13.1027 px · 0.0194 | **identical** |
+| S2 peak channel / blown / centre-to-limb | 224 · 0.0% · 2.1626 | **identical** |
+| S3 corona / sky / ratio | 29.3534 · 9.9346 · 2.9547 | **identical** |
+| S4 centre / limb / ratio | 139.4958 · 103.5804 · **0.7425** | **identical** |
+| S5 half-time | 5.1559 s | **identical** |
+| S6 tier law | pass | **pass** |
+
+The capture existed from 2026-09-10 and this file was never updated to say so. Recorded
+here rather than re-run.
+
+---
+
 ## Open, and this stage cannot be signed on either
 
 **C2 contradicts S4, and the contradiction is mine.** Both measure limb luminance over centre
@@ -96,7 +118,8 @@ deviation and how many of 360 angles move between frames. `sun-3.py`'s C3 measur
 prominences, which SUN-3 redefined under the same name. The vertex wobble was slowed fivefold
 here and it is exactly the term that criterion watches.
 
-**Rule 2 is unmet.** Every number here is from localhost. The preview alias sits behind
+~~**Rule 2 is unmet.** Every number here is from localhost.~~ **CLOSED 2026-09-14 - see
+"SIGNED ON THE ALIAS" above.** The original note follows for the record. The preview alias sat behind
 Vercel SSO and an automated harness cannot reach it without a protection bypass token.
 
 ## Also re-measured, and unrelated to this stage
