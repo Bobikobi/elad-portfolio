@@ -482,8 +482,20 @@ shot sat **one scene step late** (937, 989 ... against 936, 988 ...). The cause,
 analyzer refused that pair because its step counts differed.
 
 It also exposed a gap in the analyzer: it compared step COUNTS, not absolute scene TIME, so a turn whose
-first shot slipped and then stepped cleanly would have passed while misaligned. The "frame 1601" every
-baseline shares is itself this slip - 1600 was requested - happening the same way each time.
+first shot slipped and then stepped cleanly would have passed while misaligned. ~~The "frame 1601" every
+baseline shares is itself this slip - 1600 was requested - happening the same way each time.~~
+
+> **CORRECTED the same day - that sentence was wrong.** It is not a slip. `DebugHud.tsx` advances
+> `fixedElapsed` in the same frame callback that increments `frame`, so frame 1600 *is* scene time
+> 26.6667 s, and `freeze()` pins exactly that value. The snapshot reports frame 1601 only because the
+> freeze promise resolves on the next render frame, which counts a frame without advancing scene time.
+> A real slip would read 26.6833 s. Every baseline reads 26.6667 s: no slip anywhere. The fix therefore
+> keeps requesting frame 1600.
+>
+> `p7-sun` uses the same two-call pattern, and was checked for the same reason: in all three of its
+> runs, including the signed alias run `alias1`, all 7 shots land exactly on their requested scene
+> times. Only the render-frame counter differs between runs, as it should while frozen. P7's S5 and its
+> signature are unaffected.
 
 **Audited before anything else was believed.** Every Mars turn is aligned with `turn-on` on every shot
 in absolute scene time, and every `p3-albedo` capture froze all six views at frame 1601. **No result
