@@ -525,6 +525,24 @@ losses appear and grow, and Saturn's and Earth's gains shrink. Down: the reverse
 or Saturn's.** Venus and Mars moved against each other every time. The approved goals cannot all be met
 by this function, and that is now the owner's decision rather than a tuning problem.
 
+### The window, measured
+
+With the race fixed and validated (see the harness commit): same curve, strength 0.73 and 0.74.
+
+| strength | Mars worst <= 11.10% | Saturn chroma | Venus burnt | Earth burnt | colour lost | overview burnt pixels |
+|---|---|---|---|---|---|---|
+| **0.73** | **10.97% PASS** | 0.0744 -> **0.0845** (+13.6%) | 1,483 -> 1,498 | 9,712 -> **8,464** PASS (-12.9%) | **Venus only**: 0.0133 -> 0.0125 | 1,498 -> 1,513 - all 15 are Venus's |
+| 0.74 | 10.31% PASS | 0.0842 | 1,503 | 8,477 PASS | Venus only: 0.0134 -> 0.0122 | 1,498 -> 1,518 |
+
+**There is no setting in this family where Mars holds and Venus loses nothing.** At 0.73, the narrowest
+point, Venus is slightly worse - 15 more burnt pixels (1%) and 6% of a colour that is already nearly grey
+(chroma 0.013). Every other body and view is unchanged or better: Earth's burnt white down 12.9%,
+technologies 135 -> 114, no other body loses colour, the sun's core +0.06%.
+
+The modest version is therefore reachable only with Venus taken out of P4 entirely - her goal **and** her
+share of guards P4-4 and P4-5 - which is consistent with making her a separate item. On those terms 0.73
+passes every criterion measured so far. P4-6 (the sun) and P4-7 (cost) are being measured for it.
+
 **Audited before anything else was believed.** Every Mars turn is aligned with `turn-on` on every shot
 in absolute scene time, and every `p3-albedo` capture froze all six views at frame 1601. **No result
 recorded above is affected.** The fix - wait and freeze inside one browser call, plus an absolute-time
