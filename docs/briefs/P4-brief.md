@@ -1,7 +1,12 @@
 # P4 brief - re-scope `highlightRolloff` to the case it was built for
 
 Written 2026-09-14, before any change, per standing rule 1.
-**Criteria PROPOSED, not approved. No pixel moves until the owner signs the table.**
+> **CLOSED 2026-09-15 - MEASURED, NOT SHIPPED. Owner decision.** Eleven candidates were measured.
+> Every setting of this function that gives visible colour back makes Mars or Venus worse, and the one
+> setting that makes nothing else worse (strength 0.73 on a steeper curve) is indistinguishable by eye
+> from today. No shipped pixel ever moved. What the stage leaves behind is in "What P4 leaves" at the end.
+
+~~**Criteria PROPOSED, not approved. No pixel moves until the owner signs the table.**~~
 
 P4 of [PHOTOMETRY-megaplan.md](PHOTOMETRY-megaplan.md). The plan's own P4 section was written
 2026-08-17 and **two of the numbers it stands on have moved since.** Correcting them is the
@@ -583,6 +588,34 @@ shifts. Nothing is visibly harmed, and nothing is visibly improved.
 That reframes the stage. P4 set out to give visible colour back. Across eleven measured candidates this
 function could not do that without making Mars or Venus worse, and the one setting that makes nothing else
 worse changes nothing a visitor can see. Whether to ship it is the owner's call.
+
+## What P4 leaves - closed 2026-09-15
+
+**Decision.** The owner, shown the side-by-side and told it is safe and too small to see, chose to close
+P4 without shipping. A shader that runs on every pixel in the site is not changed for a gain no visitor
+can see.
+
+**Kept in the code, deliberately.** The `?noRolloff` and `?hl=knee,range,max[,power]` seams in
+`ExposureToneMap.tsx`. Both act only in HUD builds, both were verified to leave the scene byte-identical
+when absent, and `?hl` with today's values reproduces today exactly. Any future work on this function
+starts from a validated instrument instead of from rebuilding one.
+
+**Kept as instruments.** `mars-turn.{mjs,py}` (Mars over a full turn, one page load, exact freezes,
+refuses pairs offset in absolute time), `p4-chroma.py`, `p4-verdicts.py`, `p4-galaxy.mjs`, and `EXTRA_QS`
+on `p3-albedo` and `p7-sun`.
+
+**Findings that outlive the stage.**
+1. Mars's clipping is 0.00-11.10% over a turn, not the single figures recorded before. Separate defect,
+   in INDEX.
+2. Venus's highlights are as saturated as Mars's, so this function cannot treat them differently.
+   Venus's burnt white is now its own recorded defect, pointing at a Venus-specific lever.
+3. The function CAN nearly remove Mars's clipping - strength 1.0 on a steeper curve took the worst
+   longitude to 0.74% - at the cost of about a third of Mars's red. A lead for the Mars defect, not a
+   decision.
+4. A capture race in the harnesses (wait and freeze as two browser calls) was found, audited harmless
+   for every recorded result, and fixed where it mattered.
+5. Visible colour on Saturn and Venus, if still wanted, lives in their brightness settings and in the
+   lighting, not in this function.
 
 **Audited before anything else was believed.** Every Mars turn is aligned with `turn-on` on every shot
 in absolute scene time, and every `p3-albedo` capture froze all six views at frame 1601. **No result

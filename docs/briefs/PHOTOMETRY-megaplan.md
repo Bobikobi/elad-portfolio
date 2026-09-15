@@ -353,6 +353,9 @@ rises or holds. No frame goes over 250 in all three channels anywhere - the same
 >
 > **Owner decision, 2026-09-15:** P4 is judged by "Mars clips no worse over a paired full turn". The
 > 0% target is not P4's to meet; Mars's 11.10% is a separate open defect.
+>
+> **P4 CLOSED 2026-09-15 - measured, not shipped (owner decision).** Eleven candidates: visible colour
+> costs Mars or Venus, and the harmless setting is invisible. See [P4-brief.md](P4-brief.md), "What P4 leaves".
 
 ---
 
