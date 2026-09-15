@@ -194,8 +194,12 @@ const activatePage = async (page, id) => {
 // the spin running, slowing every shader time term by twenty moved the half-life from
 // 0.657s to 0.568s - i.e. it was measuring rotation the whole time. `?pinSpin` is
 // debug-only and absent from production, like the fixed-step clock it sits beside.
+// Extra query string, appended verbatim - added 2026-09-15 so a P4 candidate (`EXTRA_QS=hl=...`) can
+// be checked against S1-S6 with every other capture condition held. Empty when unset, so the URL - and
+// therefore every earlier run of this harness - is unchanged by construction.
+const EXTRA_QS = process.env.EXTRA_QS || '';
 const fixedStepUrl = (tier, opts = {}) =>
-  `${BASE}/?hud=1&tier=${tier}&fixedStep${opts.pinSpin ? '&pinSpin' : ''}`;
+  `${BASE}/?hud=1&tier=${tier}&fixedStep${opts.pinSpin ? '&pinSpin' : ''}${EXTRA_QS ? `&${EXTRA_QS}` : ''}`;
 
 const waitForFixedFrame = async (page, target, id) => {
   const at = await page.evaluate(async (frame) => {
