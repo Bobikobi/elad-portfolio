@@ -497,6 +497,34 @@ baseline shares is itself this slip - 1600 was requested - happening the same wa
 > times. Only the render-frame counter differs between runs, as it should while frozen. P7's S5 and its
 > signature are unaffected.
 
+### Round 3 - the balance point, measured
+
+Same curve throughout - spread power 2, knee 0.72, range 1.70 - with only the strength changing:
+
+| strength | Mars worst <= 11.10% | Saturn >= 0.0928 | Venus burnt <= 958 | Earth burnt <= 8,749 | bodies losing colour | overview burnt pixels |
+|---|---|---|---|---|---|---|
+| 0.68 (c1, round 1) | 15.99% FAIL | 0.0861 | 1,468 | 8,418 | none | 1,498 -> 1,483 |
+| 0.72 | 11.75% FAIL | - | - | - | - | - |
+| 0.76 | **9.10% PASS** | 0.0835 | 1,511 | 8,498 | 2, small: Venus, Mars's world | 1,498 -> 1,527 |
+| 0.80 | 6.72% PASS | 0.0823 | 1,529 | 8,537 | 4 | 1,498 -> 1,546 |
+| 0.85 | 3.81% PASS | 0.0808 | 1,559 | 8,588 | 4 | 1,498 -> 1,576 |
+
+(0.72 did not hold Mars, so its six views were not captured.)
+
+**Every quantity moves one way with the strength.** Up: Mars improves, and Venus burns more, colour
+losses appear and grow, and Saturn's and Earth's gains shrink. Down: the reverse.
+
+- Mars's guard is crossed between 0.72 and 0.76 - about **0.73** by interpolation.
+- Colour losses are zero at 0.68 and already present, if small, at 0.76.
+- So a setting where Mars holds **and** nothing loses colour, if one exists, sits in a narrow window
+  around 0.73-0.74. It is being measured.
+- Its expected outcome is **modest**: Earth's burnt white down about 13% (meeting its target),
+  Saturn's colour up about 12-15% (short of the halfway target), Venus and Mars unchanged.
+
+**Across all eight comparable candidates of three rounds, no candidate reached Venus's halfway target
+or Saturn's.** Venus and Mars moved against each other every time. The approved goals cannot all be met
+by this function, and that is now the owner's decision rather than a tuning problem.
+
 **Audited before anything else was believed.** Every Mars turn is aligned with `turn-on` on every shot
 in absolute scene time, and every `p3-albedo` capture froze all six views at frame 1601. **No result
 recorded above is affected.** The fix - wait and freeze inside one browser call, plus an absolute-time
