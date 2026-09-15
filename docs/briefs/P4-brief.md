@@ -472,6 +472,25 @@ Between c1 (strength 0.68: Mars worse, no colour lost anywhere) and round 2 (0.9
 colour lost): same curve, strength 0.85, 0.80, 0.76, 0.72. Each capture is retried once on failure,
 and every retry is logged.
 
+### A capture race, and the audit that clears every result above
+
+The one refused turn - the first run of `0.72,1.70,0.85,2` - was complete, but from shot 18 on every
+shot sat **one scene step late** (937, 989 ... against 936, 988 ...). The cause, read from
+`DebugHud.tsx` rather than guessed: `freeze()` pins scene time the instant it is called, and
+`waitForFrame()` resolves just after its frame has rendered - but `mars-turn` and `p3-albedo` both did
+"wait" and "freeze" as **two separate browser calls**, so a frame could render in the gap. The
+analyzer refused that pair because its step counts differed.
+
+It also exposed a gap in the analyzer: it compared step COUNTS, not absolute scene TIME, so a turn whose
+first shot slipped and then stepped cleanly would have passed while misaligned. The "frame 1601" every
+baseline shares is itself this slip - 1600 was requested - happening the same way each time.
+
+**Audited before anything else was believed.** Every Mars turn is aligned with `turn-on` on every shot
+in absolute scene time, and every `p3-albedo` capture froze all six views at frame 1601. **No result
+recorded above is affected.** The fix - wait and freeze inside one browser call, plus an absolute-time
+check in the analyzer - is applied after round 3, because the sweep re-reads the scripts for every
+candidate and a change mid-sweep would mix two versions of the instrument.
+
 ---
 
 ## Out of scope
