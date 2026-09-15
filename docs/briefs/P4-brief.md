@@ -43,6 +43,10 @@ corrected in place.
 > Mars is far below 5.0%; they do not agree on where, and this section should not be read as
 > settled.
 
+> **CORRECTED 2026-09-15** - both figures were single longitudes, and so is "far below 5.0%".
+> Mars keeps spinning in its focused world. Over a full turn the shipped scene clips its disc from
+> 0.00% to **11.10%**. See "MARS OVER A FULL TURN".
+
 The plan says: *"Mars's disc clipping stays at 0% (it is currently 5.0% and failing - so this
 stage inherits a fix, not just a guard)."*
 
@@ -235,6 +239,90 @@ at all; "taken" is how much of the lit face's chroma the function removes.
 in any channel; this capture reads 5,371 of 286,936 disc pixels, 1.87%. They use different
 captures and different disc radii. The "Mars is at 0.08%" correction earlier in this brief rests
 on one of them. Which one is right is not known yet.
+
+> **RESOLVED 2026-09-15** - neither was wrong. They measured different longitudes of a spinning
+> planet. See "MARS OVER A FULL TURN".
+
+---
+
+## MARS OVER A FULL TURN - 2026-09-15
+
+Replaces every single-frame Mars figure in this brief, and resolves the instrument disagreement.
+
+### Why every earlier Mars number was one longitude
+
+Mars keeps spinning inside its own focused world. `SolarAct.tsx` stops the heliocentric
+revolution when a world is focused (line 767) but not the axial spin (line 826,
+`rotation.y += dt * 0.3`, the last line of the planet's own frame loop). One turn is 20.9 s of scene
+time. `sun-3` (live clock) and `p3-albedo` (frozen at frame 1601) each photographed whichever
+longitude faced the camera at that moment.
+
+`sun-3` was also measuring the wrong region - fitted from the frame centre with an absolute
+threshold of 40, only 39% of it on Mars; fixed in `ad9b9fc`. That was **not** the cause: a 2x2 of
+both regions on both images showed the same picture reads nearly the same in either region, and
+the same region reads ~20x apart across the two pictures.
+
+### The instrument
+
+`scripts/harness/mars-turn.{mjs,py}`. One page load; the fixed-step clock frozen at frame 1601;
+then stepped exactly 52 scene steps between 24 shots, 15 degrees of spin apart, plus a closing shot
+one turn later. Geometry from each shot's own HUD disc. It refuses if the disc's centre moves (it
+moved 0.00 px).
+
+**Validated against an independent harness:** shot 1 is byte-identical to `p3-albedo`'s `p4-on`
+contact capture at the same frame - mean 0.0000, max 0, the same 5,371 clipped pixels. Both turns
+start at scene time 26.6667 s, so they pair longitude for longitude.
+
+Two defects were found and fixed in the harness on its first runs, and are recorded because both
+would have produced a plausible wrong answer: it froze the clock AFTER a 400 ms wall-clock wait, so
+shot 1 landed 13 steps late and a different number of steps late on each run; and it refused on the
+disc's size, which breathes by design, instead of on its centre.
+
+### Result
+
+| | rolloff ON (shipped) | rolloff OFF |
+|---|---|---|
+| worst longitude | **11.10%** at 297.9 deg | 44.83% at 342.6 deg |
+| median over the turn | 0.20% | 30.87% |
+| best | 0.00% - 7 of 24 longitudes clip nothing | 9.10% at 223.5 deg |
+| clipped in all three channels | 0 at every longitude | - |
+| chroma the function takes from Mars | 21-51%, by longitude | - |
+
+All of Mars's clipping is single-channel - red.
+
+### What it corrects
+
+1. **"Mars is at 0.08%" and "P4 inherits a guard and a 0.03pp gap" were wrong.** At its worst
+   longitude the shipped scene clips **11.10%** of Mars's disc: 222 times P4-1's 0.05%, and more
+   than twice the 5.0% the plan recorded in August. **P4 inherits a real, failing criterion.**
+2. **The rolloff is doing real work on Mars.** It holds the worst longitude at 11.10% where it
+   would otherwise be 44.83%, and takes 21-51% of Mars's chroma to do it. Removing it is not on the
+   table; re-scoping it is a trade on this planet.
+3. **The instruments never disagreed.** 0.09% (`sun-3`, alias), 0.29% (`sun-3`, localhost) and 1.87%
+   (`p3-albedo`) are three points on one curve that runs from 0.00% to 11.10%.
+4. `ExposureToneMap.tsx` records its constants were "tightened until [the worst longitude] reached
+   zero". Today the worst longitude is 11.10%. Those constants predate P3, which re-set the lamp,
+   the falloff and Mars's aperture (`ORBIT_APERTURE` mars 0.72 -> 0.92). That is context for where
+   to look, **not** a demonstrated cause.
+
+### What one turn still does not cover
+
+The ORBIT vantage's lit target wobbles on two slow cycles - `CameraRig.tsx`,
+`sin(t * 0.055)` and `sin(t * 0.021 + 1.7)`, periods **114 s and 299 s** - so a 21 s turn sees one
+slice of it, and 11.10% is the worst **of this turn**, not a proven absolute worst. The closing shot
+shows the scene is not purely spin-periodic: one turn later clipping matched within 0.2 points
+(1.69% against 1.87%), but 91% of the frame's pixels had changed (mean 8.9). Part of that is the
+framing's size, which breathes on a ~30 s cycle (radius 306-318 px) from a source not yet identified
+- it is **not** the lit wobble, whose periods do not match.
+
+### P4-1, restated - PROPOSED, needs the owner
+
+Because two clocks other than the spin move the result, P4-1 can only be judged fairly as a
+**paired** comparison: before and after the change, over a full turn, at identical scene instants,
+which holds every clock equal on both sides. Proposed: the worst-longitude clipping after the change
+must not exceed the worst before it (11.10% today). The absolute 0.05% target has **never held over
+a full turn on the current lighting**, so whether to keep it, and what it would take, is the owner's
+call rather than something this stage should assume.
 
 ---
 

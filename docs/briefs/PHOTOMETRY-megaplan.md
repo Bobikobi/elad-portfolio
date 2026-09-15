@@ -347,6 +347,10 @@ So P4 is now two separate things, and only the first is P4:
 stage inherits a fix, not just a guard), and the mean chroma of every focused world's disc
 rises or holds. No frame goes over 250 in all three channels anywhere - the same corrected threshold as P3-1.
 
+> **CORRECTED 2026-09-15** - "currently 5.0%" was one longitude. Mars keeps spinning inside its
+> focused world; measured over a full turn with the rolloff on, its disc clips 0.00-11.10% (worst at
+> 297.9 deg). See [P4-brief.md](P4-brief.md), "MARS OVER A FULL TURN".
+
 ---
 
 ## P5 - close the holes in the criteria
