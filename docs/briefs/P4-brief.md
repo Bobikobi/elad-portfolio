@@ -541,7 +541,19 @@ technologies 135 -> 114, no other body loses colour, the sun's core +0.06%.
 
 The modest version is therefore reachable only with Venus taken out of P4 entirely - her goal **and** her
 share of guards P4-4 and P4-5 - which is consistent with making her a separate item. On those terms 0.73
-passes every criterion measured so far. P4-6 (the sun) and P4-7 (cost) are being measured for it.
+passes every criterion measured so far. P4-6 (the sun) and P4-7 (cost), measured for it:
+
+| | today | strength 0.73 | |
+|---|---|---|---|
+| S1 granulation | autocorr 10.488%, spectrum 1.943% | 10.490%, 1.943% | PASS |
+| S2 hot core | peak 224, core/limb 2.16x | peak 225, 2.17x | PASS |
+| S3 corona | 2.955x sky | 2.955x | PASS |
+| S4 limb/centre | 0.743 | 0.743 | PASS |
+| S5 granulation lifetime | 5.156 s | 5.156 s | PASS |
+| S6 tier law | calls 69/64, tris 167,134/146,549, 16.700 ms | identical | PASS |
+
+**The sun is untouched and nothing costs more.** With Venus out of P4, strength 0.73 passes every measured
+criterion; only P4-8, the owner's look, remains.
 
 **Audited before anything else was believed.** Every Mars turn is aligned with `turn-on` on every shot
 in absolute scene time, and every `p3-albedo` capture froze all six views at frame 1601. **No result
