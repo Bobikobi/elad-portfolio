@@ -111,3 +111,41 @@ than one I was able to film.
 The external reviewer's capture conditions - route, tier, viewport, and the interval
 between their two frames. If they sampled during the entry flight, or on the galaxy act
 rather than a world, the population in frame is different from the one measured here.
+
+---
+
+## 2026-09-14 - the pulse patch is applied, and its guard cries wolf on every load
+
+Found while investigating something else. The dev server log showed
+`[SeededStars] drei's star pulse is not the line we patch - sky left as is` 124 times, which
+reads as "the fix for candidates 1 and 3 has silently stopped working". **It has not.**
+
+Probed the live star material with `window.__three`, on the dev server and on a deployed
+preview build of `mobile-1-wip`:
+
+| build | guard messages per load | 13,000-point star material |
+|---|---|---|
+| dev, localhost | 1 | patched pulse **present**, original pulse **absent**, `vFade` present |
+| preview alias | 1 | patched pulse **present**, original pulse **absent**, `vFade` present |
+
+So the sky is patched in both builds, and the guard fires once per load anyway.
+
+Two explanations were checked and are **wrong**, recorded so nobody re-derives them:
+- **A drei upgrade broke the match.** drei has been 10.7.7 since the scene first landed
+  (`e0b1f34`, 2026-07-23), before the patch (`36a99fb`, 2026-08-03), and the installed
+  `core/Stars.js` contains the exact `PULSE` string. (A stale drei 9.122.0 copy also sits in
+  the pnpm store; a naive `find` lands on it first. It is not what resolves.)
+- **React's dev-only double effect run.** The preview build does not double-invoke effects and
+  logs it too.
+
+What remains consistent with both probes: the effect runs more than once per mount - its deps
+are `[radius, depth, count, factor]`, and `count` follows the quality tier - and on one of
+those runs it either finds no material yet or finds the text it already rewrote. Either way
+one run patches and one run logs. Not investigated further.
+
+**Why it matters anyway.** The comment above the guard says it exists to "refuse loudly
+instead of shipping a sky that silently stopped twinkling". A guard that fires on every
+healthy load cannot do that: a real break would log the same line it logs today. The fix is
+to recognise the patch's own output as success - check for the patched line before logging.
+**Not done here**: it is product code outside the stage that found it, and it needs its own
+small brief. Until then, this message in a log is not evidence of anything.
