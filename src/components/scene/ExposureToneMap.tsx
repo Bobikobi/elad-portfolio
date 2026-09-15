@@ -136,14 +136,58 @@ const FRAGMENT_NO_ROLLOFF = (() => {
   return fragmentShader.replace(marker, 'acesFilmic( exposed )');
 })();
 
-const rolloffDisabled = () =>
-  HUD_AVAILABLE &&
-  typeof window !== 'undefined' &&
-  new URLSearchParams(window.location.search).has('noRolloff');
+/**
+ * P4 candidate seam, HUD builds only: `?hl=knee,range,max` or `?hl=knee,range,max,power`.
+ *
+ * Re-scoping this function means trying constants, and each try is a full capture set. Editing the
+ * shipped constants per try would rebuild the product for every candidate and leave nothing to
+ * compare a candidate against but a previous build. This builds the candidate shader from the
+ * shipped one by replacing the three constant lines - and, with a fourth value, raising `spread`
+ * to a power, which is the one lever that can tell a saturated red highlight (Mars) from a pale
+ * bright one (Saturn, Venus, Earth's clouds) where brightness alone cannot.
+ *
+ * Without `?hl` (and without `?noRolloff`) the program text is the shipped `fragmentShader`,
+ * byte for byte. With `?hl=0.72,1.70,0.68` - today's values - it must reproduce today's frame
+ * exactly; that is how this seam is validated before any candidate result is believed.
+ */
+const glslNum = (v: number) => (Number.isInteger(v) ? v.toFixed(1) : String(v));
+const HL_MARKERS = {
+  knee: 'const float HL_KNEE  = 0.72;',
+  range: 'const float HL_RANGE = 1.70;',
+  max: 'const float HL_MAX   = 0.68;',
+  spread: 'HL_MAX * over * spread )',
+};
+
+const hudFragment = (): string => {
+  if (!HUD_AVAILABLE || typeof window === 'undefined') return fragmentShader;
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('noRolloff')) return FRAGMENT_NO_ROLLOFF;
+  const hl = params.get('hl');
+  if (!hl) return fragmentShader;
+  const values = hl.split(',').map(Number);
+  const [knee, range, max, power] = values;
+  if (values.length < 3 || values.length > 4 || values.some((v) => !Number.isFinite(v)) ||
+      range <= 0 || max < 0 || max > 1 || (power !== undefined && power <= 0)) {
+    throw new Error(`P4 seam: ?hl must be knee,range,max[,power] with range > 0, 0 <= max <= 1, power > 0 - got "${hl}"`);
+  }
+  for (const [name, marker] of Object.entries(HL_MARKERS)) {
+    if (!fragmentShader.includes(marker)) {
+      throw new Error(`P4 seam: the ${name} line has moved - ?hl would silently measure the shipped constants`);
+    }
+  }
+  let out = fragmentShader
+    .replace(HL_MARKERS.knee, `const float HL_KNEE  = ${glslNum(knee)};`)
+    .replace(HL_MARKERS.range, `const float HL_RANGE = ${glslNum(range)};`)
+    .replace(HL_MARKERS.max, `const float HL_MAX   = ${glslNum(max)};`);
+  if (power !== undefined) {
+    out = out.replace(HL_MARKERS.spread, `HL_MAX * over * pow( spread, ${glslNum(power)} ) )`);
+  }
+  return out;
+};
 
 class ExposureToneMapEffect extends Effect {
-  constructor(noRolloff = false) {
-    super('ExposureToneMap', noRolloff ? FRAGMENT_NO_ROLLOFF : fragmentShader, {
+  constructor(fragment: string = fragmentShader) {
+    super('ExposureToneMap', fragment, {
       uniforms: new Map([['exposure', new Uniform(1)]]),
     });
   }
@@ -156,7 +200,7 @@ class ExposureToneMapEffect extends Effect {
 
 /** Place AFTER God Rays / Bloom (those want HDR) and BEFORE the grade, grain and vignette. */
 const ExposureToneMap = forwardRef<ExposureToneMapEffect>(function ExposureToneMap(_props, ref) {
-  const effect = useMemo(() => new ExposureToneMapEffect(rolloffDisabled()), []);
+  const effect = useMemo(() => new ExposureToneMapEffect(hudFragment()), []);
   return <primitive ref={ref} object={effect} dispose={null} />;
 });
 

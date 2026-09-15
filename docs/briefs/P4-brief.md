@@ -336,9 +336,9 @@ call rather than something this stage should assume.
 
 ---
 
-## CRITERIA, REVISED - 2026-09-15 - PROPOSED
+## CRITERIA, REVISED - 2026-09-15 - APPROVED
 
-**No pixel moves until the owner signs this table.** P4-1 is already decided; the rest are proposed.
+**APPROVED by the owner, 2026-09-15** ("מסכים"), after being asked in plain language: bring colour back to Saturn, Venus and Earth, on condition that Mars burns no worse than today.
 
 Every target below is taken from measurements already in this brief, and the goals are set against
 a named reference - **the same frame with the function switched off** (`?noRolloff`), which is the
@@ -382,6 +382,62 @@ numeric views above look at the galaxy act.
   `mars-turn` method extends to any focused world.
 - `p4-chroma` takes the lit face from the second capture it is given. Before-and-after runs must use
   the same argument order every time, or chroma figures are averaged over slightly different pixels.
+
+---
+
+## SCREENING - 2026-09-15
+
+### The candidate seam, validated before any result was believed
+
+`?hl=knee,range,max[,power]` in HUD builds (`ExposureToneMap.tsx`) builds a candidate shader from the
+shipped one. Two checks, both required and both passed:
+
+- **without `?hl`** the scene is byte-identical to `m1-before` on all six views - the shipped path
+  is untouched;
+- **with today's values**, `?hl=0.72,1.70,0.68`, it reproduces `p4-on` exactly: 13 bodies, 3 sun
+  regions, 6 frames, zero pixels different. The seam measures what it claims.
+
+### Where each body's colour sits - an output-space estimate
+
+From the function-OFF capture, lit face only, pixels with any channel at or above 250 excluded because
+clipping destroys the ratio. The shader's own `spread` is computed before ACES, so this is a proxy.
+
+| body (view) | spread of its brightest 5% of pixels, median |
+|---|---|
+| Earth (about) - the clouds | 0.036 |
+| Jupiter (services) | 0.054 |
+| Saturn (projects) | 0.097 |
+| **Mars (contact)** | **0.669** |
+| **Venus (overview)** | **0.770** - from only 18 unclipped pixels of 1,870 |
+
+The pale bodies' highlights are near neutral and Mars's are strongly saturated, so the steepness of
+the spread response is the lever that can tell them apart. **Venus's highlights look as saturated as
+Mars's** - which predicts the function cannot help Venus without also releasing Mars. The Venus
+figure rests on 18 pixels and was treated as a prediction to test, not a finding.
+
+### Round 1 - both candidates fail
+
+| # | criterion | c1 steep curve `0.72,1.70,0.68,2` | c2 the plan's `0.90,0.35,0.30` |
+|---|---|---|---|
+| P4-1 | Mars worst longitude <= 11.10% | **15.99%** FAIL | **38.41%** FAIL |
+| P4-2 | Saturn chroma >= 0.0928 | 0.0861 FAIL | 0.0895 FAIL |
+| P4-3 | Venus burnt white <= 958 | 1,468 FAIL | 995 FAIL |
+| P4-3 | Earth burnt white <= 8,749 | 8,418 PASS | 8,544 PASS |
+| P4-4 | no body loses chroma | PASS | PASS |
+| P4-5 | no view burns more | PASS | PASS |
+| - | sun chroma change, core | +0.08% | +0.20% |
+
+**Every candidate that gave colour back made Mars worse.** Even c1, the gentlest, moved Mars's worst
+longitude from 11.10% to 15.99%. **Venus did not respond to the steeper curve at all** (1,483 to
+1,468), which is what the estimate above predicted: her highlights are as saturated as Mars's, so any
+setting that spares her also spares Mars.
+
+### Round 2 - under way
+
+c1 lost Mars because a steeper curve lowers the effect everywhere, Mars included. Round 2 raises the
+strength to offset that at Mars's saturation level while keeping the pale bodies spared: `0.72,1.70,
+0.85,2`, `0.72,1.70,1.0,2.5`, `0.72,1.70,1.0,3` and `0.80,1.70,0.90,2`. Each is measured on Mars first,
+and the six views are captured only for candidates that hold Mars.
 
 ---
 
