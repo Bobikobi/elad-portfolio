@@ -432,12 +432,45 @@ longitude from 11.10% to 15.99%. **Venus did not respond to the steeper curve at
 1,468), which is what the estimate above predicted: her highlights are as saturated as Mars's, so any
 setting that spares her also spares Mars.
 
-### Round 2 - under way
+### Round 2 - raise the strength to offset the steeper curve
 
 c1 lost Mars because a steeper curve lowers the effect everywhere, Mars included. Round 2 raises the
 strength to offset that at Mars's saturation level while keeping the pale bodies spared: `0.72,1.70,
 0.85,2`, `0.72,1.70,1.0,2.5`, `0.72,1.70,1.0,3` and `0.80,1.70,0.90,2`. Each is measured on Mars first,
 and the six views are captured only for candidates that hold Mars.
+
+| # | criterion | c4 `0.72,1.70,1.0,2.5` | c6 `0.72,1.70,1.0,3` | c5 `0.80,1.70,0.90,2` |
+|---|---|---|---|---|
+| P4-1 | Mars worst <= 11.10% | **0.74%** PASS | **1.28%** PASS | **1.70%** PASS |
+| P4-2 | Saturn >= 0.0928 | 0.0823 FAIL | 0.0874 FAIL | 0.0802 FAIL |
+| P4-3 | Venus <= 958 | 1,604 FAIL - worse | 1,597 FAIL - worse | 1,577 FAIL - worse |
+| P4-3 | Earth <= 8,749 | 8,344 PASS | 8,112 PASS | 8,641 PASS |
+| P4-4 | no body loses chroma | FAIL: Venus, Mars (both views), Neptune | FAIL: same four | FAIL: same four |
+| P4-5 | no view burns more | FAIL: overview 1,498 -> 1,624 | FAIL: -> 1,616 | FAIL: -> 1,594 |
+| - | sun chroma change, core | +0.01% | +0.05% | +0.24% |
+
+`0.72,1.70,0.85,2` did not produce a comparable turn - the analyzer refused it as sampled at different
+steps - and is rerun in round 3.
+
+### What rounds 1 and 2 establish together
+
+1. **The trade runs both ways.** Raising the strength nearly removes Mars's own clipping - 11.10% to
+   **0.74%** at c4 - but takes a third of Mars's colour in its own world (0.133 to 0.088), burns Venus
+   more (1,483 to ~1,600) and dims Neptune. Lowering it gives colour back and lets Mars burn more.
+2. **Venus and Mars moved against each other in all five comparable candidates.** Whenever Venus
+   improved Mars got worse, and whenever Mars improved Venus got worse. Their highlights are equally
+   saturated, so this function cannot treat them differently. **Venus's goal and Mars's guard conflict
+   inside this function** - that is structural, not a tuning miss, and no setting of these four values
+   is expected to satisfy both.
+3. **Earth passed in all five.** It is the one goal this function reaches easily.
+4. **Saturn's halfway target was reached by none.** Best holding Mars: 0.0874 (c6). Best at all:
+   0.0895 (c2, which let Mars reach 38%).
+
+### Round 3 - the balance point
+
+Between c1 (strength 0.68: Mars worse, no colour lost anywhere) and round 2 (0.90-1.0: Mars near 1%,
+colour lost): same curve, strength 0.85, 0.80, 0.76, 0.72. Each capture is retried once on failure,
+and every retry is logged.
 
 ---
 
