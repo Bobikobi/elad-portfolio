@@ -62,37 +62,36 @@ const assertCanvasOnly = (page) => page.evaluate(() => {
     .map((el) => `${el.tagName}.${el.className || ''}`.slice(0, 60)).slice(0, 5);
 });
 
-// Copied from p7-sun.mjs, unchanged in behaviour.
-const waitForFixedFrame = async (page, target, id) => {
+// Wait and freeze in ONE browser call. DebugHud.tsx: freeze() pins scene time the instant it is called,
+// and waitForFrame() resolves just after its frame has rendered. Called inside the same page.evaluate,
+// freeze pins exactly that frame. Sent as two browser calls - as the first version of this harness and
+// p7-sun do - a frame can render during the CDP round trip between them: measured once, a turn whose
+// shots from 18 onward sat one scene step late. The analyzer caught it; this removes the cause.
+const waitAndFreeze = async (page, target, id) => {
   const at = await page.evaluate(async (frame) => {
     const clock = window.__clock;
     if (!clock) return null;
-    const state = await clock.waitForFrame(frame);
-    return { ...state, actualFrame: clock.frame };
+    await clock.waitForFrame(frame);
+    return await clock.freeze();
   }, target);
-  if (!at?.fixedStep || at.actualFrame < target) throw new Error(`fixedStep did not reach frame ${target} on ${id}`);
+  if (!at?.fixedStep || !at.frozen) throw new Error(`${id}: fixedStep clock did not freeze at frame ${target}`);
   return at;
 };
-const freeze = async (page, id) => {
-  const frozen = await page.evaluate(async () => window.__clock ? await window.__clock.freeze() : null);
-  if (!frozen?.fixedStep || !frozen.frozen) throw new Error(`fixedStep clock did not freeze on ${id}`);
-  return frozen;
-};
-const resumeForSceneSteps = async (page, steps, id) => {
+const stepAndFreeze = async (page, steps, id) => {
   const state = await page.evaluate(async (count) => {
     const clock = window.__clock;
     if (!clock || count < 1) return null;
     const before = clock.state();
-    const resumed = await clock.unfreeze(); // The resolving scene frame is step one.
-    const remaining = count - 1;
-    const reached = remaining > 0 ? await clock.waitForFrame(clock.frame + remaining) : resumed;
-    return { before, reached, actualFrame: clock.frame };
+    await clock.unfreeze(); // The resolving scene frame is step one.
+    if (count > 1) await clock.waitForFrame(clock.frame + count - 1);
+    const frozen = await clock.freeze();
+    return { before, frozen };
   }, steps);
-  const advanced = state ? state.reached.elapsedTime - state.before.elapsedTime : NaN;
-  if (!state?.reached?.fixedStep || state.reached.frozen || Math.abs(advanced - steps / 60) > 1e-7) {
-    throw new Error(`${id}: requested ${steps}/60s of scene time, advanced ${advanced}`);
+  const advanced = state ? state.frozen.elapsedTime - state.before.elapsedTime : NaN;
+  if (!state?.frozen?.fixedStep || !state.frozen.frozen || Math.abs(advanced - steps / 60) > 1e-7) {
+    throw new Error(`${id}: requested ${steps}/60s of scene time, froze after ${advanced * 60} steps`);
   }
-  return state.reached;
+  return state.frozen;
 };
 
 const browser = await puppeteer.launch({
@@ -114,14 +113,9 @@ try {
   });
   if (!/angle|vulkan/i.test(gpu) || /swiftshader/i.test(gpu)) throw new Error(`NO REAL GPU (${gpu}) - refusing to measure`);
 
-  await waitForFixedFrame(page, START_FRAME, 'start');
-  // Freeze AT the anchor, then hide the DOM. The first version hid first and froze after its
-  // 400ms wall-clock wait, so the scene kept running: sample 0 landed at 26.88s against
-  // p3-albedo's 26.67s for the same START_FRAME - 13 steps, ~4 degrees of spin - and, because
-  // that wait is wall-clock, it would land a different number of steps late on every run.
-  // Two turns captured that way cannot be paired by longitude. Freezing the scene clock does
-  // not stop CSS, so the overlay still hides while the frame holds.
-  let frozen = await freeze(page, 'start');
+  // Freeze AT the anchor, in the same browser call as the wait, then hide the DOM. Freezing the scene
+  // clock does not stop CSS, so the overlay still hides while the frame holds.
+  let frozen = await waitAndFreeze(page, START_FRAME, 'start');
   await hideDom(page);
   await wait(400);
   const leaks = await assertCanvasOnly(page);
@@ -156,16 +150,14 @@ try {
   for (let i = 0; i < SAMPLES; i++) {
     const want = i * STEPS_PER_SAMPLE;
     if (want > taken) {
-      await resumeForSceneSteps(page, want - taken, `sample ${i}`);
-      await freeze(page, `sample ${i}`);
+      await stepAndFreeze(page, want - taken, `sample ${i}`);
       taken = want;
     }
     samples.push(await shoot(i, `s${String(i).padStart(2, '0')}`));
     console.log(`sample ${i}: ${samples[i].steps} steps, ${(samples[i].angleRad * 180 / Math.PI % 360).toFixed(1)} deg`);
     writeManifest(null);
   }
-  await resumeForSceneSteps(page, CLOSING_STEPS - taken, 'closing');
-  await freeze(page, 'closing');
+  await stepAndFreeze(page, CLOSING_STEPS - taken, 'closing');
   const closing = await shoot(SAMPLES, 'closing');
   console.log(`closing: ${closing.steps} steps, ${(closing.angleRad * 180 / Math.PI % 360).toFixed(2)} deg past sample 0`);
 

@@ -21,6 +21,15 @@ p3 = importlib.util.module_from_spec(spec); spec.loader.exec_module(p3)
 
 for tag in sys.argv[1:]:
     print(f"\n######## {tag}")
+    # Every view must have frozen at the same absolute scene time as the baseline, or the comparison is
+    # of two different moments of a spinning scene. p3-albedo sends wait and freeze as two browser
+    # calls, so a slip is possible; it is checked here rather than assumed away.
+    _on, _c = p3.load_capture('p4-on'), p3.load_capture(tag)
+    _bad = [(view, (_on['views'][view].get('frozen') or {}).get('elapsedTime'), (_c['views'][view].get('frozen') or {}).get('elapsedTime'))
+            for view in p3.VIEWS
+            if abs(((_on['views'][view].get('frozen') or {}).get('elapsedTime') or -1) - ((_c['views'][view].get('frozen') or {}).get('elapsedTime') or -2)) > 1e-6]
+    if _bad:
+        print(f"REFUSED: views froze at a different scene time than p4-on: {_bad}"); continue
     r = subprocess.run(['python3', 'scripts/harness/p4-chroma.py', 'p4-on', tag], capture_output=True, text=True)
     if r.returncode != 0:
         print("p4-chroma failed:", (r.stdout + r.stderr)[-600:]); continue

@@ -76,6 +76,7 @@ def measure(sample):
     any_clip = px.max(axis=1) > CLIP
     row = {
         "index": sample["index"],
+        "elapsedTime": float(sample["elapsedTime"]),
         "steps": sample["steps"],
         "degrees": math.degrees(sample["angleRad"]) % 360,
         "discPixels": int(mask.sum()),
@@ -163,6 +164,12 @@ def main():
         o_rows, _, _, _ = summarise(other)
         if len(o_rows) != len(rows) or any(a["steps"] != b["steps"] for a, b in zip(rows, o_rows)):
             raise SystemExit("REFUSED: the two turns were not sampled at the same steps")
+        # Step COUNTS can agree while the turns are offset: a first shot that slipped a frame and then
+        # stepped cleanly keeps every count equal. Compare absolute scene time too.
+        off = [(a["index"], round((b["elapsedTime"] - a["elapsedTime"]) * 60, 3)) for a, b in zip(rows, o_rows)
+               if abs(b["elapsedTime"] - a["elapsedTime"]) > 1e-6]
+        if off:
+            raise SystemExit(f"REFUSED: the two turns are offset in absolute scene time at shot(s) {off[:5]} (in steps)")
         print(f"\nper longitude, `{tag}` against `{other_tag}` {other.get('extraQs') or ''}")
         print(f"{'deg':>6} {'clip on':>8} {'clip off':>9} {'chroma on':>10} {'off':>7} {'taken':>7}")
         for a, b in zip(rows, o_rows):
