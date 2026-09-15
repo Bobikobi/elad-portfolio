@@ -1,5 +1,22 @@
 # MOBILE-1 verify - M3 and M4 pass, M1 and M2 do not, and the eye finds a regression
 
+> **CLOSED 2026-09-15 as PARTIAL - owner decision.**
+>
+> **What this stage leaves in the code:** the bitmap texture loader, which decodes images off the main
+> thread and carries the fix for the black-planet bug found here. The settled scene is byte-identical to
+> before on all six views, on localhost and on the deployed alias (M3, signed), and it costs nothing (M4).
+>
+> **What it did not achieve:** M1 (total blocking time) and M2 (longest task). Measured on the local
+> production build and on the alias, neither lever this stage was allowed moves them. Spreading the build
+> across frames was reverted after it lifted the loader onto a sky with no galaxy and added about 10 s of
+> busy main-thread time; the decode move on its own landed inside the baseline's own run-to-run spread.
+> MOBILE-2's N0 then named where the time actually goes - React's scheduler, react-three-fiber's frame loop,
+> and layout - and found no cheap lever there either.
+>
+> **The answer to M1 and M2 is not more tuning of this stage.** It is the owner's direction for phones,
+> recorded in [MOBILE-2-brief.md](MOBILE-2-brief.md): a newly designed gallery-style view - one planet at a
+> time, a swipe to the next, no free camera - to be designed after the current work, with its own brief.
+
 Measured 2026-09-11 against [MOBILE-1-brief.md](MOBILE-1-brief.md), on branch
 `mobile-1-wip` at `e8c7a74`, baseline `codex/p1-pilot` at `64f4efd`.
 **Re-measured 2026-09-14 on the deployed preview aliases, so rule 2 is satisfied** - see
