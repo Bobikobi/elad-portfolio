@@ -155,6 +155,13 @@ const browser = await puppeteer.launch({
 const report = { base: BASE, tag: TAG, when: new Date().toISOString(), views: {} };
 let failed = false;
 
+// try/finally around the whole capture, added 2026-09-15. Without it, a tab crash inside a
+// page.evaluate throws out of top-level await, Node prints the error - and then never exits,
+// because the Chrome child it launched is still holding the event loop open. That is not
+// hypothetical: a sweep hit "Target closed" on the Mars world and sat for 12 hours 39 minutes
+// with its browser alive until it was killed by PID. The loop body is left at its original
+// indentation to keep this diff reviewable.
+try {
 for (const view of VIEWS) {
   const page = await browser.newPage();
   await applyBypass(page);
@@ -251,4 +258,6 @@ for (const view of VIEWS) {
 report.focusMismatch = failed;
 fs.writeFileSync(path.join(OUT, `${TAG}-capture.json`), JSON.stringify(report, null, 2));
 console.log(`\ncaptured 6 views x 2 shots -> ${OUT}  (tag "${TAG}")`);
-await browser.close();
+} finally {
+  await browser.close().catch(() => {});
+}
