@@ -555,6 +555,35 @@ passes every criterion measured so far. P4-6 (the sun) and P4-7 (cost), measured
 **The sun is untouched and nothing costs more.** With Venus out of P4, strength 0.73 passes every measured
 criterion; only P4-8, the owner's look, remains.
 
+### P4-8 evidence - and what it shows
+
+`p4-galaxy.mjs` captured the galaxy act before and after, and a side-by-side sheet - all six views, the
+galaxy, and zooms of Saturn, Earth, Venus (x4) and Mars - was sent to the owner. Strength 0.73 against today:
+
+| frame | pixels changed | largest change, of 255 |
+|---|---|---|
+| overview | 1.57% | 85 |
+| Earth world | 10.49% | 21 |
+| Jupiter world | 11.06% | 12 |
+| Saturn world | 17.59% | 6 |
+| technologies | 1.67% | 6 |
+| Mars world | 10.56% | 19 |
+| galaxy act | 23.38% | 47 |
+
+In the most-changed 260 px square of each: the galaxy's mean change is **1.01 of 255**, with 0.43% of
+pixels moving by 10 or more and 0.03% by 25 or more; Earth's mean is **0.95**, with 0.05% by 10 or more.
+Viewed at full resolution with the difference amplified 5x and 10x, **before and after are
+indistinguishable by eye.**
+
+**The honest reading: strength 0.73 is safe and too small to see.** The measured gains are real -
+Saturn's lit-face chroma +13.6%, Earth's burnt-white pixels -12.9% - but they are averages of changes of
+about one level per pixel. The galaxy's "23% of pixels changed" is the same thing: almost all single-level
+shifts. Nothing is visibly harmed, and nothing is visibly improved.
+
+That reframes the stage. P4 set out to give visible colour back. Across eleven measured candidates this
+function could not do that without making Mars or Venus worse, and the one setting that makes nothing else
+worse changes nothing a visitor can see. Whether to ship it is the owner's call.
+
 **Audited before anything else was believed.** Every Mars turn is aligned with `turn-on` on every shot
 in absolute scene time, and every `p3-albedo` capture froze all six views at frame 1601. **No result
 recorded above is affected.** The fix - wait and freeze inside one browser call, plus an absolute-time
