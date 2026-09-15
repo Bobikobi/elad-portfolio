@@ -350,6 +350,9 @@ rises or holds. No frame goes over 250 in all three channels anywhere - the same
 > **CORRECTED 2026-09-15** - "currently 5.0%" was one longitude. Mars keeps spinning inside its
 > focused world; measured over a full turn with the rolloff on, its disc clips 0.00-11.10% (worst at
 > 297.9 deg). See [P4-brief.md](P4-brief.md), "MARS OVER A FULL TURN".
+>
+> **Owner decision, 2026-09-15:** P4 is judged by "Mars clips no worse over a paired full turn". The
+> 0% target is not P4's to meet; Mars's 11.10% is a separate open defect.
 
 ---
 

@@ -132,6 +132,10 @@ answers, and the answer decides how much of a stage P4 actually is.
 
 ## Criteria - PROPOSED
 
+> **SUPERSEDED 2026-09-15** by "CRITERIA, REVISED" further down. This table was written before any
+> measurement: it rests on the sun losing 49% (it loses 0.35%) and on "nothing clips anywhere"
+> being reachable at all. Kept for the record.
+
 | # | criterion | how | target |
 |---|---|---|---|
 | **P4-1** | the case it exists for still works | `sun-3.py`, Mars's focused world | **<= 0.05%** of the disc over 250 in any channel, from 0.08% |
@@ -323,6 +327,61 @@ which holds every clock equal on both sides. Proposed: the worst-longitude clipp
 must not exceed the worst before it (11.10% today). The absolute 0.05% target has **never held over
 a full turn on the current lighting**, so whether to keep it, and what it would take, is the owner's
 call rather than something this stage should assume.
+
+> **DECIDED BY THE OWNER, 2026-09-15.** P4-1 is judged as the paired no-regression rule above:
+> over a full turn at identical scene instants, Mars's worst-longitude clipping after the change
+> must not exceed the worst before it. Mars's 11.10% is recorded as a separate open defect, not as
+> something P4 must fix. P4's gains are on Saturn, Venus and Earth; Mars's clipping is most likely a
+> lighting question, and is not this function's to solve.
+
+---
+
+## CRITERIA, REVISED - 2026-09-15 - PROPOSED
+
+**No pixel moves until the owner signs this table.** P4-1 is already decided; the rest are proposed.
+
+Every target below is taken from measurements already in this brief, and the goals are set against
+a named reference - **the same frame with the function switched off** (`?noRolloff`), which is the
+upper bound of what re-scoping it can give back. "Halfway" means recovering at least half of the
+distance between today and that reference.
+
+### What should be TRUE afterwards
+
+| # | criterion | how | today | reference, function off | target |
+|---|---|---|---|---|---|
+| **P4-1** | Mars does not clip worse | `mars-turn`, paired full turn at identical scene instants | worst **11.10%** | 44.83% | worst longitude **<= 11.10%** - **DECIDED** |
+| **P4-2** | Saturn gets its colour back | `p4-chroma`, projects world, lit-face chroma | **0.0744** | 0.1112 | **>= 0.0928** (halfway) |
+| **P4-3** | the burnt white turns back into colour | `p4-chroma`, pixels over 250 in all three channels | Venus (overview) **1,483** · Earth's world **9,712** | 434 · 7,786 | Venus **<= 958** · Earth **<= 8,749** (halfway) |
+
+### Guards - nothing gets worse
+
+| # | criterion | how | target |
+|---|---|---|---|
+| **P4-4** | no body loses colour | `p4-chroma`, all 13 body rows, before against after | lit-face chroma on every row **>= today's** |
+| **P4-5** | nothing newly burns out | `p3-albedo`, six views | all-channel clipping **does not rise** in any view |
+| **P4-6** | the sun is left alone | `p7-sun` S1-S6 | all six still pass; S4 **<= 0.75** |
+| **P4-7** | it costs nothing | `p7-sun` S6, both tiers | calls, triangles, median frame time unchanged |
+
+### Not measurable - the owner judges
+
+| # | what | how |
+|---|---|---|
+| **P4-8** | the scene still reads as itself: saturation returning, not a different palette, no body changing hue | the six views **and one galaxy-act frame**, before and after side by side |
+
+The galaxy frame is there because this function runs on every pixel in the site, and none of the
+numeric views above look at the galaxy act.
+
+### How honest each measurement is
+
+- **P4-1 is the only criterion measured over a full turn**, because Mars is the only body where the
+  function is guarding against a worst case. It holds both of the scene's other clocks equal by
+  pairing, not by covering them.
+- **P4-2 to P4-5 are paired at one frame** (fixed step, frozen at frame 1601). That is a fair
+  before-and-after at one state of a spinning scene. It is not a worst case, and a body could look
+  better at that frame and worse at another. If the owner wants P4-2/P4-3 over a full turn too, the
+  `mars-turn` method extends to any focused world.
+- `p4-chroma` takes the lit face from the second capture it is given. Before-and-after runs must use
+  the same argument order every time, or chroma figures are averaged over slightly different pixels.
 
 ---
 
