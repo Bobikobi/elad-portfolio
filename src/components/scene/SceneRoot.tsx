@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import SeededStars from './SeededStars';
 import * as THREE from 'three';
+import { NEUTRAL_APERTURE } from '@/lib/photometry';
 import { useScene } from '@/lib/sceneStore';
 import { sparkleClock } from '@/lib/spaceMaterials';
 import GalaxyAct from './acts/GalaxyAct';
@@ -18,7 +19,14 @@ import { FramePacer, ResolutionScaler } from './PerfPacer';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
-import { HudProbe, DebugHudOverlay, HUD_AVAILABLE, useHudEnabled } from './DebugHud';
+import {
+  ClockFreezeProbe,
+  HudProbe,
+  DebugHudOverlay,
+  HUD_AVAILABLE,
+  installFixedStepClock,
+  useHudEnabled,
+} from './DebugHud';
 
 /**
  * The single WebGL canvas — fixed, full-bleed, behind the DOM. `dynamic(ssr:false)`
@@ -87,9 +95,13 @@ export default function SceneRoot() {
         dpr={1}
         camera={{ position: [0, 2.6, 9], fov: 55, near: 0.1, far: 200 }}
         shadows={false}
-        onCreated={({ gl }) => {
+        onCreated={({ gl, clock }) => {
+          // R3F 9.6.1 calls onCreated after the scene graph commit but before its first
+          // requestAnimationFrame update. Fixed-step must be installed here: mounting the
+          // probe below in an effect would make first-frame coverage depend on scheduling.
+          if (HUD_AVAILABLE) installFixedStepClock(clock);
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1;
+          gl.toneMappingExposure = NEUTRAL_APERTURE;
         }}
       >
         <color attach="background" args={['#050714']} />
@@ -125,6 +137,10 @@ export default function SceneRoot() {
         {/* Priority 2 → the last thing in the frame, after the composer has drawn it, so
             every pill lands on the exact pixels of the body it names (R5.4). */}
         <PlanetLabelDriver />
+        {/* Unlike the visible HUD, the measurement seam is available without ?hud=1 so its
+            own overlay never contaminates a screenshot. The build-time flag is the outer
+            guard: production neither mounts the probe nor publishes anything to window. */}
+        {HUD_AVAILABLE && <ClockFreezeProbe />}
         {HUD_AVAILABLE && hudOn && <HudProbe />}
       </Canvas>
       <DragControls />

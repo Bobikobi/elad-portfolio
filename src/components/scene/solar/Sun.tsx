@@ -3,8 +3,33 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
+import { HUD_AVAILABLE } from '../DebugHud';
+import {
+  SUN_EMISSIVE_EXPOSURE,
+  SUN_LAMP_DECAY,
+  SUN_LAMP_DISTANCE,
+  SUN_LAMP_INTENSITY,
+} from '@/lib/photometry';
 import { softSprite, flameSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
+
+/**
+ * Print a TS number as a GLSL float literal.
+ *
+ * Two hazards, and both are invisible to the type system because they live inside a
+ * template string. This shader is GLSL ES 1.00 - it writes gl_FragColor - and that dialect
+ * has no implicit int-to-float conversion, so an interpolated `2` fails to compile and the
+ * sun vanishes. But `toFixed(1)`, the obvious way to force the decimal point, silently
+ * ROUNDS: it turns 1.55 into "1.6" and 0.06 into "0.1". photometry.ts exists precisely so
+ * these numbers can be tuned, so a rounding trap in the interpolation is a wrong value
+ * waiting for the first person who tunes one. Full precision, and a decimal point only
+ * where JavaScript would not print one.
+ */
+const glslFloat = (v: number) => (Number.isInteger(v) ? v.toFixed(1) : String(v));
+
+/** `?pinSpin` freezes the sun's rigid rotation so a harness can measure surface evolution. */
+const SPIN_PINNED =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('pinSpin');
 
 // Shared compact value-noise (used by both the surface colour and the edge wobble).
 const NOISE_GLSL = /* glsl */ `
@@ -20,6 +45,41 @@ const NOISE_GLSL = /* glsl */ `
   // the disc has pixels at any framing the sun is seen at, which is not detail, it is noise
   // for the sampler to alias.
   float grain(vec3 p){ return noise(p) * 0.62 + noise(p * 2.0) * 0.38; }
+
+  // CELLULAR noise, and this is the one that matters.
+  //
+  // Value noise makes CLOUDS: soft woolly blobs, which is what the surface looked like
+  // through every round of frequency and amplitude tuning, because no amount of either turns
+  // a cloud into a cell. A photosphere is not cloudy - it is a pavement of bright granules
+  // separated by NARROW DARK LANES, and that shape only comes out of a distance-to-nearest-
+  // point field.
+  //
+  // Returns the two nearest distances. Their DIFFERENCE is near zero exactly on the border
+  // between two cells and nowhere else, which is the lane; inside a cell it is large.
+  //
+  // EIGHT cells, not twenty-seven. The exact version searches the full 3x3x3 neighbourhood
+  // and it measured +3.1ms on the low tier and +2.6ms on the high one - a fifth of the frame
+  // for a texture that is deliberately subtle. The two nearest centres are, in practice,
+  // in the octant the sample leans toward, so that is the octant this searches: its own cell
+  // and the seven neighbours on the side it is nearest to.
+  //
+  // It can pick a wrong second-nearest where three cells nearly meet. On a warped field at
+  // this contrast that is a lane a pixel wide being a shade off, and the frame time is worth
+  // more than that.
+  vec2 worley(vec3 p){
+    vec3 i = floor(p), f = fract(p);
+    vec3 s = step(vec3(0.5), f) * 2.0 - 1.0;
+    float f1 = 9.0, f2 = 9.0;
+    for (int a = 0; a < 2; a++)
+    for (int b = 0; b < 2; b++)
+    for (int c = 0; c < 2; c++) {
+      vec3 g = vec3(float(a) * s.x, float(b) * s.y, float(c) * s.z);
+      vec3 o = vec3(hash(i + g), hash(i + g + 11.3), hash(i + g + 27.7));
+      float d = length(g + o - f);
+      if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
+    }
+    return vec2(f1, f2);
+  }
 `;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
@@ -31,7 +91,14 @@ const sunVert = /* glsl */ `
   void main() {
     vPos = position;
     vNormal = normalize(normalMatrix * normal);
-    float d = fbm(normalize(position) * 3.0 + vec3(0.0, uTime * 0.12, 0.0));
+    // P7: 0.12 -> 0.03. This vertex wobble was the last fast clock in the sun and it was
+    // the one actually driving the surface's decorrelation - it displaces EVERY vertex
+    // radially, not just the silhouette, so the whole texture swims in screen space while
+    // the shader's own time terms sit twenty times slower. Measured: slowing the fragment
+    // clocks twice moved the granulation half-life 4.407s -> 4.408s, i.e. not at all.
+    // SUN-2's C3 wants a live limb and is measured against this term, so it is slowed by
+    // four rather than by twenty, and C3 must be re-measured before this stage is signed.
+    float d = fbm(normalize(position) * 3.0 + vec3(0.0, uTime * 0.023, 0.0));
     // 0.09 -> 0.13. With the bloom no longer smeared across the limb the silhouette is
     // measured against the geometry itself rather than the glow around it, and the same
     // displacement that read as 1.55% of the radius through the haze reads as 1.16%
@@ -57,9 +124,52 @@ const sunFrag = /* glsl */ `
     // is about fourteen, and the weight moves to the finer of the two so the big shapes stop
     // dominating the face.
     vec3 p = vPos * 4.6;
-    float slow = fbm(p + vec3(0.0, uTime*0.05, 0.0));               // big slow swirls
-    float fast = fbm(p*2.6 - vec3(0.0, uTime*0.16, uTime*0.05));    // fast granules
-    float n = slow*0.45 + fast*0.55;
+    // The large scale keeps its job and loses its dominance: real photospheres do vary in
+    // brightness across the disc, but slowly and gently, and it was this term - a cloud -
+    // that the whole surface was reading as.
+    float slow = fbm(p + vec3(0.0, uTime*0.0015, 0.0));
+    float fast = fbm(p*2.6 - vec3(0.0, uTime*0.0048, uTime*0.0015));
+    float big = slow*0.55 + fast*0.45;
+
+    // THE GRANULATION. ~36 cells across the disc, which is what a photograph of the sun
+    // shows at this size; the sun's own are far finer than any screen could resolve, and
+    // drawing them at their true scale is drawing grey.
+    // WARPED, or it reads as crackle. An unwarped Voronoi is a regular pavement - even
+    // cell sizes, even lane widths, the look of dried mud rather than plasma. Pushing the
+    // sample point around with the large-scale field first breaks the regularity in both
+    // size and shape, and costs one extra noise lookup.
+    vec3 warp = vec3(slow - 0.5, fast - 0.5, noise(p * 1.9 + vec3(7.3)) - 0.5) * 1.5;
+    vec2 w = worley(vPos * 17.0 + warp + vec3(0.0, uTime * 0.00042, uTime * 0.0006));
+    // Bright inside the cell, dark in the narrow lane where the two nearest centres are
+    // equidistant. The upper edge is deliberately low - a wide smoothstep here paints fat
+    // grey borders and the pavement turns back into cloud.
+    // Wide and SHALLOW. A narrow window with a big weight draws a net over the disc - the
+    // contrast between a real granule and its lane is maybe a fifth of the disc's range, not
+    // half of it, and at half the surface reads as a lychee skin rather than as plasma.
+    float cells = smoothstep(0.02, 0.34, w.y - w.x);
+    // A little variation between neighbouring granules, so the pavement is not one tone.
+    // P7: 12 -> 15 here and in the worley call above, and they must move together or the
+    // per-cell tint stops lining up with the cells it is tinting. The power spectrum put
+    // the grain at 2.37% of the disc diameter against S1's 1-2%; 12/15 scales that to about
+    // 1.9%. The reference's real granule is 0.066%, which at this disc size is half a pixel
+    // - the target is the finest grain that survives being drawn, not the true one.
+    float perCell = hash(floor(vPos * 17.0 + 0.5)) * 0.07;
+
+    // The LEVEL matters as much as the pattern. The cell term sits near 1 over most of a
+    // granule and the large scale averages 0.5, so the first balance put n's mean near 0.77
+    // - past the hot stop across nearly the whole disc, and the surface went pale again
+    // exactly as it had with the old ramp. These weights put the mean near 0.49, where the
+    // amber lives, and leave the hot stop for the brightest cells.
+    // P7, 2026-08-17. MEASURED, not adjusted by eye: the rendered disc was analysed two
+    // ways and they disagreed by 140% - autocorrelation found structure at 12.9% of the
+    // disc diameter, the power spectrum at 2.26%. That is not noise in the instrument, it
+    // is two structures, and the coarse one was winning: the big field carried weight 0.34
+    // the cells' 0.12, nearly three times as much. The golf-ball reading is that term.
+    // Raising the cell FREQUENCY - the obvious fix - would only have produced a finer golf
+    // ball, because it does not touch which structure the eye lands on. The weights are
+    // swapped instead, and the constant is trimmed to hold n's mean near 0.5 where the
+    // amber lives, since the level decides the ramp stop as much as the pattern does.
+    float n = 0.15 + big * 0.18 + cells * 0.28 + perCell;
     // SUN-2. The surface had the large blotches and nothing else - measured, its
     // high-frequency energy was 1.3 luminance units against 6.5 for the large structure, and
     // that is what makes a photographed sun read as smooth instead of boiling. A detail
@@ -68,58 +178,128 @@ const sunFrag = /* glsl */ `
     // Kept at the SAME absolute frequency it had before the base was doubled - 62 times the
     // surface position, not 26 times a base that has itself moved - or the two octaves would
     // have converged and there would be no separation between the cells and their grain.
-    float gr = grain(p*13.6 + vec3(uTime*0.09, -uTime*0.06, uTime*0.04));
-    n += (gr - 0.5) * 0.17;
-    // B3: these were mixed for a frame that had NO tone mapper, where anything over 1
-    // simply clamped and (1.0, 0.5, 0.11) stayed vividly gold. ACES desaturates its
-    // highlights toward white on the way up, so the same values came out pale butter.
-    // Pushing the source far more saturated keeps the star burning gold AFTER the curve —
-    // measured, the mid tone now lands at sRGB (254, 218, 124) instead of a washed cream —
-    // while the HDR magnitude stays high, which is what Bloom and God Rays read.
-    vec3 dark = vec3(0.60, 0.13, 0.015);
-    vec3 mid  = vec3(1.00, 0.30, 0.030);
-    vec3 hot  = vec3(1.00, 0.74, 0.300);
+    // Sub-cell texture, on top of the pavement rather than instead of it. Smaller than it
+    // was: the cells now carry the structure, and this only stops each granule from being a
+    // flat plate.
+    // P7: every time term above and below divided by twenty. The granulation's measured
+    // half-life was 0.657 SECONDS - the surface boiled away in under a second, which reads
+    // as shimmer rather than as a live photosphere. The real sun halves in 252s; the
+    // criterion asks for 6-20s, because a visitor should see it move without waiting four
+    // minutes for it.
+    float gr = grain(p*13.6 + vec3(uTime*0.00162, -uTime*0.0018, uTime*0.0012));
+    n += (gr - 0.5) * 0.13;
+    // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
+    // it was in these nine numbers.
+    //
+    // Measured on the render: the sun's red channel came out 225 of 255 across ONE HUNDRED
+    // PERCENT of the disc, standard deviation 0.31. Every bit of shading the shader
+    // computes - the granulation, the limb darkening below, the plasma flow - existed only
+    // in green and blue, because red had no room left to move in. A sphere whose brightest
+    // channel is a flat plateau cannot read as a sphere, and that is the whole of "it looks
+    // clunky": not the silhouette (measured at 0.97% rms, which is what it should be), not
+    // the granulation (which is there), but a face with no falloff across it.
+    //
+    // Two things did it, and B3 set up both while chasing a real problem:
+    //
+    //  - the mid and hot stops BOTH had red at 1.00, so from the mid stop upward the ramp
+    //    had no red gradient left to give at all;
+    //  - at 1.5x exposure that put the exposed red at 1.16-1.85, which is deep in ACES's
+    //    shoulder. Simulated over the pipeline, a 10% brightness change there moves the
+    //    output 3 of 255; at 0.6 linear the same change moves 7. The limb darkening below
+    //    really does cut linear red by 37% from centre to limb - and 37% arrived at the
+    //    screen as 0.2%.
+    //
+    // B3's reasoning was sound for the frame it was written against ("ACES desaturates its
+    // highlights toward white, so push the source more saturated"). The step it missed is
+    // that pushing a colour PAST the shoulder does not keep it saturated, it freezes it:
+    // the gold stops being a colour the surface has and becomes a ceiling it rests on.
+    //
+    // So the stops are desaturated to 62% and scaled to 56%, which puts the whole disc back
+    // on the part of the curve that has slope. Measured on the render: the disc's mean moves
+    // from sRGB (216, 141, 87) to (186, 124, 89) and, far more to the point, red stops being
+    // a plateau - it now runs 208 at the centre to 174 at the limb where it used to run 225
+    // to 225. Dimmer, and for the first time shaded.
+    //
+    // The dimming is not a side effect to be tuned away, it IS the fix: on this pipeline a
+    // sun bright enough to sit in ACES's shoulder is a sun with no shading, and the two
+    // cannot both be had. How bright it should be from here is the owner's call, not a
+    // measurement - the criteria constrain the gradient, never the level.
+    vec3 dark = vec3(0.255, 0.092, 0.052);
+    vec3 mid  = vec3(0.439, 0.196, 0.102);
+    // The hot stop is the one place red should NOT lead: a hotter patch of a photosphere is
+    // whiter, not redder. Red barely rises from the mid stop while green doubles.
+    // P7: 0.510,0.419,0.267 -> 0.690,0.566,0.361, the same hue scaled by 1.35.
+    //
+    // SUN-3 dimmed everything to get red off its plateau, and that was right, but it left
+    // the core at 212 of 255 where S2 asks for 240. The lever is the HOT stop rather than
+    // the exposure: exposure lifts the limb with the centre and flattens the very gradient
+    // SUN-3 recovered, while the hot stop moves only the brightest cells - the limb sits
+    // low on the ramp and does not follow. So S2 and S4 move the same way for once, which
+    // is why this is tried before anything cleverer.
+    vec3 hot  = vec3(1.035, 0.849, 0.541);
     // SUN-2: the lanes between the cells go deeper and the ramp starts earlier, so the dark
     // stop is actually reached somewhere on the disc instead of being a limit the surface
-    // approaches. The HOT stop is untouched - B3 measured the gold that survives ACES at
-    // exactly these values, and the tone-map discipline is not what this stage is changing.
+    // approaches. (SUN-3 note: that pass left the HOT stop alone on the grounds that B3 had
+    // measured the gold surviving ACES at exactly those values. It had - but "survives ACES"
+    // and "is past the point where ACES still has slope" turned out to be the same place.)
     // The ramp's windows move UP. n centres near 0.5, so with the old windows almost the
     // whole disc sat at or past the mid stop and the surface came out one flat cream tone -
     // "not rich enough", and correctly so: a photographed sun is mostly deep amber with the
     // bright cells as a minority. Now most of the face lives between the dark and mid stops,
     // and the hot stop is reserved for the cells that have actually earned it.
     vec3 col = mix(dark, mid, smoothstep(0.34, 0.74, n));
-    col = mix(col, hot, smoothstep(0.74, 0.94, n));
+    // P7: the hot window drops from (0.74, 0.94) to (0.56, 0.76), and this is a repair of
+    // a defect THIS STAGE introduced. Rebalancing the surface weights - the coarse field
+    // down to 0.18, the cells up to 0.28 - also lowered n's ceiling: its realistic maximum
+    // is about 0.745, so the hot stop sat just outside the range the surface can reach and
+    // was effectively unreachable. The proof was flat: scaling the hot stop by 1.35 changed
+    // the rendered core peak by exactly zero, 212 of 255 before and after, to the last
+    // decimal of every measurement. A constant that can be changed by a third with no
+    // effect on a pixel is not being used.
+    col = mix(col, hot, smoothstep(0.56, 0.76, n));
     // SUN-2 limb darkening. The exponent was 0.35, which holds the term above 0.9 across
     // most of the disc and then falls off a cliff in the last few percent of the radius: the
     // rendered limb measured 1.006x the centre's luminance, i.e. no sphericity at all. At
     // 0.6 the darkening is spread across the disc, which is the term that makes a flat
     // circle read as a ball.
     float ndv = max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0);
-    // Depth 32% -> 48%. Measured on the preview, a 32% darkening arrived at the screen as a
-    // 6% one: bloom spills off the bright interior and fills the limb back in. The term has
-    // to be stronger than the result we want, because something downstream is subtracting
-    // from it - which is a statement about the composite, not about physics.
-    float limb = pow(ndv, 0.6);
-    // Exposure, on the owner's ruling. At 2.2 every radial bin of the disc measured between
-    // 205 and 230 of 255 - the top fifth of the range, where ACES compresses hardest and
-    // desaturates toward white. The grain was being drawn and then flattened, a 32% limb
-    // darkening was arriving as 2%, and the gold B3 locked was coming out chalk. Measured at
-    // 1.4 the grain became visible and the mid tone's red-to-blue gap doubled; 1.5 keeps
-    // that and gives back a little of the brightness.
-    // Depth 48% -> 74%, and this needs saying plainly: the criterion was written in the
-    // wrong colour space. A real sun's limb sits at 65-75% of its centre in LINEAR
-    // intensity; the screenshot it is measured in is tone-mapped and display-encoded, where
-    // that same ratio reads around 0.85, not 0.70. Measured here the curve is far more
-    // compressive than gamma alone - a linear 0.72 came back as 0.91 - so hitting 0.85 on
-    // screen needs about 0.57 linear, and that is where this number comes from.
-    col *= (1.5 + uPulse) * mix(0.26, 1.0, limb);
+    // SUN-3: exponent 0.6 -> 1.0, floor 0.26 -> 0.32.
+    //
+    // The earlier note here blamed Bloom for the darkening "arriving as 6%". It was not
+    // Bloom - toggled off with everything else held, Bloom moved the limb ratio by 0.001.
+    // It was GOD RAYS, which smear the source radially and so paint the bright centre back
+    // out across the limb; see the weight constant in Effects.tsx. Worth recording because
+    // the wrong culprit had this term chasing a number it could not reach, which is how it
+    // ended up as a cliff in the last tenth of the radius with the inner 70% varying by 2%.
+    //
+    // With the real cause fixed and red free to move, the exponent does what it says: near
+    // 1.0 this is close to the linear I(mu) = a + b*mu a real photosphere follows, and the
+    // falloff is spread across the whole face instead of piled at the edge.
+    //
+    // NOTE on how this is measured: the visible limb is NOT ndv = 0. For a sphere of radius
+    // 1.5 seen from 10.65 the tangent point sits at ndv = r/d = 0.141, so the disc spans
+    // 1.0 down to 0.141 and no further. Reading it as the orthographic sqrt(1 - r^2) makes
+    // the predicted limb far darker than the renderer's, and that error spent a round
+    // looking like a mystery term somewhere in the post chain.
+    float limb = pow(ndv, 1.0);
+    // Exposure rationale lives with SUN_EMISSIVE_EXPOSURE in photometry.ts.
+    // glslFloat, not toFixed: see its comment - one guarantees the decimal point, the
+    // other also rounds the value away.
+    // P7: the limb floor drops 0.32 -> 0.20. S4 wants limb/centre at or under 0.75 and it
+    // measured 0.800; the geometric term at the r 0.90-0.97 annulus is about 0.56, so the
+    // gap is what bloom, the god rays and the corona put back. Deepening the floor darkens
+    // the limb WITHOUT touching the centre, so it moves S4 and leaves S2 alone - the same
+    // reason the hot stop was the right lever for S2.
+    col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.15, 1.0, limb);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 const SUN_R = 1.5;
-const PROM_COUNT = 7;
+// SUN-3: 7 -> 5. Seven arcs at the old width and length covered 8.9% of the silhouette
+// with spikes reaching 1.76 sun-radii; five shorter, narrower ones measure 1.1% and 1.09 R.
+// A limb with a few things happening on it reads more alive than one with a ring of them.
+const PROM_COUNT = 5;
 
 // R2.2 milky-halo fix. A bisection (Debug HUD + corner luminance) showed the washed
 // "milky halo" around the sun on arrival — worst on mobile — came from the additive gold
@@ -128,7 +308,12 @@ const PROM_COUNT = 7;
 // glow and the system sits in dark space (corners <10% lum, measured).
 const SHOW_HALO_SPRITE = false;  // big soft gold disc (scale 4.4) - milky-halo contributor
 const SHOW_CORONA_SHELL = false; // corona backside shell (scale 1.28) - primary milky-halo source
-const SHOW_ANAMORPHIC = true;    // short horizontal gold streak - kept (subtle, not a wash)
+// SUN-2: OFF. The streak is drawn across the disc, and on the old cloudy surface nobody
+// could tell. On a granular one it reads as a bright horizontal line cutting the star in
+// half - toggled off and on with everything else held, and the line goes with it. A real
+// anamorphic flare extends past a light source; it does not draw a stripe through it.
+// The sprite itself is kept, so restoring it is one word if the owner wants it back.
+const SHOW_ANAMORPHIC = false;   // short horizontal gold streak - it crossed the disc
 
 /**
  * Solar prominences — flame arcs licking off the limb, each on its own irregular cycle so
@@ -173,17 +358,28 @@ function Prominences() {
       const burst = Math.max(0, Math.sin(t * pr.speed * 0.5 + pr.phase * 1.7) - 0.72) * 3.4;
       const e = Math.min(1.4, base * 0.5 + burst);
       const s = g.children[i] as THREE.Sprite;
-      const l = SUN_R * (0.30 + pr.len * 0.34 * e);
+      // SUN-3. These are the "weird sparkles", and the numbers say why: at 0.30 + len*0.34*e
+      // a fully-erupted arc put its tip at 2.19 SUN_R, i.e. it stuck a sun-and-a-bit out
+      // past the limb. Measured on the render the visible reach was 1.74 R - the faint tip
+      // does not register - and at that length a tapered sprite has stopped being a flame
+      // and become a straight hard-edged ray, which is exactly what it looked like.
+      //
+      // A real prominence is a few percent of the solar radius; even the record ones are
+      // well under half. These now top out at 0.19 R of arc, tip at 1.19 SUN_R, which is
+      // still far more than nature and is the point - it has to be seen at a 350px disc.
+      const l = SUN_R * (0.06 + pr.len * 0.075 * e);
       // The flame's BASE is at v=0, i.e. the bottom edge of the sprite, so the sprite's
       // centre has to sit half a length outboard for the base to land on the limb.
       const anchor = SUN_R * 0.985 + l * 0.5;
       s.position.set(pr.x * anchor, pr.y * anchor, 0);
-      s.scale.set(SUN_R * (0.16 + 0.10 * e), l, 1);
+      // Narrower too, and for the other half of C3: width is what decides how much of the
+      // silhouette is covered, and five arcs at the old width still spanned ~15%.
+      s.scale.set(SUN_R * (0.10 + 0.07 * e), l, 1);
       // SUN-2: the arcs sat at 0.05-0.25 on additive blending, against a rim the bloom has
       // already lit - close to invisible, so the limb read as a clean circle with nothing
       // happening on it. Raised enough to be seen against dark space at the silhouette,
       // still driven entirely by each arc's own eruption envelope.
-      (s.material as THREE.SpriteMaterial).opacity = 0.08 + 0.30 * e;
+      (s.material as THREE.SpriteMaterial).opacity = 0.07 + 0.26 * e;
       s.material.rotation = pr.a - Math.PI / 2;
     }
   });
@@ -230,7 +426,15 @@ export default function Sun() {
       pulse = 0.15 * Math.sin(t * 0.6) + 0.1 * Math.sin(t * 0.23 + 1.3) + Math.max(0, Math.sin(t * 0.11) - 0.9) * 3.0;
       u.uPulse.value = pulse;
     }
-    if (meshRef.current) meshRef.current.rotation.y += dt * 0.03;
+    // Debug-only: a harness measuring how fast the SURFACE evolves has to stop the sun
+    // spinning first. Measured on 2026-08-17: slowing every time term in the shader by
+    // twenty barely moved the granulation half-life, 0.657s to 0.568s, because the
+    // decorrelation was never coming from the shader. At 0.03 rad/s a point on the disc
+    // travels about 3% of the radius per second, which is more than half a granule - so
+    // the pattern was being carried off the sample point long before it could change.
+    // With the spin pinned, a correlation measurement sees evolution and nothing else.
+    // Absent from production builds exactly like the rest of the HUD surface.
+    if (meshRef.current && !(HUD_AVAILABLE && SPIN_PINNED)) meshRef.current.rotation.y += dt * 0.03;
 
     // Camera speed in world units per second, damped. Drives the streak: light stretches
     // when the frame moves and eases back on braking.
@@ -247,13 +451,8 @@ export default function Sun() {
 
   return (
     <group name="sun">
-      {/* B3: the starlight was #ffd9a0 - linear (1.00, 0.69, 0.35), i.e. it delivers
-          three times as much red as blue. On a body that is already red, Mars, the red
-          channel saturated while blue never got off the floor: that is what "neon
-          yellow" was made of. A G star is close to white; the gold identity of this
-          system comes from the sun's own emissive surface and its bloom, both of which
-          are toneMapped:false and untouched by this. */}
-      <pointLight position={[0, 0, 0]} intensity={650} distance={90} decay={2} color="#fff0dc" />
+      {/* Lamp rationale and values live in photometry.ts. */}
+      <pointLight position={[0, 0, 0]} intensity={SUN_LAMP_INTENSITY} distance={SUN_LAMP_DISTANCE} decay={SUN_LAMP_DECAY} color="#fff0dc" />
       {/* Plasma surface (the God Rays source) */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[SUN_R, 96, 96]} />

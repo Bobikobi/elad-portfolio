@@ -1,7 +1,8 @@
 'use client';
 import { useMemo, useRef, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { loadBitmapTexture } from '@/lib/bitmapTexture';
 
 /**
  * A6 — one-universe cohesion. Real public-domain Hubble nebulae (the SAME sprites used by
@@ -29,15 +30,16 @@ const POCKETS: Pocket[] = [
 
 export default function GalaxyNebulae() {
   const group = useRef<THREE.Group>(null);
-  const texes = useMemo(() => {
-    const loader = new THREE.TextureLoader();
-    return POCKETS.map((p) => {
-      const t = loader.load(`/textures/nebula/${p.img}.webp`);
-      t.colorSpace = THREE.SRGBColorSpace;
-      return t;
-    });
-  }, []);
-  useEffect(() => () => texes.forEach((t) => t.dispose()), [texes]);
+  const gl = useThree((s) => s.gl);
+  const textureLoads = useMemo(
+    () =>
+      POCKETS.map((p) =>
+        loadBitmapTexture(`/textures/nebula/${p.img}.webp`, gl, { colorSpace: THREE.SRGBColorSpace })
+      ),
+    [gl]
+  );
+  const texes = textureLoads.map((load) => load.texture);
+  useEffect(() => () => textureLoads.forEach((load) => load.dispose()), [textureLoads]);
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;

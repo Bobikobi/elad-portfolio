@@ -1,10 +1,11 @@
 'use client';
 import { useMemo, useRef, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions } from '@/lib/planetPositions';
 import { featherSpriteProps, makeSparkleMaterial } from '@/lib/spaceMaterials';
+import { loadBitmapTexture } from '@/lib/bitmapTexture';
 
 /**
  * A4 — reference-grade per-world backdrop. When a world is FOCUSED, real Hubble nebula
@@ -53,18 +54,17 @@ const _dir = new THREE.Vector3();
 const _target = new THREE.Vector3();
 
 export default function WorldBackdrop() {
+  const gl = useThree((s) => s.gl);
   const focused = useScene((s) => s.focusedPlanet);
   const cfg = focused ? WORLD_NEBULA[focused] : null;
-  const texes = useMemo(() => {
+  const textureLoads = useMemo(() => {
     if (!cfg) return null;
-    const loader = new THREE.TextureLoader();
-    return cfg.imgs.map((n) => {
-      const t = loader.load(`/textures/nebula/${n}.webp`);
-      t.colorSpace = THREE.SRGBColorSpace;
-      return t;
-    });
-  }, [cfg]);
-  useEffect(() => () => texes?.forEach((t) => t.dispose()), [texes]);
+    return cfg.imgs.map((n) =>
+      loadBitmapTexture(`/textures/nebula/${n}.webp`, gl, { colorSpace: THREE.SRGBColorSpace })
+    );
+  }, [cfg, gl]);
+  const texes = textureLoads?.map((load) => load.texture) ?? null;
+  useEffect(() => () => textureLoads?.forEach((load) => load.dispose()), [textureLoads]);
 
   // B13+: procedural tapered spikes, one material per star, one shared clock.
   const starMats = useMemo(
