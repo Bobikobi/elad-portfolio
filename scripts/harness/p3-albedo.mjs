@@ -179,13 +179,19 @@ const waitForFixedFrame = async (page, target, id) => {
   return at;
 };
 
-const freeze = async (page, id) => {
-  const frozen = await page.evaluate(async () => {
+// Wait and freeze in ONE browser call, as mars-turn.mjs does. freeze() pins scene time the
+// instant it is called and waitForFrame() resolves just after its frame has rendered, so the
+// same page.evaluate pins exactly that frame. As two calls, a frame can render during the CDP
+// round trip and a capture labelled CAPTURE_FRAME shows a later moment of a spinning scene.
+const waitAndFreeze = async (page, target, id) => {
+  const frozen = await page.evaluate(async (frame) => {
     const clock = window.__clock;
-    return clock ? await clock.freeze() : null;
-  });
+    if (!clock) return null;
+    await clock.waitForFrame(frame);
+    return await clock.freeze();
+  }, target);
   if (!frozen?.fixedStep || !frozen?.frozen) {
-    console.error(`fixedStep clock did not freeze on ${id}`);
+    console.error(`fixedStep clock did not freeze at frame ${target} on ${id}`);
     await closeBrowser();
     process.exit(2);
   }
@@ -293,8 +299,7 @@ for (const view of VIEWS) {
     process.exit(2);
   }
 
-  await waitForFixedFrame(page, CAPTURE_FRAME, view.id);
-  const frozen = await freeze(page, view.id);
+  const frozen = await waitAndFreeze(page, CAPTURE_FRAME, view.id);
   const finalLeaks = await assertCanvasOnly(page);
   if (finalLeaks.length) {
     console.error(`NOT canvas-only at capture on ${view.id}: ${finalLeaks.join(', ')} - refusing to measure`);

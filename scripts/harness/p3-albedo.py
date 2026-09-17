@@ -61,6 +61,10 @@ def load_capture(tag):
         return json.load(handle)
 
 
+def frozen_time(capture, view):
+    return (capture.get("views", {}).get(view, {}).get("frozen") or {}).get("elapsedTime")
+
+
 def load_image(capture, view):
     section = capture.get("views", {}).get(view, {})
     filename = section.get("capture")
@@ -286,6 +290,20 @@ def main():
         after = load_capture(after_tag)
     except Exception as exc:
         print(f"NOT MEASURED: {exc}")
+        return 2
+
+    # Both tags must show the same moment of a spinning scene. Captures taken before the capture
+    # script froze in one browser call could slip a frame, so the scene time is compared here
+    # rather than trusted.
+    misaligned = [
+        (view, frozen_time(before, view), frozen_time(after, view))
+        for view in VIEWS
+        if frozen_time(before, view) is None
+        or frozen_time(after, view) is None
+        or abs(frozen_time(before, view) - frozen_time(after, view)) > 1e-6
+    ]
+    if misaligned:
+        print(f"NOT MEASURED: views froze at different scene times (view, before, after): {misaligned}")
         return 2
 
     lines, details = criterion_lines(before, after)

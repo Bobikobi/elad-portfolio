@@ -22,8 +22,8 @@ p3 = importlib.util.module_from_spec(spec); spec.loader.exec_module(p3)
 for tag in sys.argv[1:]:
     print(f"\n######## {tag}")
     # Every view must have frozen at the same absolute scene time as the baseline, or the comparison is
-    # of two different moments of a spinning scene. p3-albedo sends wait and freeze as two browser
-    # calls, so a slip is possible; it is checked here rather than assumed away.
+    # of two different moments of a spinning scene. p3-albedo sent wait and freeze as two browser
+    # calls until 2026-09-17, so older captures can have slipped; it is checked here rather than assumed away.
     _on, _c = p3.load_capture('p4-on'), p3.load_capture(tag)
     _bad = [(view, (_on['views'][view].get('frozen') or {}).get('elapsedTime'), (_c['views'][view].get('frozen') or {}).get('elapsedTime'))
             for view in p3.VIEWS
