@@ -606,18 +606,30 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       {
         const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
         const HARD = 'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );';
-        // Both markers are load-bearing and both are three-version-dependent, so neither may
-        // fail quietly: a missed replace here would leave the terminator hard and look exactly
-        // like a tuning disagreement rather than a broken patch.
+        // EDGE-FLASH — the soft dotNL must reach the DIFFUSE term only. BRDF_GGX takes its own
+        // hard dotNL, which is 0 past the terminator, and its visibility term is then
+        // 0.5 / max(dotNV * alpha, 1e-6): on a silhouette pixel that is ~5e5, so soft
+        // irradiance times it came out hundreds of times brighter than the lamp, and bloom drew
+        // that one pixel as a white blob for a frame. The specular gets the hard factor BRDF_GGX
+        // was written for, as in stock three.
+        const SPEC = 'reflectedLight.directSpecular += irradiance * BRDF_GGX_Multiscatter(';
+        // All three markers are load-bearing and three-version-dependent, so none may fail
+        // quietly: a missed replace here would leave the terminator hard, or the limb flashing,
+        // and look exactly like a tuning disagreement rather than a broken patch.
         if (!CHUNK || !CHUNK.includes(HARD)) {
           throw new Error('G2: three\'s RE_Direct_Physical dotNL line has moved - the soft terminator patch is not applied');
+        }
+        if (!CHUNK.includes(SPEC)) {
+          throw new Error('EDGE-FLASH: three\'s RE_Direct_Physical specular line has moved - the limb would flash again');
         }
         if (!shader.fragmentShader.includes('#include <lights_physical_pars_fragment>')) {
           throw new Error('G2: meshphysical no longer includes lights_physical_pars_fragment');
         }
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <lights_physical_pars_fragment>',
-          SOFT_NL + CHUNK.replace(HARD, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );')
+          SOFT_NL + CHUNK
+            .replace(HARD, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );')
+            .replace(SPEC, 'reflectedLight.directSpecular += saturate( dot( geometryNormal, directLight.direction ) ) * directLight.color * BRDF_GGX_Multiscatter(')
         );
       }
       shader.fragmentShader = shader.fragmentShader.replace(
