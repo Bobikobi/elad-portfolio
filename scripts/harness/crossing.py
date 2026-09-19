@@ -22,19 +22,25 @@ import sys
 import numpy as np
 from PIL import Image
 
-# C1: the galaxy at rest measures 56.6 mean / 1.81% above 200 on the shipped build, and it is
-# the brightest thing the visitor is already looking at when the passage starts. Rounded up.
-C1_MEAN = 60.0
-C1_BRIGHT_PCT = 5.0
+# C1: the galaxy at rest measures 76.1 mean / 7.30% above 200 ON THIS INSTRUMENT, and it is the
+# brightest thing the visitor is already looking at when the passage starts. Rounded up.
+# These are NOT the 56.6 / 1.81% in the brief's first table: that came from the edge-flash
+# recordings, which keep the DOM on screen. The two scales do not convert.
+C1_MEAN = 80.0
+C1_BRIGHT_PCT = 8.0
 
-# C2: the settled solar system's own mean is 30.5, so a 25-level step is under one settled
+# C2: the settled solar system's own mean is 30.6, so a 25-level step is under one settled
 # scene's worth of change in a single frame. A bar on violence, not on speed.
 C2_JUMP = 25.0
+# The near-black clause. Master already passes it here - the frame held during the act-swap
+# stall is the bright one, not a black one - so it is a guard, not a proof. The black frame
+# in the edge-flash recordings is only visible to a capture with the DOM live; see the brief.
 C2_DARK = 20.0     # "near black"
 C2_BRIGHT = 100.0  # "bright"
 C2_REACH = 3       # frames either side
 
-# C3: |R-G| reads 0.7 at the galaxy and 7.2 at the settled solar system. 10 is the looser end.
+# C3: |R-G| reads 1.4 at the galaxy and 7.8 at the settled solar system. 10 is just past the
+# looser end.
 C3_RG = 10.0
 
 LUMA = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)

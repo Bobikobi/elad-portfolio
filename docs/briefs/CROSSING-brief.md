@@ -1,7 +1,9 @@
 # CROSSING brief - the passage from the galaxy into the solar system
 
 Written 2026-09-19, before any pixel moves, per standing rule 1.
-**Criteria PROPOSED, NOT APPROVED. No product code may change until the owner approves them.**
+**Criteria APPROVED by the owner 2026-09-19** ("approved, per your recommendation"), with
+one number re-derived after step 0 - see "Step 0 - result", which is the authority on the
+bars. The C1 numbers written further down are the pre-step-0 draft and are superseded there.
 
 Scope approved by the owner 2026-09-19: **the passage only.** The galaxy at rest is a
 separate, later stage - the owner said so in the same breath ("the galaxy itself will need
@@ -113,31 +115,105 @@ tolerances from that spread rather than from a guess.
 
 ---
 
+## Step 0 - result
+
+Built as `scripts/harness/crossing.mjs` + `crossing.py`, commit `caa4215`. The ramp is
+indexed by **rendered frame** under `?fixedStep`, not by wall clock, which is what makes two
+runs comparable at all. The DOM is hidden, so the numbers describe the canvas.
+
+Control: two runs against the preview of `ce2c11d`, whose tree hash
+`fabdbc777c3748fe148a4f0467cd9e90a4ab8fe2` is **identical to master's at `8d8d1be`** - the
+same bytes as production, on a build where the debug clock exists. Real Intel GPU through
+ANGLE/Vulkan both times, 1280x720, ~46 fps, median frame gap 17.4 ms, 180/181 rendered ramp
+frames, scroll span 2880 px, galaxy -> solar both times.
+
+**The two runs agree to the decimal on every judged metric.**
+
+| metric | master-1 | master-2 |
+|---|---|---|
+| max mean luminance | 210.8 | 210.8 |
+| ...at t | 4.046 s | 4.036 s |
+| max % of pixels > 200 | 70.18 | 70.18 |
+| max frame-to-frame jump | 29.9 | 29.9 |
+| max abs(R - G) | 28.2 | 28.2 |
+| settled mean | 30.6 | 30.6 |
+| dark holes | none | none |
+| act swap at ramp fraction | 0.9333 | 0.9333 |
+| C1 / C2 / C3 | FAIL / FAIL / FAIL | FAIL / FAIL / FAIL |
+
+The instrument repeats. Step 0's requirement is met and candidates may now be measured.
+
+### Two honest corrections this forced
+
+**a. The two instruments are not comparable, so the bars had to be re-derived.** The table
+further up came from the edge-flash recordings, which kept the DOM on screen and drove the
+scroll differently. On this instrument the same untouched build reads 210.8 rather than
+197.2, 70.18% rather than 66.75%, and 28.2 rather than 34.5. The defects are the same and
+bigger once the navbar and the HUD stop diluting the average. **Never compare a number in
+the old table to a number from `crossing.py`.** Reference points on this instrument, stable
+to a tenth across both runs:
+
+| moment | mean | % > 200 | max abs(R - G) |
+|---|---|---|---|
+| galaxy at rest (pre-ramp, 35 frames) | 75.7 - 76.1 | 7.23 - 7.30 | 1.4 |
+| settled solar system (last 3 s, 137 frames) | 30.6 - 31.6 | 0.47 - 0.51 | 7.8 |
+
+**C1's draft bars of 60 and 5% are therefore impossible and are replaced.** They were derived
+from the galaxy's 56.6 / 1.81% on the old instrument; on this one the untouched galaxy itself
+reads 76.1 and 7.30%, and the recording necessarily starts there. The approved principle is
+unchanged - *the passage may not be brighter than what the visitor is already looking at
+before it begins, rounded up* - so, on the instrument that will do the judging:
+
+> **C1 (binding): no frame's mean luminance exceeds 80, and no frame has more than 8% of its
+> pixels above level 200.** Today: 210.8 and 70.18%.
+
+C2 (jump <= 25, no near-black frame with a bright neighbour within 3 frames) and C3
+(abs(R - G) <= 10) are unchanged; 25 still sits under one settled scene's worth of change,
+and 10 still sits between the galaxy's 1.4 and the settled system's 7.8.
+
+**b. The near-black frame does not reproduce here, and I am not going to pretend it does.**
+Defect 2 above is real in all four edge-flash recordings. Under this instrument
+`dark_holes` is empty in both runs and the largest jump is 29.9, not ~185. The stall is
+still there - one 397 ms gap at t = 4.05 s, against a 17.4 ms median - but the frame the
+screen is held on during it is the bright one (210.8), not a black one.
+
+So the black frame is a property of a capture with the DOM live and a wheel-driven scroll,
+which is closer to what a visitor does than this ramp is. **This instrument is blind to
+defect 2.** C2's near-black clause stays in force as a guard, and it will pass on master
+too, so it proves nothing on its own. The claim that defect 2 is fixed will be made from a
+fresh pair of `edge-flash.mjs` recordings of the passage, or not made at all.
+
+---
+
 ## Criteria - PROPOSED, for the owner to approve or change
 
 All four are measured on a **deployed preview alias**, real GPU, **two runs**, on the same
 fixed scroll ramp, against two runs of today's master as the control.
 
 **C1 - the wash is gone.** Over the whole passage, no frame's mean luminance exceeds
-**60** (today: 197.2), and no frame has more than **5%** of its pixels above level 200
-(today: 66.75%).
+**80**, and no frame has more than **8%** of its pixels above level 200. Today, on the
+instrument that judges this: 210.8 and 70.18%.
 
-*Where 60 and 5% come from:* the galaxy at rest measures 56.6 and 1.81%. The bar is the
-brightest thing the visitor is already looking at before the passage begins, rounded up.
-Neither number is taken from a constant in the code being changed.
+*Where 80 and 8% come from:* the galaxy at rest measures 76.1 and 7.30% on that same
+instrument. The bar is the brightest thing the visitor is already looking at before the
+passage begins, rounded up. Neither number is taken from a constant in the code being
+changed. The draft of this brief said 60 and 5% from the old recordings' 56.6 / 1.81%;
+step 0 showed those two instruments do not share a scale, and the replacement is derived
+the same way on the new one.
 
 **C2 - nothing jumps.** The largest frame-to-frame change in mean luminance anywhere in the
-passage is at most **25** levels (today: about 185, on the 197 -> 12 step). The near-black
-frame between two cream frames must not exist: no frame under mean 20 may have a neighbour
-within 3 frames above mean 100.
+passage is at most **25** levels (today, on this instrument: 29.9). The near-black frame
+between two cream frames must not exist: no frame under mean 20 may have a neighbour within
+3 frames above mean 100 - a clause master already satisfies here, so it is a guard rather
+than a proof. See step 0, correction b.
 
 *Where 25 comes from:* the settled solar system's own mean is 30.5, so a 25-level step is
 still under one settled-scene's worth of brightness change in a frame. It is a bar on
 violence, not on speed.
 
 **C3 - no invented colour.** Over the whole passage, |mean R - mean G| stays at or below
-**10** (today: 34.5). The galaxy reads 0.7 and the settled solar system 7.2, so 10 is the
-looser of the two ends the passage is travelling between.
+**10** (today, on this instrument: 28.2). The galaxy reads 1.4 and the settled solar system
+7.8, so 10 is just past the looser of the two ends the passage is travelling between.
 
 **C4 - the passage still reads as arrival, and the endpoints are untouched.**
 Two parts, both required:
