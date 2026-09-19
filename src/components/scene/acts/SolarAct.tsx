@@ -606,18 +606,37 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       {
         const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
         const HARD = 'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );';
-        // Both markers are load-bearing and both are three-version-dependent, so neither may
-        // fail quietly: a missed replace here would leave the terminator hard and look exactly
-        // like a tuning disagreement rather than a broken patch.
+        // EDGE-FLASH — the wrapped irradiance must not reach the specular past N·L = 0.
+        // BRDF_GGX computes its own hard dotNL, which is 0 there, so its visibility term is
+        // 0.5 / max(dotNV * alpha, 1e-6): on a silhouette pixel that is ~5e5, and soft
+        // irradiance times it came out hundreds of times brighter than the lamp, which bloom
+        // drew as a white blob for one frame. SPEC_GATE takes the specular to zero across the
+        // last 0.05 of N·L, so past the geometric terminator the specular matches stock three
+        // and the product stays bounded (at the gate's edge, soft/hard is 1.6, not infinite).
+        //
+        // Measured 2026-09-19: giving the specular the plain hard dotNL instead also removed
+        // the blobs, but it re-lit the whole sunlit hemisphere, because softNL(x) > x
+        // everywhere except the pole - photometry moved by 0.18-0.53 of 255 on five of six
+        // views, over EF-3's 0.1. Gating leaves the lit side bit-identical and touches only
+        // the band where the defect lives.
+        const SPEC = 'reflectedLight.directSpecular += irradiance * BRDF_GGX_Multiscatter(';
+        // All three markers are load-bearing and three-version-dependent, so none may fail
+        // quietly: a missed replace here would leave the terminator hard, or the limb flashing,
+        // and look exactly like a tuning disagreement rather than a broken patch.
         if (!CHUNK || !CHUNK.includes(HARD)) {
           throw new Error('G2: three\'s RE_Direct_Physical dotNL line has moved - the soft terminator patch is not applied');
+        }
+        if (!CHUNK.includes(SPEC)) {
+          throw new Error('EDGE-FLASH: three\'s RE_Direct_Physical specular line has moved - the limb would flash again');
         }
         if (!shader.fragmentShader.includes('#include <lights_physical_pars_fragment>')) {
           throw new Error('G2: meshphysical no longer includes lights_physical_pars_fragment');
         }
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <lights_physical_pars_fragment>',
-          SOFT_NL + CHUNK.replace(HARD, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );')
+          SOFT_NL + CHUNK
+            .replace(HARD, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );')
+            .replace(SPEC, 'reflectedLight.directSpecular += smoothstep( 0.0, 0.05, dot( geometryNormal, directLight.direction ) ) * irradiance * BRDF_GGX_Multiscatter(')
         );
       }
       shader.fragmentShader = shader.fragmentShader.replace(
