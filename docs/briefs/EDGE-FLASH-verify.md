@@ -24,7 +24,7 @@ HTML and grepping the deployed bundle. The marker appears only in the fix builds
 | **EF-1** | no big flashes | 0 in all four recordings | home **0, 0**. `/about` **5, 5** - one moving-edge track, identical in the before runs | **PASS on home, FAIL on `/about` as written.** 0 big flashes are left that the fix owns |
 | **EF-2** | flashes nearly gone | `/about` <= 55, home <= 15 | `/about` **466, 472**. home **92, 94** | **FAIL.** The threshold was set from a count the fix was never going to move |
 | **EF-3** | the rest of the image does not move | mean <= 0.1 of 255 on six views; P3-2..P3-5 PASS, P3-1 clips do not rise | 2 of 6 views inside 0.1; P3 half fully PASS | **FAIL on the photometry half, PASS on the P3 half** |
-| **EF-4** | the day-night line stays soft | the owner's eye | not measured | **for the owner**, on `elad-portfolio-3e9esd8qw` |
+| **EF-4** | the day-night line stays soft | the owner's eye | the owner looked at `elad-portfolio-3e9esd8qw` on 2026-09-19: "the transition is soft enough" | **PASS** |
 
 **What actually happened to the defect:** on the home page the largest bright event in a whole
 22-second window went from **3,198 and 5,260 pixels to 2 and 5 pixels**. On `/about` all 32 and
@@ -126,8 +126,7 @@ exactly the two places the brief named as where the blobs appear. Nothing else i
 frames moved. `diff-<view>.png` in `.harness-out/photometry-diff`.
 
 So EF-3 fails its number while its intent - "the rest of the image does not move" - holds: the
-change is confined to the defect. Whether that is acceptable is the owner's call, and EF-4 is how
-he answers it.
+change is confined to the defect. That was the owner's call to make, and he made it - EF-4 below.
 
 **The rejected variant is why the shipped one is gated.** Giving the specular the plain hard `N·L`
 also removed the blobs, but `softNL(x) > x` everywhere except the fully lit pole, so it re-lit the
@@ -154,11 +153,16 @@ The gate halves or better on five of six views and leaves the lit side untouched
 | P3-4 the worlds do not shift | **PASS** | about -0.4, services -0.2, projects -0.2, technologies -1.4, contact -0.6 |
 | P3-5 the tier law | **PASS** | high 69 calls / 167,134 tris / 16.700ms, low 64 / 146,549 / 16.700ms - identical, +0.000ms |
 
-## EF-4 - the day-night line stays soft
+## EF-4 - the day-night line stays soft: PASS
 
-Not measured, by design. `softNL`, `TERM_WRAP = 0.18` and `TERM_TOE = 0.35` are untouched, and the
-diffuse term still receives the wrapped `N·L`; only the specular is gated. For the owner's eye on
-**https://elad-portfolio-3e9esd8qw-bobikobis-projects.vercel.app**
+Not measurable, by design - this one is the owner's eye, and he gave it on 2026-09-19 after
+looking at **https://elad-portfolio-3e9esd8qw-bobikobis-projects.vercel.app**: *"the transition is
+soft enough"*.
+
+That is the criterion EF-3's photometry half was standing in for. `softNL`, `TERM_WRAP = 0.18` and
+`TERM_TOE = 0.35` are untouched and the diffuse term still receives the wrapped `N·L`; only the
+specular is gated. The 0.103-0.275 of 255 that EF-3 measures on four views is that gate acting on
+the terminator arc, and with EF-4 answered it is the intended change rather than a side effect.
 
 ---
 
