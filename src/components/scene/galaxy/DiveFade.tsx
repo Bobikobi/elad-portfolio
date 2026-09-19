@@ -60,6 +60,18 @@ const FADE_TO = 0.64;
  */
 const FADE_MAX = 0.94;
 
+/**
+ * Fastest the plane may change, in opacity per second. The scroll is read raw, so a scroll
+ * TELEPORT (scrollbar drag, End key, scroll restoration - the paths CameraRig documents and
+ * supports) would otherwise take the plane from invisible to 78% in one frame while the
+ * camera's damped gate is still where it was: measured on the deployed build, a jump to
+ * mid-dive dropped the frame by 52 luminance levels in one captured frame, against the 25
+ * the passage is allowed. At 2/s a jump takes half a second to land - and a real scroll never
+ * asks for more: the steepest part of the fade is 2.6 opacity per unit of progress, so
+ * anything under ~0.75 of the whole driver per second (about 2,100 px/s) is untouched.
+ */
+const FADE_RATE = 2.0;
+
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -70,11 +82,20 @@ const DEG2RAD = Math.PI / 180;
 
 export default function DiveFade() {
   const plane = useRef<THREE.Mesh>(null);
+  // The opacity actually drawn. Null until the first frame: this component mounts with the
+  // galaxy act, including on the way BACK from the solar system, where the camera is already
+  // deep in the dive and the plane must be at its full value at once, under the swap curtain.
+  // Ramping up from 0 there would let the bright galaxy show as the curtain releases.
+  const shown = useRef<number | null>(null);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const m = plane.current;
     if (!m) return;
-    const a = smoothstep(FADE_FROM, FADE_TO, useScene.getState().scrollProgress) * FADE_MAX;
+    const target = smoothstep(FADE_FROM, FADE_TO, useScene.getState().scrollProgress) * FADE_MAX;
+    const cur = shown.current;
+    const step = FADE_RATE * delta;
+    const a = cur === null ? target : cur + Math.min(step, Math.max(-step, target - cur));
+    shown.current = a;
     m.visible = a > 0.002;
     if (!m.visible) return;
 

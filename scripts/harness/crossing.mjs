@@ -28,6 +28,10 @@ import path from 'path';
 const BASE = process.env.BASE || 'http://localhost:3000';
 const TAG = process.env.TAG || 'run';
 const RAMP_FRAMES = Number(process.env.RAMP_FRAMES || 180);
+// Where the ramp ends, as a fraction of the driver. 1 = the whole passage. With RAMP_FRAMES=1 and
+// RAMP_TO=0.5 the scroll TELEPORTS to mid-dive in one frame (scrollbar drag / End key / scroll
+// restoration) - the case the damped swap machine exists for, and the one a raw-scroll effect breaks.
+const RAMP_TO = Number(process.env.RAMP_TO || 1);
 const PRE_MS = Number(process.env.PRE_MS || 1200);
 const POST_MS = Number(process.env.POST_MS || 4000);
 const SETTLE = Number(process.env.SETTLE || 14000);
@@ -115,7 +119,7 @@ try {
   // The ramp, and a per-rendered-frame sample of the three store values that decide what the
   // passage looks like. Both live in the page and are keyed on the SAME frame counter.
   const rampStartedAt = (Date.now() - t0) / 1000;
-  await page.evaluate((span) => {
+  await page.evaluate(({ span, to }) => {
     const clock = window.__clock;
     const store = window.__scene;
     const max = document.documentElement.scrollHeight - window.innerHeight;
@@ -127,7 +131,7 @@ try {
       if (f !== last) {
         last = f;
         const t = Math.min(1, (f - f0) / span);
-        window.scrollTo({ top: t * max, behavior: 'instant' });
+        window.scrollTo({ top: t * to * max, behavior: 'instant' });
         const s = store.getState();
         // The wall clock goes in too. Rendered frames are NOT uniform in wall time - the act
         // swap stalls for hundreds of ms - so interpolating the store's state onto a
@@ -139,7 +143,7 @@ try {
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-  }, RAMP_FRAMES);
+  }, { span: RAMP_FRAMES, to: RAMP_TO });
 
   const rampDeadline = Date.now() + 60000;
   while (!(await page.evaluate(() => window.__crossing.done))) {
@@ -168,7 +172,7 @@ try {
 
   const gaps = stamps.slice(1).map((t, i) => t - stamps[i]).sort((a, b) => a - b);
   const meta = {
-    base: BASE, tag: TAG, extraQs: EXTRA_QS, rampFrames: RAMP_FRAMES,
+    base: BASE, tag: TAG, extraQs: EXTRA_QS, rampFrames: RAMP_FRAMES, rampTo: RAMP_TO,
     preMs: PRE_MS, postMs: POST_MS, settleMs: SETTLE,
     gpu: probe.gpu, fixedStep: true, startAct: probe.act, endAct,
     rampStartedAt: +rampStartedAt.toFixed(3), rampEndedAt: +rampEndedAt.toFixed(3),
@@ -183,7 +187,7 @@ try {
   };
   fs.writeFileSync(path.join(OUT, 'stamps.json'), JSON.stringify(stamps));
   fs.writeFileSync(path.join(OUT, 'meta.json'), JSON.stringify(meta, null, 2));
-  if (endAct !== 'solar') throw new Error(`the ramp ended in act "${endAct}" - the passage did not complete`);
+  if (RAMP_TO === 1 && endAct !== 'solar') throw new Error(`the ramp ended in act "${endAct}" - the passage did not complete`);
   console.log(JSON.stringify(meta));
 } catch (err) {
   console.error(err);
