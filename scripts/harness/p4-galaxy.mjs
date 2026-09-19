@@ -21,6 +21,15 @@ const EXTRA_QS = process.env.EXTRA_QS || '';
 if (!TAG) { console.error('TAG is required'); process.exit(2); }
 fs.mkdirSync(OUT, { recursive: true });
 
+// Preview deployments sit behind SSO; the bypass secret is read from a file, never an argument,
+// so it stays out of shell history. Same block as photometry-diff.mjs. Without it this script
+// could only ever reach localhost, which the standing rules do not accept as evidence.
+const BYPASS_FILE = process.env.VERCEL_BYPASS_FILE
+  || path.join(os.homedir(), '.claude', 'secrets', 'vercel-bypass.txt');
+const VERCEL_BYPASS = (() => {
+  try { return fs.readFileSync(BYPASS_FILE, 'utf8').trim() || null; } catch { return null; }
+})();
+
 const browser = await puppeteer.launch({
   executablePath: process.env.CHROME || '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 240000,
   userDataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'p4galaxy-')),
@@ -29,6 +38,9 @@ const browser = await puppeteer.launch({
 try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  if (VERCEL_BYPASS && /vercel\.app/.test(BASE)) {
+    await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': VERCEL_BYPASS });
+  }
   await page.goto(`${BASE}/?hud=1&tier=high&fixedStep${EXTRA_QS ? `&${EXTRA_QS}` : ''}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await new Promise((r) => setTimeout(r, 14000));
   const at = await page.evaluate(async () => {
