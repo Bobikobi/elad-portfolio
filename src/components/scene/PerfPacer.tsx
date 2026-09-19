@@ -176,12 +176,7 @@ export function ResolutionScaler() {
     if (Math.abs(dpr - applied.current) < 0.01) return;
     applied.current = dpr;
     setDpr(dpr);
-    // A buffer resize clears the canvas, and R3F applies it after React commits. On the idle
-    // 30fps 'demand' loop nothing draws until the next tick, so a frame was presented blank:
-    // a one-frame black flash on arrival at the solar system (measured on the alias, one per
-    // run, always right after a resize). Ask for a draw now and once more after the commit.
     invalidate();
-    requestAnimationFrame(() => invalidate());
   };
 
   /**
@@ -224,7 +219,9 @@ export function ResolutionScaler() {
     // Idle pages are cheap by definition and get their pixels back.
     const idle = isIdle(now);
     if (idle) {
-      if (scale.current !== MAX_SCALE) { scale.current = MAX_SCALE; apply(MAX_SCALE); }
+      // The buffer keeps the ratio it had when the page went idle. Handing the pixels back on
+      // idle resized the canvas on the 30fps demand loop and presented one blank frame each
+      // time (measured, 4 of 5 real-wheel runs, always <40ms after the resize).
       publish(fps, true);
       return;
     }
