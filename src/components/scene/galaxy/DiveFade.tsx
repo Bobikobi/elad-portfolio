@@ -60,16 +60,21 @@ import { HUD_AVAILABLE } from '../DebugHud';
 const FADE_FROM = 0.06;
 const FADE_TO = 0.55;
 /**
- * How deep it goes, and the reason v2 exists. Half the frame still reaches the visitor: 36 of
- * colour split becomes about 17, the 87 peak becomes about 66, and the darkest the dive itself
- * ever gets is around 30 — the same brightness as the settled solar system on the other side.
+ * How deep it goes, and the reason v2 exists. A third of the frame still reaches the visitor: 36 of
+ * colour split becomes about 19, the 87 peak becomes about 66, and the darkest the dive itself
+ * ever gets is around 21 (see the return-trip note below) — the same brightness as the settled solar system on the other side.
  * Nothing here is near black, so nothing here can read as frozen. The near-black stretch of the
  * passage is the swap curtain's alone, which is 0.11 of the scroll wide by its own geometry
  * (COVER_PLATEAU + COVER_FALLOFF in diveEnvelope) and is the crossover itself. Going deeper
  * than this only buys colour: 0.68 measured a split of 19.4 with the frame under mean 20 from
  * scroll 0.872, this one 16.7 from 0.867, and each step deeper starts the darkness earlier.
  */
-const FADE_MAX = 0.74;
+const FADE_MAX = 0.71;
+// 0.74 was the first pick and it was measured on the DOWN direction only. On the way back up the
+// same ember reads about 5 levels darker (19.0 at scroll 0.68-0.76 against 25 going down) and
+// dipped under the mean-20 line, stretching the near-black run to 0.25 of the scroll. Swept on the
+// return at a 360-frame ramp: 0.72 -> ember floor 20.5, colour 18.5; 0.71 -> 21.2, 19.0;
+// 0.70 -> 21.9, 19.5. 0.71 leaves about one level on each side of the two bars.
 
 /**
  * Fastest the plane may change, in opacity per second. The scroll is read raw, so a scroll

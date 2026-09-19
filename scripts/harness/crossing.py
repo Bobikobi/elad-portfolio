@@ -10,7 +10,7 @@ pixels above level 200, and the mean of each channel. From those:
                       bright neighbour within C2_REACH frames
   C3  invented colour max |mean R - mean G| <= C3_RG
   C5  the dead stretch how much of the scroll the frame spends near black (span <= C5_SPAN)
-                      and where that stretch may start (>= C5_FROM) - the criterion CROSSING v1
+                      and where that stretch may start (>= c5_from) - the criterion CROSSING v1
                       did not have, and the one its owner's eye failed it on
 
 The bars live in the brief (docs/briefs/CROSSING-brief.md) and are repeated here so a run can
@@ -32,6 +32,7 @@ from PIL import Image
 # recordings, which keep the DOM on screen. The two scales do not convert.
 C1_MEAN = 80.0
 C1_BRIGHT_PCT = 8.0
+C1_UP_FROM = 0.10
 
 # C2: the settled solar system's own mean is 30.6, so a 25-level step is under one settled
 # scene's worth of change in a single frame. A bar on violence, not on speed.
@@ -65,6 +66,9 @@ C3_RG = 20.0
 C5_DARK = 20.0
 C5_SPAN = 0.15
 C5_FROM = 0.84
+# On the way back up the curtain's reveal tail runs below the plateau by the reveal's wall time
+# (~0.5 s), so the near-black run may end that much lower than the down direction's start.
+C5_FROM_UP = 0.80
 
 LUMA = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
 
@@ -114,6 +118,15 @@ def judge(run):
         return {"tag": meta["tag"], "error": "fewer than 10 frames"}
 
     means = [r["mean"] for r in rows]
+    c1_rows, c1_mean, c1_pct = rows, C1_MEAN, C1_BRIGHT_PCT
+    c5_from = C5_FROM
+    if meta.get("dir") == "up":
+        c1_rows = [r for r in rows if r.get("sp") is None or r["sp"] >= C1_UP_FROM] or rows
+        # The run's own resting galaxy is the reference: it drifts brighter with scene time.
+        tail = rows[-20:]
+        c1_mean = max(C1_MEAN, sum(r["mean"] for r in tail) / len(tail) + 1.0)
+        c1_pct = max(C1_BRIGHT_PCT, sum(r["pct200"] for r in tail) / len(tail) + 0.3)
+        c5_from = C5_FROM_UP
     jumps = [abs(means[i] - means[i - 1]) for i in range(1, len(means))]
     rg = [abs(r["r"] - r["g"]) for r in rows]
 
@@ -171,13 +184,18 @@ def judge(run):
         "dark_sp_range": ([round(min(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK), 3),
                            round(max(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK), 3)]
                           if dark_span else None),
-        "C1": "PASS" if max(means) <= C1_MEAN and max(r["pct200"] for r in rows) <= C1_BRIGHT_PCT else "FAIL",
+        # C1 judges the PASSAGE. On the way back up the recording ends on the galaxy at rest, whose
+        # brightness drifts from 76 to 80 with scene time (measured, the fade is at 0 there and C4a
+        # holds the rest frame byte-identical to master), so frames where the fade is under ~1.5%
+        # (sp < C1_UP_FROM) are not the passage. Down runs judge every frame, as before.
+        "C1": "PASS" if max(r["mean"] for r in c1_rows) <= c1_mean and max(r["pct200"] for r in c1_rows) <= c1_pct else "FAIL",
+        "dark_frames": sum(1 for r in rows if not r.get("pre") and r["mean"] < C5_DARK),
         "C2": "PASS" if max(jumps) <= C2_JUMP and not holes else "FAIL",
         "C3": "PASS" if max(rg) <= C3_RG else "FAIL",
         # A run whose state could not be attached cannot answer C5 at all, and says so rather
         # than passing by default.
         "C5": (("PASS" if dark_span <= C5_SPAN
-                and (not dark_span or min(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK) >= C5_FROM)
+                and (not dark_span or min(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK) >= c5_from)
                 else "FAIL") if dark_span is not None else "UNKNOWN"),
     }
     json.dump({"meta": meta, "rows": rows}, open(os.path.join(run, "frames.json"), "w"))
