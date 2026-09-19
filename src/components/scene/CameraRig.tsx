@@ -224,7 +224,7 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 const REVEAL_FRAMES = 8;
 const REVEAL_MIN_FRAMES = 2;   // readiness floor - drawn frames, never wall-clock
 const REVEAL_HOLD_CAP = 0.4;   // s - past this the floor alone governs
-const REVEAL_FADE = 0.35; // s
+const REVEAL_FADE = 0.25; // s - was 0.35, the black stretch after the swap was the longest part of the dark
 const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
 // Immersive welcome: low + close, looking ACROSS the galaxy plane so it fills the
