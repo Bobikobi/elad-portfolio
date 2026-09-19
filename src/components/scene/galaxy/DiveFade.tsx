@@ -45,24 +45,31 @@ import { HUD_AVAILABLE } from '../DebugHud';
  * camera flies in: measured with no plane at all, 76 mean at rest, 80 by scroll 0.20, a peak
  * of 87 at 0.40. The passage may not be brighter than the rest state the visitor is already
  * looking at (C1's bar, 80), so the dimming has to have started before the galaxy crosses it.
- * A smoothstep is nearly flat at its foot, so the start sits well below 0.20.
+ * A smoothstep is nearly flat at its foot, so the start sits well below 0.20: at 0.06 the
+ * plane is under 1.5% opaque for the whole first tenth of the scroll, where the welcome is
+ * still on screen, and starting there instead of 0.12 measured 78.2 mean and 7.70% of pixels
+ * above 200 against 79.4 and 7.95 - real margin on both of C1's numbers for nothing visible.
  *
  * FADE_TO is set by the colour. The galaxy's gold core (`#FFC978`) fills the view over the end
  * of the approach and carries a red-green split that peaks at 36 with no plane over it, around
  * scroll 0.65, falling back to 9 by 0.80 as the camera passes it. C3 allows 20, so the plane
- * has to be at its full depth by the time that peak arrives.
+ * has to be at its full depth by the time that peak arrives. Swept on a preview with `?fade`,
+ * full depth at 0.66 measured a split of 25.3, at 0.62 21.8, at 0.58 19.4 and at 0.55 16.7;
+ * 0.55 is the one with margin, and the bar is not a target to touch.
  */
-const FADE_FROM = 0.12;
-const FADE_TO = 0.66;
+const FADE_FROM = 0.06;
+const FADE_TO = 0.55;
 /**
  * How deep it goes, and the reason v2 exists. Half the frame still reaches the visitor: 36 of
  * colour split becomes about 17, the 87 peak becomes about 66, and the darkest the dive itself
  * ever gets is around 30 — the same brightness as the settled solar system on the other side.
  * Nothing here is near black, so nothing here can read as frozen. The near-black stretch of the
  * passage is the swap curtain's alone, which is 0.11 of the scroll wide by its own geometry
- * (COVER_PLATEAU + COVER_FALLOFF in diveEnvelope) and is the crossover itself.
+ * (COVER_PLATEAU + COVER_FALLOFF in diveEnvelope) and is the crossover itself. Going deeper
+ * than this only buys colour: 0.68 measured a split of 19.4 with the frame under mean 20 from
+ * scroll 0.872, this one 16.7 from 0.867, and each step deeper starts the darkness earlier.
  */
-const FADE_MAX = 0.52;
+const FADE_MAX = 0.74;
 
 /**
  * Fastest the plane may change, in opacity per second. The scroll is read raw, so a scroll

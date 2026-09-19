@@ -9,8 +9,8 @@ pixels above level 200, and the mean of each channel. From those:
   C2  the jump        max |mean(t) - mean(t-1)| <= C2_JUMP, and no near-black frame with a
                       bright neighbour within C2_REACH frames
   C3  invented colour max |mean R - mean G| <= C3_RG
-  C5  the dead stretch how much of the scroll the frame spends near black, as a span of
-                      scrollProgress over frames under C5_DARK - the criterion CROSSING v1
+  C5  the dead stretch how much of the scroll the frame spends near black (span <= C5_SPAN)
+                      and where that stretch may start (>= C5_FROM) - the criterion CROSSING v1
                       did not have, and the one its owner's eye failed it on
 
 The bars live in the brief (docs/briefs/CROSSING-brief.md) and are repeated here so a run can
@@ -51,12 +51,20 @@ C2_REACH = 3       # frames either side
 # rather than as a lit object. See CROSSING-brief.md.
 C3_RG = 20.0
 
-# C5: the dead stretch. v1 shipped a frame under mean 20 from scroll 0.556 to 0.922 - 37% of the
-# whole scroll, in both directions, during which the picture does not change. A tenth of the
-# scroll is about 2.5 wheel notches: long enough to read as a passage through darkness, short
-# enough that nothing has time to look frozen.
+# C5: the dead stretch. v1 shipped the frame under mean 20 across 0.444 of the whole scroll, in
+# both directions, with nothing changing inside it - the owner read it as the scene switching
+# off and the scroll sticking. Two numbers, because "how long" and "where" fail differently:
+#
+#   C5_SPAN  how much of the scroll is near black. The draft bar was 0.10 and is not reachable:
+#            the swap curtain alone holds the frame under 20 across 0.111 of the scroll, which
+#            follows from COVER_PLATEAU + COVER_FALLOFF in diveEnvelope and is the crossover
+#            itself. 0.15 is that geometry plus room for the last of the dive to dim into it.
+#   C5_FROM  where the darkness may begin: not before the curtain does. Coverage first leaves 0
+#            at scroll 0.8444, so anything dark before 0.84 is the dive going dark on its own -
+#            exactly v1's defect, which began at 0.556.
 C5_DARK = 20.0
-C5_SPAN = 0.10
+C5_SPAN = 0.15
+C5_FROM = 0.84
 
 LUMA = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
 
@@ -168,7 +176,9 @@ def judge(run):
         "C3": "PASS" if max(rg) <= C3_RG else "FAIL",
         # A run whose state could not be attached cannot answer C5 at all, and says so rather
         # than passing by default.
-        "C5": ("PASS" if dark_span <= C5_SPAN else "FAIL") if dark_span is not None else "UNKNOWN",
+        "C5": (("PASS" if dark_span <= C5_SPAN
+                and (not dark_span or min(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK) >= C5_FROM)
+                else "FAIL") if dark_span is not None else "UNKNOWN"),
     }
     json.dump({"meta": meta, "rows": rows}, open(os.path.join(run, "frames.json"), "w"))
     return out
