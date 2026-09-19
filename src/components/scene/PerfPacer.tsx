@@ -151,6 +151,7 @@ const HIGH_RATIO = 0.95;   // above this share = room to scale back up
  */
 export function ResolutionScaler() {
   const setDpr = useThree((s) => s.setDpr);
+  const invalidate = useThree((s) => s.invalidate);
   const quality = useScene((s) => s.quality);
   const pacing = useScene((s) => s.pacing);
   const displayHz = useScene((s) => s.displayHz);
@@ -175,6 +176,12 @@ export function ResolutionScaler() {
     if (Math.abs(dpr - applied.current) < 0.01) return;
     applied.current = dpr;
     setDpr(dpr);
+    // A buffer resize clears the canvas, and R3F applies it after React commits. On the idle
+    // 30fps 'demand' loop nothing draws until the next tick, so a frame was presented blank:
+    // a one-frame black flash on arrival at the solar system (measured on the alias, one per
+    // run, always right after a resize). Ask for a draw now and once more after the commit.
+    invalidate();
+    requestAnimationFrame(() => invalidate());
   };
 
   /**
