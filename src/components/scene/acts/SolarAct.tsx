@@ -12,6 +12,18 @@ import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
 import { makeRng, SEED } from '@/lib/rng';
+import { loadBitmapTexture } from '@/lib/bitmapTexture';
+import {
+  AMBIENT_FILL_INTENSITY,
+  EARTH_ALBEDO_MULTIPLIER,
+  JUPITER_ALBEDO_MULTIPLIER,
+  MARS_ALBEDO_MULTIPLIER,
+  MERCURY_ALBEDO_MULTIPLIER,
+  NEPTUNE_ALBEDO_MULTIPLIER,
+  SATURN_ALBEDO_MULTIPLIER,
+  URANUS_ALBEDO_MULTIPLIER,
+  VENUS_ALBEDO_MULTIPLIER,
+} from '@/lib/photometry';
 import Sun from '../solar/Sun';
 import AsteroidBelt from '../solar/AsteroidBelt';
 import WorldBackdrop from '../solar/WorldBackdrop';
@@ -75,19 +87,14 @@ function hiTierFor(): HiTier {
 }
 
 /** Fetch + decode a tier texture off the critical path and pre-upload it to the GPU so the
- *  material swap never stalls the flight. flipY handled to match the base TextureLoader map. */
+ *  material swap never stalls the flight. The shared loader owns the flipY contract. */
 async function loadHiRes(key: string, tier: HiTier, gl: THREE.WebGLRenderer): Promise<THREE.Texture | null> {
-  const res = await fetch(`/textures/hi/${key}.${tier}.webp`);
-  if (!res.ok) return null;
-  const bitmap = await createImageBitmap(await res.blob(), { imageOrientation: 'flipY' });
-  const tex = new THREE.Texture(bitmap);
-  tex.flipY = false; // bitmap already flipped → matches the base map's orientation
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
-  tex.wrapS = THREE.RepeatWrapping; // match the base map (A2 band shear)
-  tex.needsUpdate = true;
-  gl.initTexture(tex);
-  return tex;
+  return loadBitmapTexture(`/textures/hi/${key}.${tier}.webp`, gl, {
+    colorSpace: THREE.SRGBColorSpace,
+    anisotropy: Math.min(8, gl.capabilities.getMaxAnisotropy()),
+    wrapS: THREE.RepeatWrapping, // match the base map (A2 band shear)
+    preupload: true, // the swap happens mid-flight on a live material - it must not stall
+  }).ready;
 }
 
 /** A radial ring strip (colour + alpha vs radius) on a 1-D canvas — mapped radially by
@@ -261,6 +268,17 @@ const PLANETS: PlanetSpec[] = [
   { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 9.8, size: 0.42, speed: 0.0062, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
 ];
 
+const BODY_ALBEDO_MULTIPLIER: Record<string, number> = {
+  mercury: MERCURY_ALBEDO_MULTIPLIER,
+  venus: VENUS_ALBEDO_MULTIPLIER,
+  earth: EARTH_ALBEDO_MULTIPLIER,
+  mars: MARS_ALBEDO_MULTIPLIER,
+  jupiter: JUPITER_ALBEDO_MULTIPLIER,
+  saturn: SATURN_ALBEDO_MULTIPLIER,
+  uranus: URANUS_ALBEDO_MULTIPLIER,
+  neptune: NEPTUNE_ALBEDO_MULTIPLIER,
+};
+
 // A3 / B13: atmospheric limb scattering, driven by the IMPACT PARAMETER rather than by a
 // fresnel term.
 //
@@ -433,15 +451,17 @@ function EarthLayers({ radius }: { radius: number }) {
   // twinkle the mip bias above is dealing with. Capped at 16 because that is where every
   // desktop GPU stops anyway, and asking for more just reads back as 16.
   const maxAniso = useMemo(() => Math.min(16, gl.capabilities.getMaxAnisotropy()), [gl]);
-  const cloudTex = useMemo(() => {
-    const tx = new THREE.TextureLoader().load('/textures/earth_clouds.webp');
-    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = maxAniso; return tx;
-  }, [maxAniso]);
-  const nightTex = useMemo(() => {
-    const tx = new THREE.TextureLoader().load('/textures/earth_night.webp');
-    tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = maxAniso; return tx;
-  }, [maxAniso]);
-  useEffect(() => () => { cloudTex.dispose(); nightTex.dispose(); }, [cloudTex, nightTex]);
+  const cloudLoad = useMemo(
+    () => loadBitmapTexture('/textures/earth_clouds.webp', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: maxAniso }),
+    [gl, maxAniso]
+  );
+  const nightLoad = useMemo(
+    () => loadBitmapTexture('/textures/earth_night.webp', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: maxAniso }),
+    [gl, maxAniso]
+  );
+  const cloudTex = cloudLoad.texture;
+  const nightTex = nightLoad.texture;
+  useEffect(() => () => { cloudLoad.dispose(); nightLoad.dispose(); }, [cloudLoad, nightLoad]);
   const cloudUniforms = useMemo(() => ({ uMap: { value: cloudTex } }), [cloudTex]);
   const nightUniforms = useMemo(() => ({ uMap: { value: nightTex } }), [nightTex]);
   useFrame((_, dt) => { if (clouds.current) clouds.current.rotation.y += dt * 0.045; });
@@ -481,13 +501,13 @@ const _mearth = new THREE.Vector3();
 function EarthMoon({ planetSize }: { planetSize: number }) {
   const pivot = useRef<THREE.Group>(null);
   const body = useRef<THREE.Mesh>(null);
-  const tex = useMemo(() => {
-    const tx = new THREE.TextureLoader().load('/textures/moon.jpg');
-    tx.colorSpace = THREE.SRGBColorSpace;
-    tx.anisotropy = 8;
-    return tx;
-  }, []);
-  useEffect(() => () => { tex.dispose(); }, [tex]);
+  const gl = useThree((s) => s.gl);
+  const textureLoad = useMemo(
+    () => loadBitmapTexture('/textures/moon.jpg', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: 8 }),
+    [gl]
+  );
+  const tex = textureLoad.texture;
+  useEffect(() => () => { textureLoad.dispose(); }, [textureLoad]);
   const r = planetSize * MOON_DIST;
   useFrame((state) => {
     const a = (state.clock.elapsedTime / MOON_PERIOD) * Math.PI * 2;
@@ -569,18 +589,25 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   };
   useCursor(hovered && (!!page || decorative));
 
-  const texture = useMemo(() => {
-    const tx = new THREE.TextureLoader().load(spec.tex);
-    tx.colorSpace = THREE.SRGBColorSpace;
-    tx.anisotropy = 8;
-    tx.wrapS = THREE.RepeatWrapping; // let the A2 band shear scroll U seamlessly
-    return tx;
-  }, [spec.tex]);
+  const textureLoad = useMemo(
+    () =>
+      loadBitmapTexture(spec.tex, gl, {
+        colorSpace: THREE.SRGBColorSpace,
+        anisotropy: 8,
+        wrapS: THREE.RepeatWrapping, // let the A2 band shear scroll U seamlessly
+      }),
+    [spec.tex, gl]
+  );
+  const texture = textureLoad.texture;
   // Albedo material. Page planets get a mix-in hi-res sampler (A1): the base 2K map is
   // always the floor; `uHiMap`/`uHiMix` crossfade the focused hi-res texture in on top of
   // it in the exact same UV space, so upgrade/downgrade is a fade, never a pop.
   const material = useMemo(() => {
-    const m = new THREE.MeshStandardMaterial({ map: texture, color: spec.bodyColor ?? '#ffffff', roughness: 0.9, metalness: 0.02 });
+    // THREE.Color converts the existing hex tint from sRGB to linear; scale that working
+    // colour directly so the albedo factor stays literal. Encoding the factor as hex would
+    // silently turn (for example) 0.5 into ~0.21. Values above 1 are intentional here.
+    const bodyColor = new THREE.Color(spec.bodyColor ?? '#ffffff').multiplyScalar(BODY_ALBEDO_MULTIPLIER[spec.key]);
+    const m = new THREE.MeshStandardMaterial({ map: texture, color: bodyColor, roughness: 0.9, metalness: 0.02 });
     m.onBeforeCompile = (shader) => {
       shader.uniforms.uHiMap = { value: white1() };
       shader.uniforms.uHiMix = { value: 0 };
@@ -615,18 +642,37 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       {
         const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
         const HARD = 'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );';
-        // Both markers are load-bearing and both are three-version-dependent, so neither may
-        // fail quietly: a missed replace here would leave the terminator hard and look exactly
-        // like a tuning disagreement rather than a broken patch.
+        // EDGE-FLASH — the wrapped irradiance must not reach the specular past N·L = 0.
+        // BRDF_GGX computes its own hard dotNL, which is 0 there, so its visibility term is
+        // 0.5 / max(dotNV * alpha, 1e-6): on a silhouette pixel that is ~5e5, and soft
+        // irradiance times it came out hundreds of times brighter than the lamp, which bloom
+        // drew as a white blob for one frame. SPEC_GATE takes the specular to zero across the
+        // last 0.05 of N·L, so past the geometric terminator the specular matches stock three
+        // and the product stays bounded (at the gate's edge, soft/hard is 1.6, not infinite).
+        //
+        // Measured 2026-09-19: giving the specular the plain hard dotNL instead also removed
+        // the blobs, but it re-lit the whole sunlit hemisphere, because softNL(x) > x
+        // everywhere except the pole - photometry moved by 0.18-0.53 of 255 on five of six
+        // views, over EF-3's 0.1. Gating leaves the lit side bit-identical and touches only
+        // the band where the defect lives.
+        const SPEC = 'reflectedLight.directSpecular += irradiance * BRDF_GGX_Multiscatter(';
+        // All three markers are load-bearing and three-version-dependent, so none may fail
+        // quietly: a missed replace here would leave the terminator hard, or the limb flashing,
+        // and look exactly like a tuning disagreement rather than a broken patch.
         if (!CHUNK || !CHUNK.includes(HARD)) {
           throw new Error('G2: three\'s RE_Direct_Physical dotNL line has moved - the soft terminator patch is not applied');
+        }
+        if (!CHUNK.includes(SPEC)) {
+          throw new Error('EDGE-FLASH: three\'s RE_Direct_Physical specular line has moved - the limb would flash again');
         }
         if (!shader.fragmentShader.includes('#include <lights_physical_pars_fragment>')) {
           throw new Error('G2: meshphysical no longer includes lights_physical_pars_fragment');
         }
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <lights_physical_pars_fragment>',
-          SOFT_NL + CHUNK.replace(HARD, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );')
+          SOFT_NL + CHUNK
+            .replace(HARD, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );')
+            .replace(SPEC, 'reflectedLight.directSpecular += smoothstep( 0.0, 0.05, dot( geometryNormal, directLight.direction ) ) * irradiance * BRDF_GGX_Multiscatter(')
         );
       }
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -684,7 +730,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       hiShader.current = shader;
     };
     return m;
-  }, [texture, spec.bodyColor, spec.flow, spec.shear, spec.haze]);
+  }, [texture, spec.key, spec.bodyColor, spec.flow, spec.shear, spec.haze]);
   useEffect(() => () => material.dispose(), [material]);
   // Procedural ring strip (colour + alpha vs radius), drawn to a 1-D canvas and mapped
   // radially. Deterministic and CSP-safe — avoids the saturn_ring.png alpha-layout that
@@ -730,11 +776,11 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     if (HUD_AVAILABLE) phaseSetters[spec.key] = (a: number) => { angle.current = a; };
     return () => {
       delete phaseSetters[spec.key];
-      texture.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose();
+      textureLoad.dispose(); ringTex?.dispose(); ringGeo?.dispose(); hiTex.current?.dispose();
       planetPositions.delete(spec.key); planetRadii.delete(spec.key); planetRingNormal.delete(spec.key);
       if (useScene.getState().hoveredBody === spec.key) useScene.getState().setHoveredBody(null);
     };
-  }, [texture, ringTex, ringGeo, spec.key, spec.size]);
+  }, [textureLoad, ringTex, ringGeo, spec.key, spec.size, spec.rings]);
 
   // A1: lazily upgrade this planet's albedo the moment it becomes the focused world, and
   // fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
@@ -905,7 +951,7 @@ export default function SolarAct() {
   });
   return (
     <>
-      <ambientLight intensity={0.06} />
+      <ambientLight intensity={AMBIENT_FILL_INTENSITY} />
       {/* Star sphere + nebulae come from the shared SceneRoot sky (one universe). */}
       <group ref={root} rotation={[0.42, 0, 0]} name="solarRoot">
         <Sun />
