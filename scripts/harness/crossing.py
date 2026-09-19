@@ -9,6 +9,9 @@ pixels above level 200, and the mean of each channel. From those:
   C2  the jump        max |mean(t) - mean(t-1)| <= C2_JUMP, and no near-black frame with a
                       bright neighbour within C2_REACH frames
   C3  invented colour max |mean R - mean G| <= C3_RG
+  C5  the dead stretch how much of the scroll the frame spends near black, as a span of
+                      scrollProgress over frames under C5_DARK - the criterion CROSSING v1
+                      did not have, and the one its owner's eye failed it on
 
 The bars live in the brief (docs/briefs/CROSSING-brief.md) and are repeated here so a run can
 be judged without it; changing one here without changing it there is a defect.
@@ -40,9 +43,20 @@ C2_DARK = 20.0     # "near black"
 C2_BRIGHT = 100.0  # "bright"
 C2_REACH = 3       # frames either side
 
-# C3: |R-G| reads 1.4 at the galaxy and 7.8 at the settled solar system. 10 is just past the
-# looser end.
-C3_RG = 10.0
+# C3: |R-G| reads 1.4 at the galaxy and 7.8 at the settled solar system. The v1 bar of 10 is
+# what forced the fade to be COMPLETE by scroll 0.64 - the galaxy's own gold core fills the view
+# from there to the swap, so obeying 10 meant blacking it out. The bar is now the ember's own
+# measured split rounded up, and the reason it may move at all is that this colour is the
+# galaxy's, not an invention. Ceiling 20, which is where a warm frame starts to read as a tint
+# rather than as a lit object. See CROSSING-brief.md.
+C3_RG = 20.0
+
+# C5: the dead stretch. v1 shipped a frame under mean 20 from scroll 0.556 to 0.922 - 37% of the
+# whole scroll, in both directions, during which the picture does not change. A tenth of the
+# scroll is about 2.5 wheel notches: long enough to read as a passage through darkness, short
+# enough that nothing has time to look frozen.
+C5_DARK = 20.0
+C5_SPAN = 0.10
 
 LUMA = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
 
@@ -104,6 +118,7 @@ def judge(run):
         if max(means[lo:i] + means[i + 1:hi] or [0.0]) > C2_BRIGHT:
             holes.append({"frame": i, "t": round(stamps[i] - stamps[0], 3), "mean": round(m, 1)})
 
+    # C5 needs each frame's scroll position, which attach_state supplies below.
     peak = int(np.argmax(means))
     worst_jump = int(np.argmax(jumps)) + 1
 
@@ -111,7 +126,12 @@ def judge(run):
     # split just says which of the two halves a failure is coming from: the dive (the
     # streak field and the veils, coverage still 0) or the curtain (SwapMask).
     phases = {}
+    dark_span = None
     if attach_state(run, stamps, rows):
+        # The dead stretch, measured where the passage actually is: frames captured before the
+        # ramp started are the page sitting still and are not part of it.
+        dark_sp = [r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK]
+        dark_span = round(max(dark_sp) - min(dark_sp), 4) if dark_sp else 0.0
         for name, sel in (
             ("rest", [r for r in rows if r.get("pre")]),
             ("dive", [r for r in rows if not r.get("pre") and r.get("cov") == 0]),
@@ -139,9 +159,16 @@ def judge(run):
         "dark_holes": holes,
         "phases": phases,
         "settled_mean": round(float(np.mean(means[-15:])), 1),
+        "dark_span": dark_span,
+        "dark_sp_range": ([round(min(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK), 3),
+                           round(max(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK), 3)]
+                          if dark_span else None),
         "C1": "PASS" if max(means) <= C1_MEAN and max(r["pct200"] for r in rows) <= C1_BRIGHT_PCT else "FAIL",
         "C2": "PASS" if max(jumps) <= C2_JUMP and not holes else "FAIL",
         "C3": "PASS" if max(rg) <= C3_RG else "FAIL",
+        # A run whose state could not be attached cannot answer C5 at all, and says so rather
+        # than passing by default.
+        "C5": ("PASS" if dark_span <= C5_SPAN else "FAIL") if dark_span is not None else "UNKNOWN",
     }
     json.dump({"meta": meta, "rows": rows}, open(os.path.join(run, "frames.json"), "w"))
     return out
