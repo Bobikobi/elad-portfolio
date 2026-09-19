@@ -16,8 +16,9 @@
  * The DOM is hidden (canvas only), exactly as photometry-diff.mjs and p4-galaxy.mjs do it, so
  * the numbers describe the scene rather than the navbar, the chat widget and the debug HUD.
  *
- * Writes frames/, stamps.json, samples.json (the store's act/coverage/scrollProgress per
- * rendered frame) and meta.json. Refuses to report on a software GPU.
+ * Writes frames/, stamps.json, samples.json (per rendered frame:
+ * [frame, rampT, act, coverage, scrollProgress, wallClockSeconds]) and meta.json. Refuses to
+ * report on a software GPU.
  */
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
@@ -128,7 +129,11 @@ try {
         const t = Math.min(1, (f - f0) / span);
         window.scrollTo({ top: t * max, behavior: 'instant' });
         const s = store.getState();
-        window.__crossing.samples.push([f, +t.toFixed(4), s.act, +s.coverage.toFixed(4), +s.scrollProgress.toFixed(4)]);
+        // The wall clock goes in too. Rendered frames are NOT uniform in wall time - the act
+        // swap stalls for hundreds of ms - so interpolating the store's state onto a
+        // screencast frame by ramp position silently attributes the curtain's frames to the
+        // dive. CDP stamps each screencast frame with epoch seconds; this is the same clock.
+        window.__crossing.samples.push([f, +t.toFixed(4), s.act, +s.coverage.toFixed(4), +s.scrollProgress.toFixed(4), Date.now() / 1000]);
         if (t >= 1) { window.__crossing.done = true; return; }
       }
       requestAnimationFrame(tick);

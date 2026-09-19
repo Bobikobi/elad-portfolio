@@ -15,6 +15,7 @@ be judged without it; changing one here without changing it there is a defect.
 
 Needs PIL and numpy (/usr/bin/python3 on this machine).
 """
+import bisect
 import json
 import os
 import sys
@@ -59,6 +60,30 @@ def stats(path):
     }
 
 
+def attach_state(run, stamps, rows):
+    """Give every screencast frame the store state that was live when it was captured.
+
+    Both clocks are epoch seconds: CDP stamps each screencast frame, and the in-page ramp
+    stamps each rendered frame with Date.now(). Aligning by ramp position instead would be
+    wrong - the act swap stalls for hundreds of ms, so a whole run of curtain frames would be
+    filed under the dive. Frames captured before the ramp starts get the ramp's first state.
+    """
+    path = os.path.join(run, "samples.json")
+    if not os.path.exists(path):
+        return False
+    samples = [s for s in json.load(open(path)) if len(s) >= 6]
+    if not samples:
+        return False
+    clock = [s[5] for s in samples]
+    for i, r in enumerate(rows):
+        j = bisect.bisect_left(clock, stamps[i])
+        if j and (j == len(clock) or clock[j] - stamps[i] > stamps[i] - clock[j - 1]):
+            j -= 1
+        r["act"], r["cov"], r["sp"] = samples[j][2], samples[j][3], samples[j][4]
+        r["pre"] = stamps[i] < clock[0]
+    return True
+
+
 def judge(run):
     meta = json.load(open(os.path.join(run, "meta.json")))
     stamps = json.load(open(os.path.join(run, "stamps.json")))
@@ -81,6 +106,25 @@ def judge(run):
 
     peak = int(np.argmax(means))
     worst_jump = int(np.argmax(jumps)) + 1
+
+    # Diagnostic only - the criteria are judged over the whole passage, one bar each. This
+    # split just says which of the two halves a failure is coming from: the dive (the
+    # streak field and the veils, coverage still 0) or the curtain (SwapMask).
+    phases = {}
+    if attach_state(run, stamps, rows):
+        for name, sel in (
+            ("rest", [r for r in rows if r.get("pre")]),
+            ("dive", [r for r in rows if not r.get("pre") and r.get("cov") == 0]),
+            ("curtain", [r for r in rows if not r.get("pre") and r.get("cov", 0) > 0]),
+        ):
+            if sel:
+                phases[name] = {
+                    "n": len(sel),
+                    "mean": round(max(r["mean"] for r in sel), 1),
+                    "pct200": round(max(r["pct200"] for r in sel), 2),
+                    "rg": round(max(abs(r["r"] - r["g"]) for r in sel), 1),
+                }
+
     out = {
         "tag": meta["tag"], "gpu": meta["gpu"], "fixedStep": meta.get("fixedStep"),
         "frames": len(rows), "fps": meta["fps"], "median_gap_ms": meta["medianGapMs"],
@@ -93,6 +137,7 @@ def judge(run):
         "max_jump_at_t": round(stamps[worst_jump] - stamps[0], 3),
         "max_abs_rg": round(max(rg), 1),
         "dark_holes": holes,
+        "phases": phases,
         "settled_mean": round(float(np.mean(means[-15:])), 1),
         "C1": "PASS" if max(means) <= C1_MEAN and max(r["pct200"] for r in rows) <= C1_BRIGHT_PCT else "FAIL",
         "C2": "PASS" if max(jumps) <= C2_JUMP and not holes else "FAIL",
