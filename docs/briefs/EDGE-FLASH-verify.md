@@ -22,7 +22,7 @@ HTML and grepping the deployed bundle. The marker appears only in the fix builds
 | # | criterion | target | measured | verdict |
 |---|---|---|---|---|
 | **EF-1** | no big flashes | 0 in all four recordings | home **0, 0**. `/about` **5, 5** - one moving-edge track, identical in the before runs | **PASS on home, FAIL on `/about` as written.** 0 big flashes are left that the fix owns |
-| **EF-2** | flashes nearly gone | `/about` <= 55, home <= 15 | `/about` **466, 472**. home **92, 94** | **FAIL.** The threshold was set from a count the fix was never going to move |
+| **EF-2** | flashes nearly gone | `/about` <= 55, home <= 15 | `/about` **466, 472**. home **92, 86** | **FAIL.** The threshold was set from a count the fix was never going to move |
 | **EF-3** | the rest of the image does not move | mean <= 0.1 of 255 on six views; P3-2..P3-5 PASS, P3-1 clips do not rise | 2 of 6 views inside 0.1; P3 half fully PASS | **FAIL on the photometry half, PASS on the P3 half** |
 | **EF-4** | the day-night line stays soft | the owner's eye | the owner looked at `elad-portfolio-3e9esd8qw` on 2026-09-19: "the transition is soft enough" | **PASS** |
 
@@ -85,7 +85,7 @@ owns is left in any of the four recordings.**
 | `/about` run 1 | 540 | 466 | <= 55 |
 | `/about` run 2 | 550 | 472 | <= 55 |
 | home run 1 | 157 | 92 | <= 15 |
-| home run 2 | 150 | 94 | <= 15 |
+| home run 2 | 150 | 86 | <= 15 |
 
 **FAIL, and the target was wrong.** It was set at "90% below the live site's 555 and ~155", on the
 assumption that the flash-frame count was mostly the defect. It is not. Counting only events under
@@ -212,15 +212,40 @@ Both came out of a challenge pass on this stage (GPT-6 Astra, 2026-09-19). Neith
 verdict above; both bound what these numbers can claim, and both are cheap to close if a later
 stage needs them.
 
-**1. The counts are a lower bound on any page that renders faster than the screencast delivers.**
+**1. The median-gap guard was too weak, and is now per frame.** A median cannot see a handful of
+dropped frames: with a few missing, the median stays near 33ms and the whole run is accepted, while
+locally the detector compares frames ~66ms apart as if they were adjacent - and a one-frame flash
+that happened inside the missing interval is invisible, so a zero there is as unreliable as a
+count. Raised by an automated review of this PR and fixed in `edge-flash.py` before the merge:
+every judged frame is now also checked against its own four intervals, and a frame sitting next to
+a dropped one is **skipped and counted** instead of reported. The bar is 1.5x the run's own median
+gap, because the delivered rate differs per page; the median gap is a property of the capture clock
+rather than of the scene, so this is calibration and not a threshold taken from the source under
+audit.
+
+**Every verdict in this document survived the stricter detector**, re-run over the frames already on
+disk - no recapture needed:
+
+| recording | frames judged / scanned | skipped | flash frames | big flashes |
+|---|---|---|---|---|
+| `/about` before 1, 2 | 746/746, 746/746 | 0, 0 | 540, 550 | 32, 27 |
+| `/about` after 1, 2 | 747/747, 746/746 | 0, 0 | 466, 472 | 5, 5 |
+| home before 1, 2 | 703/703, 702/702 | 0, 0 | 157, 150 | 46, 46 |
+| home after 1, 2 | 698/698, **647/695** | 0, **48** | 92, **86** | 0, 0 |
+
+One run lost 48 frames of 695 and its flash-frame count moved 94 -> 86. Every other number in all
+eight runs is unchanged, and **no big-flash count moved at all**. The dropped frames in the home
+recordings fall during the scroll, before the 12s mark, and so were already outside the measured
+window in three of the four runs.
+
+**The counts are still a lower bound on any page that renders faster than the screencast delivers.**
 The recorder reports what the compositor handed over, not what the page drew. On `/about` that was
-30.0 fps in all four runs with a worst single gap of 37-43ms, which is the idle throttle and
-therefore every frame. On the home page it was **38.4-39.3 fps with single gaps up to 319ms**
-during the scroll, so frames were coalesced there. The before/after comparison stays fair - both
-sides were sampled the same way, on the same machine, minutes apart - and 46 big flashes going to 0
-with the largest event collapsing from 5,260 px to 5 px is far outside what a sampling difference
-could produce. But the absolute home counts understate, and a stage that needs an exact
-per-rendered-frame count must capture losslessly at the render rate rather than reuse this.
+30.0 fps with a worst single gap of 37-43ms, which is the idle throttle and therefore every frame.
+On the home page it was 38.4-39.3 fps with single gaps up to 319ms during the scroll. The
+before/after comparison stays fair - both sides sampled the same way, on the same machine, minutes
+apart - and 46 big flashes going to 0 with the largest event collapsing from 5,260 px to 5 px is far
+outside what a sampling difference could produce. A stage that needs an exact per-rendered-frame
+count must capture losslessly at the render rate rather than reuse this.
 
 **2. The ~460 small events may be the JPEG, not the scene.** The screencast is JPEG at quality 85,
 and the surviving population is 4 pixels at a median peak of 105, sitting on exactly the

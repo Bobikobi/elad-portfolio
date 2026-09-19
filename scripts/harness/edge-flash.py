@@ -21,7 +21,20 @@ from PIL import Image, ImageFilter
 
 THRESHOLD = 80
 BIG_PX = 200
-MAX_MEDIAN_GAP_MS = 40  # an idle page renders at 30fps; a wider gap means frames were dropped
+MAX_MEDIAN_GAP_MS = 40  # a whole-run sanity check: a wider median means the capture broke down
+
+# A median cannot see a handful of dropped frames. With a few missing, the median stays near
+# 33ms and the run is accepted, while LOCALLY the detector compares frames ~66ms apart as if they
+# were adjacent - and a one-frame flash that happened inside the missing interval is invisible,
+# so both a zero and a big count are unreliable exactly there. So every judged frame is also
+# checked against its own neighbourhood, and the ones sitting next to a dropped frame are skipped
+# and counted rather than reported.
+#
+# The bar is the run's OWN median gap, not a fixed millisecond value, because the delivered rate
+# differs per page (30fps idle on /about, ~39fps on the home page during a scroll). That does not
+# break standing rule 6: the median gap is a property of the capture clock, not of the scene being
+# judged, so it is calibration rather than a threshold derived from the source under audit.
+MAX_GAP_FACTOR = 1.5
 
 
 def lum(path):
@@ -56,8 +69,17 @@ def main():
             D[i] = dilate(L[i])
         return L[i], D[i]
 
-    events, mean_lum = [], []
+    gaps = [stamps[j + 1] - stamps[j] for j in range(len(stamps) - 1)]
+    gap_limit = MAX_GAP_FACTOR * sorted(gaps)[len(gaps) >> 1]
+
+    events, mean_lum, skipped = [], [], 0
     for i in range(2, len(paths) - 2):
+        for j in [k for k in L if k < i - 2]:
+            del L[j], D[j]
+        # every interval this frame's verdict rests on, i.e. lo+i-2 .. lo+i+2
+        if max(gaps[lo + i - 2:lo + i + 2]) > gap_limit:
+            skipped += 1
+            continue
         cur, _ = get(i)
         around = np.maximum.reduce([get(j)[1] for j in (i - 2, i - 1, i + 1, i + 2)])
         spike = cur - around
@@ -69,13 +91,15 @@ def main():
                 "peak": int(spike.max()), "x": int(np.median(xs)), "y": int(np.median(ys)),
                 "box": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
             })
-        for j in [k for k in L if k < i - 1]:
-            del L[j], D[j]
 
     json.dump(events, open(os.path.join(run, "events.json"), "w"))
     summary = {
         "tag": meta["tag"], "route": meta["route"], "window_s": [t_from, round(t_to, 3)],
-        "frames_scanned": len(paths) - 4, "flash_frames": len(events),
+        "frames_scanned": len(paths) - 4,
+        "frames_judged": len(paths) - 4 - skipped,
+        "frames_skipped_dropped_neighbour": skipped,
+        "gap_limit_ms": round(gap_limit * 1000, 1),
+        "flash_frames": len(events),
         "big_flashes": sum(e["px"] >= BIG_PX for e in events),
         "mean_luminance": round(float(np.mean(mean_lum)), 2),
         "fps": meta["fps"], "median_gap_ms": meta["medianGapMs"], "gpu": meta["gpu"],
