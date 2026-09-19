@@ -50,6 +50,24 @@ but not by much. That recording also holds 1,981 frames in the same 35 s against
 other three, so its frame pacing differed; I did not investigate whether the larger jump comes
 from that, and it is not a repeated measurement.
 
+## Scroll teleport - found by the Codex review on PR #39, then measured
+
+`DiveFade` read the raw scroll, so a scrollbar drag, End key or scroll restoration took the
+plane from invisible to 78% opaque in one frame while the camera's damped gate had not moved.
+`crossing.mjs` gained `RAMP_TO`; with `RAMP_FRAMES=1 RAMP_TO=0.5` the scroll jumps to mid-dive
+in one frame. Same recorder, same detector, two runs per build:
+
+| build | commit | max frame step (bar 25) | max mean |
+|---|---|---|---|
+| before | `aa6854d` (`elad-portfolio-izpla41mp`) | **52.2 / 52.2** - C2 FAIL | 76.1 |
+| after | `25e9936` (`elad-portfolio-4pz2xo62x`) | **6.0 / 6.0** - C2 PASS | 76.0 / 76.1 |
+
+The fix: the plane's opacity moves at most 2 per second (`FADE_RATE`), and starts at its target
+when the component mounts, so the way back from the solar system is unchanged. The ordinary
+scroll passage does not change with it (same preview, two runs: mean 79.0 / 79.0, above 200
+7.88% / 7.86%, largest step 2.8 / 4.2, red-green 7.8 / 7.8, swap at 0.9333 in both), and the
+return trip still reaches the top with the swap at scroll 0.8958.
+
 ## What was measured about the cause, on the way
 
 Local production build, real GPU, `crossing.py`'s rest / dive / curtain split (each frame filed
