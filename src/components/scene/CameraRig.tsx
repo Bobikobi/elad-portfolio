@@ -235,13 +235,15 @@ const LOOK = new THREE.Vector3(0, 0.5, 0);
 // horizontal band. Ends inside a spiral ARM (offset from centre, Sol's neighbourhood);
 // the gold core slides sideways to hang in the background.
 const DIVE_P0 = new THREE.Vector3(0, 2.6, 9);
-const DIVE_C1 = new THREE.Vector3(-0.7, 2.5, 6.4);
-const DIVE_C2 = new THREE.Vector3(2.9, 0.4, 3.2);
-const DIVE_P1 = new THREE.Vector3(3.7, -0.9, 1.5);
+const DIVE_C1 = new THREE.Vector3(0, 1.82, 6.3);
+const DIVE_C2 = new THREE.Vector3(2.8, 0.12, 3.0);
+// The dive now ENDS INSIDE the disc (y +0.08) instead of below it: the v2 path crossed the
+// plane and finished under an edge-on sheet, which read as "entering under the galaxy".
+const DIVE_P1 = new THREE.Vector3(3.7, 0.08, 1.5);
 // Look pitches from looking-DOWN at the core (camera above the plane) to looking-UP at
 // the arm (camera below it) — the disc sweeps across the frame at an angle.
 const LOOK_START = new THREE.Vector3(0, 0.25, 0);
-const LOOK_END = new THREE.Vector3(5.2, 0.9, -1.5);
+const LOOK_END = new THREE.Vector3(4.6, 0.05, -1.5); // level with the camera: it ends inside the disc, looking along it
 const _tmp = new THREE.Vector3();
 /** Cubic Bézier into `out`. */
 function cubicBezier(out: THREE.Vector3, p0: THREE.Vector3, c1: THREE.Vector3, c2: THREE.Vector3, p1: THREE.Vector3, e: number) {
@@ -835,15 +837,19 @@ export default function CameraRig() {
         cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, e);
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);
-        damp3(cam.position, _tgt, 0.22, dt);
+        // Pure function of scroll once the dive is under way, so scrolling back retraces the
+        // same frames (damping made the return a lagged, different path). A short damp only
+        // over the first 0.05 of scroll hides the hand-off from the idle drift pose.
+        const diveTau = 0.22 * (1 - clamp01((p - 0.015) / 0.05));
+        damp3(cam.position, _tgt, diveTau, dt);
         // FOV opens for speed on the way in, eases back near arrival (deceleration cue).
         const fov = 55 + 13 * Math.sin(clamp01(e) * Math.PI * 0.85);
-        damp(cam, 'fov', fov, 0.22, dt);
+        damp(cam, 'fov', fov, diveTau, dt);
         // Look pitches down→up as the camera crosses the plane, and a small extra pitch
         // bump mid-dive — so the disc sweeps across the frame at an angle, never a flat
         // horizontal band. The core (LOOK_END.x) slides off-side toward the arm.
         _look.copy(LOOK_START).lerp(LOOK_END, easeInOutCubic(e));
-        _look.y += 0.5 * Math.sin(e * Math.PI);
+        _look.y += 0.15 * Math.sin(e * Math.PI);
         cam.lookAt(_look.x, _look.y, _look.z);
         // Cinematic bank — a roll that tilts the disc diagonally (kills any residual
         // horizontal read). Frequency 0.85π so it stays banked THROUGH the late crossing
