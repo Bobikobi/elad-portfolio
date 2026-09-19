@@ -203,3 +203,42 @@ with "the limb would flash again" rather than silently dropping the fix.
 
 Venus burning to white, Mars's 11.10% clipping over a full turn, the gallery view for phones -
 all out of scope in the brief and still open.
+
+---
+
+## Two limits of this instrument, recorded rather than smoothed over
+
+Both came out of a challenge pass on this stage (GPT-6 Astra, 2026-09-19). Neither changes a
+verdict above; both bound what these numbers can claim, and both are cheap to close if a later
+stage needs them.
+
+**1. The counts are a lower bound on any page that renders faster than the screencast delivers.**
+The recorder reports what the compositor handed over, not what the page drew. On `/about` that was
+30.0 fps in all four runs with a worst single gap of 37-43ms, which is the idle throttle and
+therefore every frame. On the home page it was **38.4-39.3 fps with single gaps up to 319ms**
+during the scroll, so frames were coalesced there. The before/after comparison stays fair - both
+sides were sampled the same way, on the same machine, minutes apart - and 46 big flashes going to 0
+with the largest event collapsing from 5,260 px to 5 px is far outside what a sampling difference
+could produce. But the absolute home counts understate, and a stage that needs an exact
+per-rendered-frame count must capture losslessly at the render rate rather than reuse this.
+
+**2. The ~460 small events may be the JPEG, not the scene.** The screencast is JPEG at quality 85,
+and the surviving population is 4 pixels at a median peak of 105, sitting on exactly the
+high-contrast boundaries where JPEG ringing lives - star edges and Earth's sunlit detail. That
+would explain why the population is identical before (479/478) and after (457/463) any shader
+change. **Untested**, and worth one lossless re-recording before anyone treats that number as a
+property of the scene. It does not touch this stage's verdicts: EF-1 counts events of 200+ pixels,
+and EF-2 already failed on the ground that this population is not the defect.
+
+## Ruling on the two failed criteria
+
+The FAILs stand as written and are not rewritten after the fact. A criterion that proved to
+measure the wrong thing is replaced **prospectively** - the replacement judges the next stage, not
+this one - and the record keeps both the original bar and why it was wrong. What this stage feeds
+forward:
+
+- A criterion is validated against the known defect **before** it is approved: label a handful of
+  real defect frames and a handful of look-alike negatives (sparkle, an occlusion crossing), and
+  show the instrument separates them. EF-1 and EF-2 would both have been caught by that.
+- A bar is never a percentage of a total until the total has been shown to consist of the defect.
+  That is standing rule 6 applied to counts, not just to constants.
