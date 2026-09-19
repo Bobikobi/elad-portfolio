@@ -2,6 +2,7 @@
 import { forwardRef, useMemo } from 'react';
 import { Effect } from 'postprocessing';
 import { Uniform, type WebGLRenderer } from 'three';
+import { HUD_AVAILABLE } from './DebugHud';
 
 /**
  * The aperture + the tone mapper, as one fullscreen step inside the composer.
@@ -44,11 +45,18 @@ import { Uniform, type WebGLRenderer } from 'three';
  * gradient. Rust stays rust; it simply stops being redder than it can be.
  *
  * It is scaled by the channel SPREAD, and that is what makes it safe to apply globally
- * rather than per-object. A neutral highlight — the sun's core, the gold curtain at full
- * coverage, a white star — has its channels close together, so the spread term is ~0 and it
- * is passed through untouched. Only a colour that is both bright AND lopsided, which is the
+ * rather than per-object. Only a colour that is both bright AND lopsided, which is the
  * exact condition for a lone channel clipping, is touched at all. Nothing here changes
  * exposure: the aperture is still the per-world number CameraRig drives, per the ruling.
+ *
+ * CORRECTED 2026-08-15 (SUN-3). This comment used to claim that a neutral highlight — the
+ * sun's core, the gold curtain, a white star — has its channels close together, so the
+ * spread term is ~0 and it "is passed through untouched". That is false, and it hid a real
+ * defect for two stages. The sun's core is NOT neutral: its measured spread is 0.97, so the
+ * rolloff was desaturating the centre of the disc by 49% and the limb by 11% — i.e. actively
+ * cancelling the limb darkening SUN-2 was trying to produce. The pass is global, so this
+ * applies to every planet, star and the gold curtain too, not only to Mars, which is what it
+ * was written for. Re-scoping it is P4 of PHOTOMETRY-megaplan.md and is only safe after P3.
  */
 const fragmentShader = /* glsl */ `
 uniform float exposure;
@@ -105,9 +113,81 @@ void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor
 }
 `;
 
+/**
+ * P4 measurement seam, HUD builds only (`?noRolloff`).
+ *
+ * P4 has to know how much `highlightRolloff` is taking from each body, and the shader gates
+ * itself on the PRE-ACES HDR colour while a screenshot is post-ACES and clipped at 255. So
+ * the spread the shader acts on cannot be recovered from a frame - a pixel that arrives at
+ * (255,255,255) tells you nothing about how lopsided it was going in. Holding everything
+ * else and switching the function off is the only measurement that needs no inversion and
+ * no proxy. It is the same method SUN-3 used to settle god rays against bloom.
+ *
+ * Built by string replacement from the shader above rather than by branching inside it, so
+ * that WITHOUT the flag the program text is byte-identical to what shipped - no new uniform,
+ * no new branch, nothing for a compiler to schedule differently. Verified, not assumed:
+ * `photometry-diff` against `m1-before` is mean 0.0000 / max 0 on all six views.
+ */
+const FRAGMENT_NO_ROLLOFF = (() => {
+  const marker = 'acesFilmic( highlightRolloff( exposed ) )';
+  if (!fragmentShader.includes(marker)) {
+    throw new Error('P4 seam: the highlightRolloff call site has moved - the ?noRolloff measurement would silently measure nothing');
+  }
+  return fragmentShader.replace(marker, 'acesFilmic( exposed )');
+})();
+
+/**
+ * P4 candidate seam, HUD builds only: `?hl=knee,range,max` or `?hl=knee,range,max,power`.
+ *
+ * Re-scoping this function means trying constants, and each try is a full capture set. Editing the
+ * shipped constants per try would rebuild the product for every candidate and leave nothing to
+ * compare a candidate against but a previous build. This builds the candidate shader from the
+ * shipped one by replacing the three constant lines - and, with a fourth value, raising `spread`
+ * to a power, which is the one lever that can tell a saturated red highlight (Mars) from a pale
+ * bright one (Saturn, Venus, Earth's clouds) where brightness alone cannot.
+ *
+ * Without `?hl` (and without `?noRolloff`) the program text is the shipped `fragmentShader`,
+ * byte for byte. With `?hl=0.72,1.70,0.68` - today's values - it must reproduce today's frame
+ * exactly; that is how this seam is validated before any candidate result is believed.
+ */
+const glslNum = (v: number) => (Number.isInteger(v) ? v.toFixed(1) : String(v));
+const HL_MARKERS = {
+  knee: 'const float HL_KNEE  = 0.72;',
+  range: 'const float HL_RANGE = 1.70;',
+  max: 'const float HL_MAX   = 0.68;',
+  spread: 'HL_MAX * over * spread )',
+};
+
+const hudFragment = (): string => {
+  if (!HUD_AVAILABLE || typeof window === 'undefined') return fragmentShader;
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('noRolloff')) return FRAGMENT_NO_ROLLOFF;
+  const hl = params.get('hl');
+  if (!hl) return fragmentShader;
+  const values = hl.split(',').map(Number);
+  const [knee, range, max, power] = values;
+  if (values.length < 3 || values.length > 4 || values.some((v) => !Number.isFinite(v)) ||
+      range <= 0 || max < 0 || max > 1 || (power !== undefined && power <= 0)) {
+    throw new Error(`P4 seam: ?hl must be knee,range,max[,power] with range > 0, 0 <= max <= 1, power > 0 - got "${hl}"`);
+  }
+  for (const [name, marker] of Object.entries(HL_MARKERS)) {
+    if (!fragmentShader.includes(marker)) {
+      throw new Error(`P4 seam: the ${name} line has moved - ?hl would silently measure the shipped constants`);
+    }
+  }
+  let out = fragmentShader
+    .replace(HL_MARKERS.knee, `const float HL_KNEE  = ${glslNum(knee)};`)
+    .replace(HL_MARKERS.range, `const float HL_RANGE = ${glslNum(range)};`)
+    .replace(HL_MARKERS.max, `const float HL_MAX   = ${glslNum(max)};`);
+  if (power !== undefined) {
+    out = out.replace(HL_MARKERS.spread, `HL_MAX * over * pow( spread, ${glslNum(power)} ) )`);
+  }
+  return out;
+};
+
 class ExposureToneMapEffect extends Effect {
-  constructor() {
-    super('ExposureToneMap', fragmentShader, {
+  constructor(fragment: string = fragmentShader) {
+    super('ExposureToneMap', fragment, {
       uniforms: new Map([['exposure', new Uniform(1)]]),
     });
   }
@@ -120,7 +200,7 @@ class ExposureToneMapEffect extends Effect {
 
 /** Place AFTER God Rays / Bloom (those want HDR) and BEFORE the grade, grain and vignette. */
 const ExposureToneMap = forwardRef<ExposureToneMapEffect>(function ExposureToneMap(_props, ref) {
-  const effect = useMemo(() => new ExposureToneMapEffect(), []);
+  const effect = useMemo(() => new ExposureToneMapEffect(hudFragment()), []);
   return <primitive ref={ref} object={effect} dispose={null} />;
 });
 

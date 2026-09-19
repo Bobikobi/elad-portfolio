@@ -3,6 +3,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation, SMAA } from '@react-three/postprocessing';
 import * as THREE from 'three';
+import {
+  BLOOM_FOCUSED_WORLD_INTENSITY,
+  BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD,
+  BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY,
+  BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING,
+  BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD,
+  BLOOM_SOLAR_LUMINANCE_SMOOTHING,
+  BLOOM_SOLAR_OVERVIEW_INTENSITY,
+  BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD,
+  GODRAY_WEIGHT,
+} from '@/lib/photometry';
 import { useScene } from '@/lib/sceneStore';
 import { HUD_AVAILABLE } from './DebugHud';
 import ExposureToneMap from './ExposureToneMap';
@@ -48,7 +59,7 @@ const GALAXY_SAT = 0.08; // A6: the same gentle grade enriches the galaxy arms (
 // overview keeps its unconditional mount so that a drag-rotate which swings the sun off
 // the edge fades the rays without recompiling the composer mid-gesture.
 const SUN_POS = new THREE.Vector3(0, 0, 0);
-const GODRAY_WEIGHT = 0.16;
+// God-ray weight and its light-budget rationale live in @/lib/photometry.
 const RAY_FADE_IN = 0.9;   // × half-diagonal fov - full weight inside this
 const RAY_FADE_OUT = 1.7;  // × half-diagonal fov - zero weight beyond this
 const RAY_MOUNT = 2.2;     // × half-diagonal fov - mounted out to here (hysteresis below)
@@ -251,6 +262,20 @@ export default function Effects() {
         levels={high ? 7 : 6}
         // SUN-2: the OVERVIEW threshold goes 0.72 -> 0.94 and its intensity 0.6 -> 0.5.
         //
+        // STALE, CORRECTED 2026-08-16. The overview threshold is NOT 0.94. SUN-3
+        // (`0fcf349`) changed it to 0.33 and left this comment untouched, so everything
+        // below describes a value that has not been in the file since. The change is not
+        // mentioned in that commit's message either - it is the only number SUN-3 moved
+        // silently. Read the paragraph below as the reasoning for 0.94, which is history,
+        // and not as a description of what runs today.
+        //
+        // Not yet measured, so stated as a hypothesis rather than a fact: SUN-3 dimmed the
+        // disc from sRGB (216,141,87) to (186,124,89), and a threshold set against the
+        // brighter sun would leave almost nothing above the bar once the sun came down.
+        // 0.33 against a dimmer disc is a much lower bar than 0.94 was against a brighter
+        // one, and P3's albedo work moves the same goalposts again. This is knob two of
+        // P6's first judgement call and should not be re-tuned before then.
+        //
         // Bloom runs after tone mapping, and at 0.72 most of the sun's disc - not just its
         // hottest cells - was over the bar. The glow was therefore being laid over the
         // surface itself: measured, a 48% limb darkening arrived at the screen as 8%,
@@ -261,9 +286,9 @@ export default function Effects() {
         //
         // This can only make the halo TIGHTER, which is the direction R2.2 wanted - but the
         // corner luminance is re-measured anyway rather than argued about.
-        intensity={solar ? (focused ? 0.34 : 0.5) : 0.5}
-        luminanceThreshold={solar ? (focused ? 0.86 : 0.94) : 0}
-        luminanceSmoothing={solar ? 0.22 : 0}
+        intensity={solar ? (focused ? BLOOM_FOCUSED_WORLD_INTENSITY : BLOOM_SOLAR_OVERVIEW_INTENSITY) : BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY}
+        luminanceThreshold={solar ? (focused ? BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD : BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD) : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD}
+        luminanceSmoothing={solar ? BLOOM_SOLAR_LUMINANCE_SMOOTHING : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING}
         radius={solar ? 0.45 : 0.5}
       />
       {/* THE APERTURE + THE TONE MAPPER. Must sit after God Rays and Bloom (they want the
