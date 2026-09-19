@@ -733,7 +733,14 @@ export default function CameraRig() {
         // sees the seam. So state the rule directly instead of hoping the damp implies it:
         // a frame that WOULD cross the swap point stops exactly on it. One frame at full
         // coverage is guaranteed, whatever the frame took.
-        if (prevGate !== pGate.current && (prevGate < SWAP_V) !== (pGate.current < SWAP_V)) {
+        // …but never FROM the swap point itself. The snap leaves the gate at exactly SWAP_V,
+        // which counts as the solar side, so on the way UP the next frame saw a "crossing"
+        // (0.9 is not < 0.9, the damped step below it is) and snapped it back, every frame,
+        // for as long as the scroll stayed above: the gate was pinned at 0.9, `desired` stayed
+        // solar, the swap never fired and the page stuck in the solar act with the curtain shut.
+        // Recorded on the pre-CROSSING build as well: a ramp from the solar system to the top
+        // ends in `solar` with the gate at 0.9000 for the whole way. Only the dive had escaped it.
+        if (prevGate !== SWAP_V && prevGate !== pGate.current && (prevGate < SWAP_V) !== (pGate.current < SWAP_V)) {
           pGate.current = SWAP_V;
         }
         const g = pGate.current;

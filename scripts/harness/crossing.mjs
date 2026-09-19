@@ -136,7 +136,7 @@ try {
           // swap stalls for hundreds of ms - so interpolating the store's state onto a
           // screencast frame by ramp position silently attributes the curtain's frames to the
           // dive. CDP stamps each screencast frame with epoch seconds; this is the same clock.
-          window.__crossing.samples.push([f, +t.toFixed(4), s.act, +s.coverage.toFixed(4), +s.scrollProgress.toFixed(4), Date.now() / 1000]);
+          window.__crossing.samples.push([f, +t.toFixed(4), s.act, +s.coverage.toFixed(4), +s.scrollProgress.toFixed(4), Date.now() / 1000, window.__reveal ? [window.__reveal.hold, window.__reveal.envelope, window.__reveal.gate] : null]);
           if (t >= 1) { window.__crossing.done = true; return; }
         }
         requestAnimationFrame(tick);
