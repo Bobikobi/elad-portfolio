@@ -179,7 +179,7 @@ function GalaxyHome() {
 
   // R5.1 — crossover auto-commit. The swap curtain is a wide, symmetric envelope around
   // the crossover point, so a visitor who simply STOPS scrolling inside it is left staring
-  // at a gold wash with no indication that anything more is expected of them: the one true
+  // at a black curtain with no indication that anything more is expected of them: the one true
   // stuck position on the page. When scroll comes to rest while the curtain is meaningfully
   // up, finish the crossing for them — a short smooth scroll to just past the curtain, in
   // whichever direction they were already travelling. Never fires while they are still
@@ -192,7 +192,7 @@ function GalaxyHome() {
     const COMMIT_COV = 0.45; // only while the curtain actually obscures the frame
     // Clear of the ENTIRE covered band: the plateau half-width AND the falloff, plus a
     // margin. Landing on `SWAP_V + COVER_FALLOFF` alone stops one plateau short and parks
-    // the visitor at a permanent coverage of 0.25 — the same gold wash this is meant to
+    // the visitor at a permanent coverage of 0.25 — the same shut curtain this is meant to
     // clear, only now at a fixed depth instead of wherever they happened to stop.
     const PAST = COVER_PLATEAU + COVER_FALLOFF + 0.01;
     let raf = 0;

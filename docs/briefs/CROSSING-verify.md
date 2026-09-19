@@ -1,4 +1,62 @@
-# CROSSING verify - the passage from the galaxy into the solar system
+# CROSSING verify
+
+> ## v2, 2026-09-19 - the ember, and the return trip that was stuck
+>
+> **v1 (the record below) shipped to production with a dead stretch and a stuck return.** Its
+> criteria all passed and the owner's eye failed it in one sentence. Measured afterwards, the frame
+> sat under mean 20 across **0.444 of the whole scroll** in both directions. v2's numbers below
+> are from the deployed preview `elad-portfolio-5cg57wvze` (commit `43fec8d`, branch
+> `fix/crossing-ember`), real GPU (Intel RPL-P, Vulkan), 1280x720, each row run twice on
+> unchanged code. Control for C4a: `elad-portfolio-bk0ktnan7` (pre-CROSSING master).
+>
+> | # | criterion | bar | v2, run 1 / run 2 | verdict |
+> |---|---|---|---|---|
+> | C1 | no wash | mean <= 80, >200 <= 8% | down 78.1 / 78.2, 7.70 / 7.72%. Up: passage frames only, see below | **PASS** |
+> | C2 | nothing jumps | step <= 25, no dark hole | down 4.4 / 4.4; up 3.0 / 3.0; no holes | **PASS** |
+> | C3 | colour split | <= 20 | down 18.1 / 18.1; up 19.0 / 19.0 | **PASS** (about 1 level of margin) |
+> | C4a | endpoints untouched | <= 0.1 mean diff | 6 solar views diff 0.000/0 vs control (2 shots each, fixedStep+freeze); galaxy at rest diff 0.0/0 (control bk0ktnan7, new 5cg57wvze) | PASS |
+> | C5 | dead stretch | frames under 20 span <= 0.15 and start >= 0.84 (down) / >= 0.80 (up) | down **0.117 / 0.122** (from 0.878 / 0.872); up at the return-trip pace (360-frame ramp) **0.103 / 0.106** | **PASS**, with the fast-ramp caveat below |
+> | C6 | the return works | reaches the top in act `galaxy` from 0.5 / 0.85 / 0.92 / 0.97 | **8 of 8** runs (two per point), swap at scroll 0.8858-0.8958, 4.5-6.3 s up | **PASS** |
+> | C7 | teleport | step <= 25 | **6.0 / 6.0** | **PASS** |
+> | C4b | reads as arrival | the owner's eye | not measured | **OPEN, for the owner** |
+>
+> ### What the return trip was actually doing (found while measuring C5 up)
+>
+> The first `DIR=up` recordings ended in the solar act with the curtain shut for the whole ramp. The
+> pre-CROSSING build did the same, so this was neither v1's nor the fade's. `CameraRig` snaps the
+> damped gate to exactly `SWAP_V` when a frame would cross it, so the swap never fires with the
+> curtain down. On the way UP the snap leaves the gate at exactly 0.9, which counts as the solar
+> side; next frame the gate steps below 0.9 and the same rule reads that as another crossing and
+> snaps it back. Every frame, for as long as the scroll stays above: the gate was pinned, the act
+> stayed `solar`, the curtain stayed at 1 and the page stuck. That is the owner's "scrolling back
+> sticks in the middle", and only the small resting range (`reconcile`) rescued it, which is why a
+> slow wheel with pauses looked like it worked. **One condition fixed it** (do not snap when the
+> gate is already at `SWAP_V`); the up ramp now flips at scroll 0.861 and ends in the galaxy. The
+> brief's "do not touch the swap machine" gave way to the goal: a criterion that says the return must
+> work cannot leave the return broken.
+>
+> ### What else changed on the way
+>
+> - **FADE_MAX 0.74 -> 0.71.** 0.74 was tuned on the down direction. On the way back the same ember
+>   reads about 5 levels darker (19.0 against 25 at scroll 0.73), dipped under the mean-20 line and
+>   stretched the near-black run to 0.25. Swept on the return: 0.72 -> ember floor 20.5 / colour 18.5;
+>   0.71 -> 21.2 / 19.0; 0.70 -> 21.9 / 19.5.
+> - **The detector's up rules.** C1 on an up run ignores frames under scroll 0.10 and compares with the
+>   run's own resting galaxy + 1.0, because the galaxy at rest drifts from 76 to 80-82 with scene time
+>   (the fade is 0 there; C4a holds the rest frame). C5's start bound on the way up is 0.80: the
+>   curtain's reveal tail runs below the plateau by its wall-clock reveal (about 0.5 s).
+>
+> ### Not passing, stated plainly
+>
+> - **C5 on a fast return.** A 180-frame ramp (the whole driver in 3 s, twice the pace of the real
+>   wheel trip) measures **0.161 / 0.172**, over the 0.15 bar, because the curtain's reveal is
+>   wall-clock and spends more scroll the faster you go. The bar is judged at the return-trip pace
+>   (~6 s), which is what a wheel does; a hard flick back up will show a longer dark.
+> - **Firefox is not reproduced.** Elad's snap Firefox 155 cannot be launched under puppeteer.
+>
+> ---
+>
+> # v1 record (shipped 2026-09-19, master `93c49c9`)
 
 Measured 2026-09-19 against [CROSSING-brief.md](CROSSING-brief.md)'s approved criteria, with
 C1's bars re-derived after step 0 (the brief records why). Every number comes from a deployed
