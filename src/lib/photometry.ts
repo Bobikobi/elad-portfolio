@@ -36,8 +36,11 @@ export const NEPTUNE_ALBEDO_MULTIPLIER = 4.38;
 // ?ringprobe, 95% of R; 0.68 measured twice: 141.8 / 142.0): 0.68 -> mean 142 p99 248, 0.45 -> 131 / 243,
 // 0.3 -> 118 / 236, 1.0 -> 151 / 251; clipped >=250 is 0% throughout. 0.68 sat above the 90-135 band the
 // other worlds were held to; 0.45 is the smallest cut that lands inside it and keeps shoulder headroom.
+// Mars re-measured over one full turn (24 longitudes, ?orbitexp sweep, preview of PR #43): clipped share
+// of the disc, worst longitude 297.9 deg, 0.92 -> 11.10% (mean lum 115-164), 0.75 -> 3.55%, 0.6 -> 0.001%
+// (mean lum 96-148, average 121, inside the 90-135 band). 0.6 is the first value with 23 of 24 longitudes clean.
 // The string index signature permits an unmapped focus; CameraRig owns its neutral fallback.
-export const ORBIT_APERTURE: Record<string, number> = { earth: 0.45, mars: 0.92, jupiter: 0.50, saturn: 0.45, belt: 0.66 };
+export const ORBIT_APERTURE: Record<string, number> = { earth: 0.45, mars: 0.6, jupiter: 0.50, saturn: 0.45, belt: 0.66 };
 
 /** Renderer aperture before a world is selected and after departure from one. */
 export const NEUTRAL_APERTURE = 1;
