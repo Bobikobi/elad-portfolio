@@ -9,6 +9,7 @@ export const galaxyVertexShader = /* glsl */ `
   attribute float aScale;
   attribute vec3 aRandomness;
   attribute vec3 aColor;
+  attribute float aDim;
 
   varying vec3 vColor;
   varying float vDistanceFade;
@@ -23,7 +24,8 @@ export const galaxyVertexShader = /* glsl */ `
 
     // Dim each core star so the dense center accumulates into a soft gold glow
     // under additive blending instead of clipping to white.
-    vAlpha = mix(0.35, 0.9, smoothstep(0.0, 3.5, radius));
+    // aDim carries the dust lanes and the rim fade, both decided once on the CPU.
+    vAlpha = mix(0.35, 0.9, smoothstep(0.0, 3.5, radius)) * aDim;
     float angleOffset = (1.0 / (radius + 0.35)) * uTime * 0.28;
     angle += angleOffset;
     modelPosition.x = sin(angle) * radius;
