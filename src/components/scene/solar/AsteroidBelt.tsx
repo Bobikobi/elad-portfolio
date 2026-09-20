@@ -349,7 +349,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         'void main() {',
-        `${chromeMaskGLSL}\nuniform float uDither;\nuniform float uSpec;\nvarying float vRockPx;\nvoid main() {`
+        `${chromeMaskGLSL}\nuniform float uDither;\nvarying float vRockPx;\nvoid main() {`
       );
       {
         const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
@@ -357,7 +357,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         if (!CHUNK.includes(SPEC)) throw new Error('ASTEROID-BACKLIT: three\'s specular line has moved');
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <lights_physical_pars_fragment>',
-          CHUNK.replace(SPEC, 'reflectedLight.directSpecular += uSpec * irradiance * BRDF_GGX_Multiscatter(')
+          'uniform float uSpec;\n' + CHUNK.replace(SPEC, 'reflectedLight.directSpecular += uSpec * irradiance * BRDF_GGX_Multiscatter(')
         );
       }
       shader.fragmentShader = shader.fragmentShader.replace(
