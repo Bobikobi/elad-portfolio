@@ -11,7 +11,7 @@ import {
   SUN_LAMP_INTENSITY,
   SUN_LAMP_OVERVIEW_SCALE,
 } from '@/lib/photometry';
-import { softSprite, arcSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
+import { softSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 
 /**
@@ -356,9 +356,67 @@ const smooth01 = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
   return t * t * (3 - 2 * t);
 };
+const promVert = /* glsl */ `
+  varying vec2 vUv;
+  void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+`;
+// The loops BURN: each strand's radius is pushed around by drifting noise (stronger toward the crest),
+// bright knots of plasma travel along the strands in alternating directions, and the outer fringe
+// licks upward in short tongues. Nothing here is a texture, so nothing repeats.
+const promFrag = /* glsl */ `
+  uniform float uTime;
+  uniform float uOpacity;
+  uniform float uSeed;
+  varying vec2 vUv;
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+  void main() {
+    float ux = vUv.x * 2.0 - 1.0;
+    float uy = vUv.y;
+    float d = length(vec2(ux, uy));
+    float ang = atan(uy, ux);               // 0..pi along the arch
+    float thin = 1.0 - 0.7 * smoothstep(0.15, 1.0, uy);
+    float t = uTime;
+    float a = 0.0;
+    float hot = 0.0;
+    for (int i = 0; i < 3; i++) {
+      float fi = float(i);
+      float r = 0.93 - 0.085 * fi;
+      float w = (0.085 - 0.015 * fi) * thin;
+      float k = 1.0 - 0.32 * fi;
+      float dir = mod(fi, 2.0) < 0.5 ? 1.0 : -1.0;
+      // turbulence: the strand wanders in radius, more so near the crest, and never in step with its neighbours
+      float wob = (vnoise(vec2(ang * 3.0 + uSeed + fi * 5.1 - t * 0.55 * dir, t * 0.9 + fi * 3.7)) - 0.5) * 0.11 * (0.3 + 0.7 * smoothstep(0.0, 0.9, uy));
+      float dd = d - wob;
+      float s = exp(-pow((dd - r) / w, 2.0));
+      // plasma knots streaming along the strand
+      float flow = vnoise(vec2(ang * 4.0 - t * 1.4 * dir + fi * 7.3 + uSeed, fi * 2.0 + t * 0.35));
+      float knot = smoothstep(0.35, 0.85, flow);
+      a += k * s * (0.45 + 0.7 * knot);
+      hot += k * s * knot;
+    }
+    // footpoints pool brighter, and short tongues lick up off the outer fringe
+    a *= 1.0 + 0.9 * exp(-uy / 0.14);
+    float lick = vnoise(vec2(ang * 9.0 + uSeed, t * 1.6)) * smoothstep(0.98, 1.12, d) * (1.0 - smoothstep(1.12, 1.30, d));
+    a += 0.35 * lick * smoothstep(0.0, 0.4, uy + 0.1);
+    a += 0.34 * smoothstep(0.98, 0.35, d) * (1.0 - 0.6 * uy) * (0.6 + 0.6 * vnoise(vec2(ang * 5.0 + uSeed, t * 0.7 + d * 4.0)));
+    // whole loop breathes a little so it never sits still
+    a *= 0.88 + 0.12 * sin(t * 2.3 + uSeed * 3.0) * sin(t * 0.9 + uSeed);
+    a = clamp(a, 0.0, 1.0);
+    vec3 col = mix(vec3(1.0, 0.36, 0.13), vec3(1.0, 0.68, 0.34), clamp(hot * 0.8, 0.0, 1.0));
+    gl_FragColor = vec4(col * a * 0.6 * uOpacity, 1.0);
+  }
+`;
 function Prominences() {
   const group = useRef<THREE.Group>(null);
-  const tex = useMemo(() => arcSprite(), []);
+  const uniforms = useMemo(
+    () => Array.from({ length: PROM_COUNT }, (_, i) => ({ uTime: { value: 0 }, uOpacity: { value: 0 }, uSeed: { value: i * 17.3 } })),
+    [],
+  );
   const life = useMemo(() => {
     const rnd = makeRng(SEED.prominences);
     return Array.from({ length: PROM_COUNT }, (_, i) => ({
@@ -379,28 +437,32 @@ function Prominences() {
       // Each cycle re-rolls where the loop stands and how big it is, deterministically.
       const rnd = makeRng(SEED.prominences + i * 7919 + cycle * 104729);
       const a = rnd() * Math.PI * 2;
-      const big = rnd() < 0.2 ? 0.25 : 0.08 + rnd() * 0.10;
-      const span = SUN_R * (0.12 + rnd() * 0.18);
+      const big = rnd() < 0.2 ? 0.38 : 0.13 + rnd() * 0.13;
+      const span = SUN_R * (0.18 + rnd() * 0.24);
       const env = ph < 0.2 ? smooth01(ph / 0.2) : ph > 0.75 ? smooth01((1 - ph) / 0.25) : 1;
       // The third loop is the occasional one: it sits out about a third of the time.
       const present = i < 2 ? 1 : smooth01((Math.sin(cycle * 2.399 + i) + 0.4) * 2);
       const flare = 1 + 1.6 * Math.exp(-Math.pow((ph - 0.5) * L.len / 1.0, 2));
       const h = SUN_R * big * (0.35 + 0.65 * env);
-      const s = g.children[i] as THREE.Sprite;
+      const m = g.children[i] as THREE.Mesh;
       // Chord centre a hair inside the limb so the roots tuck under the silhouette.
       const anchor = SUN_R * 0.975 + h * 0.5;
-      s.position.set(Math.cos(a) * anchor, Math.sin(a) * anchor, 0);
-      s.scale.set(span, h, 1);
-      s.material.rotation = a - Math.PI / 2;
-      (s.material as THREE.SpriteMaterial).opacity = Math.min(1, 0.85 * env * present * flare);
+      m.position.set(Math.cos(a) * anchor, Math.sin(a) * anchor, 0);
+      m.scale.set(span, h, 1);
+      m.rotation.z = a - Math.PI / 2;
+      const un = (m.material as THREE.ShaderMaterial).uniforms;
+      un.uTime.value = t;
+      un.uSeed.value = i * 17.3 + cycle * 3.1;
+      un.uOpacity.value = Math.min(1, 0.85 * env * present * flare);
     }
   });
   return (
     <group ref={group}>
-      {Array.from({ length: PROM_COUNT }, (_, i) => (
-        <sprite key={i}>
-          <spriteMaterial map={tex} color={'#ff8a4a'} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
-        </sprite>
+      {uniforms.map((un, i) => (
+        <mesh key={i}>
+          <planeGeometry args={[1, 1]} />
+          <shaderMaterial vertexShader={promVert} fragmentShader={promFrag} uniforms={un} transparent blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+        </mesh>
       ))}
     </group>
   );
