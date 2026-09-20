@@ -31,9 +31,9 @@ const PARAMS = {
   armSpread: 0.42, // radians of angular scatter at the rim: broad arms, not wires
   bulgeShare: 0.14, // points drawn into the compact core instead of the disc
   bulgeRadius: 0.85,
-  laneOffset: 0.38, // where the dust lane runs across the arm, as a share of the arm's half-width
-  laneWidth: 0.16,
-  laneDepth: 0.85, // how much of a point's light the lane takes
+  laneOffset: 0.36, // where the dust lane runs across the arm, as a share of the arm's half-width
+  laneWidth: 0.22,
+  laneDepth: 0.9, // how much of a point's light the lane takes
   discDim: 0.58, // arms read grey-blue instead of white, and stop merging into the core
   bulgeGain: 2.1, // the core is the one thing allowed to saturate
   coreColor: '#FFF4E2', // ivory
@@ -84,7 +84,10 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       // proportions from the core to the rim instead of being a fixed angle.
       const half = PARAMS.armSpread * (0.25 + t);
       const across = spread / half;
-      const inLane = !bulge && Math.abs(Math.abs(across) - PARAMS.laneOffset) < PARAMS.laneWidth;
+      // One lane per arm, on the trailing side only. A lane on BOTH sides of both arms is four
+      // dark features around the ring, which is exactly the four-fold signature G4 exists to
+      // remove: it took m4 from 0.087 back to 0.196. A real dust lane is one-sided anyway.
+      const inLane = !bulge && Math.abs(across - PARAMS.laneOffset) < PARAMS.laneWidth;
       const laneKeep = inLane ? 1 - PARAMS.laneDepth : 1;
 
       const rand = () =>
@@ -110,7 +113,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       scales[i] = 0.5 + rnd() * 0.8;
       // Rim fade: the old cloud had a hard outer edge that the frame cut off, so the galaxy ran
       // off three borders. The last quarter of the radius fades out instead.
-      const rim = 1 - smoothstep(0.55, 0.96, t);
+      const rim = 1 - smoothstep(0.5, 0.92, t);
       dims[i] = bulge ? PARAMS.bulgeGain : laneKeep * rim * PARAMS.discDim;
     }
 

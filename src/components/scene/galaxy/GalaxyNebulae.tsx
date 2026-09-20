@@ -19,13 +19,17 @@ interface Pocket {
   tint: string;
   op: number;
 }
+// GALAXY-REST: the pockets were seeded out to radius 4.6, where the point cloud now fades out.
+// A nebula that does not fade is what reaches the frame border, so the outer ones are pulled in
+// and dimmed; the arms keep their colour, the picture stops running off the edges.
+const PULL_IN = 0.76;
 const POCKETS: Pocket[] = [
   { img: 'lagoon', pos: [2.8, 0.15, 1.6], scale: 3.2, tint: '#e88fb0', op: 0.5 }, // pink HII
   { img: 'orion', pos: [-3.2, 0.1, -1.2], scale: 3.6, tint: '#c99ce0', op: 0.42 }, // violet HII
   { img: 'trifid', pos: [1.4, 0.2, -3.4], scale: 2.8, tint: '#e090c0', op: 0.46 }, // magenta HII
   { img: 'tarantula', pos: [-2.2, -0.1, 3.4], scale: 3.0, tint: '#ff9aa8', op: 0.4 }, // rose HII
-  { img: 'eagle', pos: [4.2, 0.1, -0.6], scale: 3.4, tint: '#f0c088', op: 0.34 }, // gold arm
-  { img: 'ring', pos: [-4.6, 0.15, 0.8], scale: 2.4, tint: '#8fd0e6', op: 0.32 }, // blue reflection
+  { img: 'eagle', pos: [4.2, 0.1, -0.6], scale: 3.0, tint: '#f0c088', op: 0.24 }, // gold arm
+  { img: 'ring', pos: [-4.6, 0.15, 0.8], scale: 2.2, tint: '#8fd0e6', op: 0.22 }, // blue reflection
 ];
 
 export default function GalaxyNebulae() {
@@ -48,15 +52,15 @@ export default function GalaxyNebulae() {
     for (let i = 0; i < POCKETS.length; i++) {
       const base = POCKETS[i].pos;
       const c = g.children[i];
-      c.position.x = base[0] + Math.sin(t * 0.03 + i) * 0.18;
-      c.position.z = base[2] + Math.cos(t * 0.025 + i * 1.3) * 0.18;
+      c.position.x = base[0] * PULL_IN + Math.sin(t * 0.03 + i) * 0.18;
+      c.position.z = base[2] * PULL_IN + Math.cos(t * 0.025 + i * 1.3) * 0.18;
     }
   });
 
   return (
     <group ref={group}>
       {POCKETS.map((p, i) => (
-        <sprite key={p.img} position={p.pos} scale={[p.scale, p.scale * 0.78, 1]}>
+        <sprite key={p.img} position={[p.pos[0] * PULL_IN, p.pos[1], p.pos[2] * PULL_IN]} scale={[p.scale, p.scale * 0.78, 1]}>
           <spriteMaterial map={texes[i]} color={p.tint} transparent opacity={p.op} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
         </sprite>
       ))}

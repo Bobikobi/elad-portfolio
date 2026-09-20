@@ -2,13 +2,23 @@
 
 Five numbers per frame, all from the frozen at-rest galaxy capture:
 
-  G1 behind the name   - light ABOVE THE SKY FLOOR inside the h1 rect grown by 12 px, mean and p99.
-                         Measured above the floor because the sky itself sits at ~31 of 255 there,
-                         so an absolute bar under that number could not be met by any galaxy change.
-  G2 lower half        - share of the frame's light (luma above the sky floor) below the midline.
+  G1 behind the name   - STRUCTURE inside the h1 rect grown by 12 px: each pixel against its own
+                         row's median, so the sky's smooth vertical gradient cancels and only things
+                         that read as objects - stars, bokeh, an arm - are counted. Reported as the
+                         share of the box more than 12 levels over its row, and the p99 over the row.
+                         Neither an absolute bar nor one over the sky floor works here: the gradient
+                         alone is ~9.5 levels brighter at the name than at the top of the frame.
+  G2 sits low          - the top row of the galaxy BODY, as a fraction of frame height. The body is
+                         the 15 px blurred frame over luma 120, which is the galaxy's own disc and
+                         not its faint outskirts; 100 is polluted by the elliptical-galaxy sprite
+                         near the top-left corner. The share of light below the midline is kept as
+                         context: it moves by a few points for a change the eye reads as large,
+                         because the sky itself carries most of the frame's light.
   G3 compact core      - the galaxy is a point cloud, so single points reach 255 all over the disc;
                          the core is measured on a 15 px box-blurred frame, which is what the eye
-                         integrates: pixels at luma >= 200 and their bounding box as % of the frame.
+                         integrates. It is the BLOB CONNECTED TO THE BRIGHTEST PIXEL, not every
+                         pixel over the threshold: bright arms also cross 200, and a bounding box
+                         over all of them measured the galaxy's width rather than the core's.
   G4 arm structure     - angular Fourier magnitudes of the light in the galaxy annulus, m = 2 and m = 4,
                          each as a share of the ring's mean. Two arms read when |c2| > |c4|.
   G5 edges dissolve    - GALAXY light (luma above the sky floor) in the outer 40 px band,
@@ -37,6 +47,25 @@ def blur(a: np.ndarray, k: int) -> np.ndarray:
     return out[: a.shape[0], : a.shape[1]] / (s * s)
 
 
+def component(mask: np.ndarray, weight: np.ndarray) -> np.ndarray:
+    """The connected blob (4-neighbour) that holds the brightest pixel of the mask."""
+    if not mask.any():
+        return mask
+    seed = np.unravel_index(int(np.argmax(np.where(mask, weight, -1))), mask.shape)
+    out = np.zeros_like(mask)
+    stack = [seed]
+    out[seed] = True
+    h, w = mask.shape
+    while stack:
+        y, x = stack.pop()
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not out[ny, nx]:
+                out[ny, nx] = True
+                stack.append((ny, nx))
+    return out
+
+
 def measure(run: str, tag: str) -> dict:
     a = np.asarray(Image.open(f'{run}/{tag}.png').convert('RGB')).astype(float)
     meta = json.load(open(f'{run}/{tag}.json'))
@@ -48,12 +77,16 @@ def measure(run: str, tag: str) -> dict:
     n = meta['name']
     x0, y0 = max(0, int(n['x']) - 12), max(0, int(n['y']) - 12)
     x1, y1 = min(w, int(n['x'] + n['w']) + 12), min(h, int(n['y'] + n['h']) + 12)
-    box = light[y0:y1, x0:x1]
+    box = lum[y0:y1, x0:x1]
+    box_rel = box - np.median(box, axis=1, keepdims=True)
 
     tot = float(light.sum())
     lower = float(light[h // 2:].sum()) / tot if tot else 0.0
+    body = blur(lum, 15) >= 120
+    rows = np.nonzero(body.any(axis=1))[0]
+    top_row = float(rows.min()) / h if rows.size else 1.0
 
-    core = blur(lum, 15) >= CORE_L
+    core = component(blur(lum, 15) >= CORE_L, blur(lum, 15))
     if core.any():
         ys, xs = np.nonzero(core)
         core_w = float(xs.max() - xs.min() + 1) / w * 100
@@ -82,12 +115,17 @@ def measure(run: str, tag: str) -> dict:
 
     return {
         'tag': tag,
-        'G1_name_box': {'mean': round(float(box.mean()), 2), 'p99': round(float(np.percentile(box, 99)), 1)},
+        'G1_name_box': {'over_row_pct': round(float((box_rel > 12).mean()) * 100, 3),
+                        'p99_over_row': round(float(np.percentile(box_rel, 99)), 1)},
+        'G2_body_top_row': round(top_row, 3),
         'G2_light_below_midline_pct': round(lower * 100, 2),
         'G3_core': {'px_over_200': int(core.sum()), 'box_w_pct': round(core_w, 2), 'box_h_pct': round(core_h, 2)},
         'G4_arms': {'m2': round(float(f[2]), 4), 'm4': round(float(f[4]), 4), 'm2_over_m4': round(float(f[2] / max(f[4], 1e-9)), 2),
                     'lane_depth': round(lane, 3)},
         'G5_edge_galaxy_light': round(float(band.mean()), 2),
+        'G5_sides': {'left': round(float(light[:, :BORDER].mean()), 2),
+                     'right': round(float(light[:, -BORDER:].mean()), 2),
+                     'bottom': round(float(light[-BORDER:, :].mean()), 2)},
         'sky_floor': round(floor, 2),
         'frame_mean': round(float(lum.mean()), 3),
         'centre': [round(cx, 1), round(cy, 1)],
