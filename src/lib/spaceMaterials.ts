@@ -160,7 +160,7 @@ export function arcSprite(): THREE.CanvasTexture {
       const ux = (x / (W - 1)) * 2 - 1;
       const d = Math.hypot(ux, uy);
       // The crest is a shade thinner than the feet; the shading is by height, not by strand.
-      const thin = 1 - 0.35 * smoothstep(0.3, 1.0, uy);
+      const thin = 1 - 0.7 * smoothstep(0.15, 1.0, uy);
       let a = 0;
       for (const st of strands) a += st.k * Math.exp(-Math.pow((d - st.r) / (st.w * thin), 2));
       // Footpoints pool brighter, and a haze under the arch keeps the loop from looking wired.

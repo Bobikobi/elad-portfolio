@@ -104,7 +104,7 @@ const sunVert = /* glsl */ `
     // measured against the geometry itself rather than the glow around it, and the same
     // displacement that read as 1.55% of the radius through the haze reads as 1.16%
     // without it. The edge did not get calmer; it stopped being flattered.
-    vec3 displaced = position + normal * (d - 0.5) * 0.13;
+    vec3 displaced = position + normal * (d - 0.5) * 0.08;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
   }
 `;
@@ -301,6 +301,20 @@ const sunFrag = /* glsl */ `
     // gap is what bloom, the god rays and the corona put back. Deepening the floor darkens
     // the limb WITHOUT touching the centre, so it moves S4 and leaves S2 alone - the same
     // reason the hot stop was the right lever for S2.
+    // SUN-4: two sunspots, attached to the sphere (object space) so they ride the rotation.
+    // Penumbra and a darker umbra, irregular edge from the granule field; together well under
+    // 1% of the disc. They give the face a scale and an "organised" activity: without them
+    // every patch of the surface is equally important, which is what makes it read as a material.
+    vec3 pd = normalize(vPos);
+    float spot = 1.0;
+    {
+      float d1 = length(pd - normalize(vec3(0.42, 0.30, 0.86))) / 0.115;
+      float d2 = length(pd - normalize(vec3(-0.30, -0.22, 0.93))) / 0.075;
+      d1 *= 0.9 + 0.2 * cells; d2 *= 0.9 + 0.2 * cells;
+      spot *= 1.0 - 0.42 * (1.0 - smoothstep(0.50, 1.0, d1)) - 0.45 * (1.0 - smoothstep(0.20, 0.45, d1));
+      spot *= 1.0 - 0.42 * (1.0 - smoothstep(0.50, 1.0, d2)) - 0.45 * (1.0 - smoothstep(0.20, 0.45, d2));
+    }
+    col *= spot;
     col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.09, 1.0, limb);
     // SUN-4: the limb is cooler as well as darker - blue and then green fall away faster than
     // red, so the rim turns amber instead of just grey-orange. Red is untouched on purpose.
@@ -392,6 +406,67 @@ function Prominences() {
   );
 }
 
+/**
+ * SUN-4: the inner corona - a thin, uneven halo attached to the limb, out to 1.45 R. Astra's
+ * critique of the resting sun was that its emission stopped dead at the surface; bloom alone
+ * gives a soft smear, not a corona. Two exponentials (a tight bright one hugging the limb, a
+ * wide faint one), three broad wisps that drift over 11-17 s, faded to zero by the outer edge.
+ * The R2.2 milky-halo defect was a 1.28x SHELL and a 4.4x sprite, both far larger and far more
+ * even than this; S3 (corona >= 2x the sky) and R2.2's corner block are the guards.
+ */
+const _coronaCentre = new THREE.Vector3();
+const _coronaDir = new THREE.Vector3();
+const CORONA_OUTER = 1.45;
+const CORONA_GAIN = 0.5;
+const coronaVert = /* glsl */ `
+  varying vec2 vUv;
+  void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+`;
+const coronaFrag = /* glsl */ `
+  uniform float uTime;
+  uniform float uGain;
+  varying vec2 vUv;
+  void main() {
+    vec2 q = (vUv - 0.5) * 2.0 * ${glslFloat(CORONA_OUTER)};   // radius in units of R
+    float rho = length(q);
+    if (rho < 1.0) discard;
+    float th = atan(q.y, q.x);
+    float e = rho - 1.0;
+    float amp = 0.55 * exp(-e / 0.055) + 0.035 * exp(-e / 0.25);
+    float wisp = 1.0 + 0.20 * sin(3.0 * th + uTime * 0.09) * sin(2.0 * th - uTime * 0.07 + 1.7);
+    float fade = 1.0 - smoothstep(${glslFloat(CORONA_OUTER - 0.3)}, ${glslFloat(CORONA_OUTER)}, rho);
+    vec3 col = mix(vec3(1.0, 0.94, 0.82), vec3(1.0, 0.77, 0.54), smoothstep(0.0, 0.25, e));
+    gl_FragColor = vec4(col * amp * wisp * fade * uGain, 1.0);
+  }
+`;
+function Corona() {
+  const mesh = useRef<THREE.Mesh>(null);
+  const mat = useRef<THREE.ShaderMaterial>(null);
+  const uniforms = useMemo(() => ({ uTime: { value: 0 }, uGain: { value: CORONA_GAIN } }), []);
+  useFrame((state, dt) => {
+    const m = mesh.current;
+    if (m) {
+      // Face the camera POSITION, not its orientation: the sun is rarely on the view axis, and a
+      // plane parallel to the view plane is tilted against the line to the sun, so its near half
+      // rides in front of the sphere and paints a pale crescent over the disc (seen on the first
+      // capture). It also sits a third of a radius behind the centre, so the sphere always wins
+      // the depth test wherever the two are nearly level at the limb.
+      m.parent!.getWorldPosition(_coronaCentre);
+      _coronaDir.copy(_coronaCentre).sub(state.camera.position).normalize();
+      // World offset, converted to the parent's frame: the group may be scaled or rotated.
+      m.position.copy(m.parent!.worldToLocal(_coronaCentre.addScaledVector(_coronaDir, SUN_R * 0.35)));
+      m.lookAt(state.camera.position);
+    }
+    if (mat.current) mat.current.uniforms.uTime.value += dt;
+  });
+  return (
+    <mesh ref={mesh} scale={SUN_R * CORONA_OUTER * 2}>
+      <planeGeometry args={[1, 1]} />
+      <shaderMaterial ref={mat} vertexShader={coronaVert} fragmentShader={coronaFrag} uniforms={uniforms} transparent blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+    </mesh>
+  );
+}
+
 /** The burning sun: displaced plasma surface (HDR for Bloom/God Rays), fresnel
  *  corona, soft gold halo, living prominences and a slow pulse. Registers its mesh
  *  as the God Rays source. Its gold = the galaxy core's gold (one continuity). */
@@ -465,6 +540,7 @@ export default function Sun() {
         <shaderMaterial ref={sunMat} vertexShader={sunVert} fragmentShader={sunFrag} uniforms={uniforms} toneMapped={false} />
       </mesh>
       <Prominences />
+      <Corona />
       {/* Fresnel-ish corona shell */}
       {SHOW_CORONA_SHELL && (
         <mesh scale={1.28}>
