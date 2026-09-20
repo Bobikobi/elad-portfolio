@@ -95,7 +95,8 @@ uniform float uGate;
 uniform float uGateMode;
 float rockSpecGate( vec3 n, vec3 v, vec3 l ) {
   if ( uGateMode < 0.5 ) return smoothstep( 0.0, uGate, dot( n, l ) ) * smoothstep( 0.0, uGate, dot( n, v ) );
-  return smoothstep( 0.0, uGate, dot( v, normalize( l + v ) ) );
+  if ( uGateMode < 1.5 ) return smoothstep( 0.0, uGate, dot( v, normalize( l + v ) ) );
+  return smoothstep( -0.6, -0.6 + uGate, dot( l, v ) );
 }
 `;
 const ROCK_COLORS = ['#37312c', '#413a32', '#2c2723', '#4a3f34', '#252220', '#544738'];
