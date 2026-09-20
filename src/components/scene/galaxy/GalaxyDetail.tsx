@@ -4,13 +4,18 @@ import * as THREE from 'three';
 import { softSprite, makeSparkleMaterial } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 
-const RADIUS = 6;
-const BRANCHES = 4;
-const SPIN = 1.1;
+// GALAXY-REST: these used to be 6 / 4 / 1.1 - the galaxy's old four-branch, tightly wound shape.
+// The point cloud is now two broad arms of radius 5.15 that fade out past 0.48 of it, so the old
+// numbers scattered the pink pockets and hero stars over empty sky, including out at the frame
+// edges. They track the arms again, and stop short of the fade.
+const RADIUS = 5.15;
+const BRANCHES = 2;
+const SPIN = 0.42;
+const OUTER = 0.8; // no detail past here: beyond it the arms themselves are fading out
 
 /** A point on a spiral arm (matches Galaxy's params) with a little scatter. */
 function armPoint(rng: () => number): [number, number, number] {
-  const radius = 1 + Math.pow(rng(), 0.7) * (RADIUS - 1);
+  const radius = 1 + Math.pow(rng(), 0.7) * (RADIUS * OUTER - 1);
   const branch = (Math.floor(rng() * BRANCHES) / BRANCHES) * Math.PI * 2;
   const spin = radius * SPIN;
   const scatter = () => (rng() - 0.5) * 0.5;
