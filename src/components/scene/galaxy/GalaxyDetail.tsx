@@ -15,11 +15,11 @@ const OUTER = 0.8; // no detail past here: beyond it the arms themselves are fad
 
 /** A point on a spiral arm (matches Galaxy's params) with a little scatter. */
 function armPoint(rng: () => number): [number, number, number] {
-  // Radius spread evenly and an angular scatter across the arm: two branches plus a power law
-  // piled all 22 pockets into two clumps near the core, which read as pink bokeh balls rather
-  // than star-birth regions lying along the arms.
-  const radius = 1.5 + rng() * (RADIUS * OUTER - 1.5);
-  const branch = (Math.floor(rng() * BRANCHES) / BRANCHES) * Math.PI * 2 + (rng() - 0.5) * 0.9;
+  // Radius spread evenly from outside the core, plus an angular scatter across the arm: two
+  // branches with a power law piled all 22 pockets into two clumps against the core, which read as
+  // pink bokeh balls rather than star-birth regions along the arms, and swelled the measured core.
+  const radius = 2.2 + rng() * (RADIUS * OUTER - 2.2);
+  const branch = (Math.floor(rng() * BRANCHES) / BRANCHES) * Math.PI * 2 + (rng() - 0.5) * 0.6;
   const spin = radius * SPIN;
   const scatter = () => (rng() - 0.5) * 0.5;
   return [Math.cos(branch + spin) * radius + scatter(), scatter() * 0.4, Math.sin(branch + spin) * radius + scatter()];
