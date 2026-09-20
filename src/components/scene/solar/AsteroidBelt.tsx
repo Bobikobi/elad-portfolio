@@ -77,6 +77,10 @@ const NEAR_FULL = 3.4; // fully solid beyond this
 // ~11px chunks alone.
 const BIG_PX_FADE = 10; // start dissolving at this projected diameter (drawing px)
 const BIG_PX_GONE = 18;
+// Dust and band go in the OPAQUE queue, ahead of everything (still additive, still never
+// depth-written), so every opaque surface drawn after them - rocks, planets, the sun -
+// simply overwrites the dust in front of it. Dust never lands on a rock face.
+const DUST_ORDER = -1;
 const SUN_DISC_R = 1.5; // Sun.tsx SUN_R, world units (belt group is unscaled) // fully gone by this one
 
 // Rocky palette — cool basalt greys through warm carbonaceous browns, and DARK. The old
@@ -473,13 +477,13 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
           is one annulus with a gaussian radial profile and the same five-stream angular
           clumping as the bodies (it shares the group, so the clumps stay registered with
           the rocks that made them). Additive, never depth-written, and clamped low. */}
-      <mesh ref={bandMesh} geometry={bandGeo} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} raycast={() => null}>
+      <mesh ref={bandMesh} renderOrder={DUST_ORDER} geometry={bandGeo} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} raycast={() => null}>
         <shaderMaterial
           ref={bandMat}
           uniforms={bandUniforms}
           vertexShader={bandVert}
           fragmentShader={bandFrag}
-          transparent
+          transparent={false}
           depthWrite={false}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
@@ -489,13 +493,13 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       {/* Dust: the nine-in-ten of the belt that is too small to be an object. Additive and
           depth-TESTED (never depth-written) so a planet still occludes it, but a dense
           stretch of it glows the way a real dust band catches sunlight. */}
-      <points ref={dustPts} geometry={dustGeo} frustumCulled={false}>
+      <points ref={dustPts} renderOrder={DUST_ORDER} geometry={dustGeo} frustumCulled={false}>
         <shaderMaterial
           ref={dustMat}
           uniforms={dustUniforms}
           vertexShader={dustVert}
           fragmentShader={dustFrag}
-          transparent
+          transparent={false}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
         />
