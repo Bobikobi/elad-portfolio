@@ -45,3 +45,18 @@ and the single front-lit one by 14.4/255, so it was rejected.
 - One pose. Rocks in front of the sun disc did not occur at any of three overview pitches (0.06 / 0.14 / 0.30).
 - Only 1 front-lit isolated rock, so "front-lit rocks unchanged" rests mostly on the shader's own gate (1.0 above dot(L,V) = -0.2) and the 43 side-lit rocks.
 - Left in the code: the HUD-only seams `__beltDebug` (dust, band, dither, spec, stock) and `__beltBacklit`.
+
+## Round 2 (owner: "not gone, seen from below at any angle")
+
+The first pose (yaw 0, pitch 0.30) had no rock in front of the sun disc. Yaw +-1.0 / pitch 0.4 has 280-310
+backlit rocks, 25-27 isolated ones measured. There the specular fix (round 1) is real but the visible speckle is
+another mechanism: the apparent-size dissolve (10-18 px) is a per-pixel hash discard; over the sun disc every hole
+shows a bright granule, so the rock face reads as speckled. Evidence, one frozen frame, yaw 1.0 / pitch 0.4:
+`nodither` turns the rock into a solid silhouette; `stock` also shows a bright specular fleck.
+
+Fix: the big-rock dissolve term is skipped inside the sun's screen disc (uniform `uSun`, disc radius 1.5 world
+units; near-camera dissolve unchanged). Preview of 22e5d7c, two runs identical:
+backlit rocks with bright pixels 17 -> 12 (of 27), pixel share 25.43% -> 17.57%. What remains equals the
+`nodither` figure (16.0% / 11) within the dust and glow band that lift the footprint; crops show solid dark
+silhouettes. Yaw -1.0 / pitch 0.4 and pitch < 0 not re-run after the fix (before it: 9 -> 4 with fix 1).
+Open, owner's eye: rocks just outside the disc are lifted to grey by the additive glow band.
