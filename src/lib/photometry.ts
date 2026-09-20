@@ -9,7 +9,12 @@ export const AMBIENT_FILL_INTENSITY = 0.06;
 // Linear material-colour multipliers: real geometric albedo divided by each texture's
 // linear mean, from the P3 measurements in docs/briefs/PHOTOMETRY-megaplan.md.
 export const MERCURY_ALBEDO_MULTIPLIER = 0.60;
-export const VENUS_ALBEDO_MULTIPLIER = 2.76;
+// Venus 2.76 -> 1.40 (stage feat/venus-burnt-white; P4-3 bar <= 958 burnt px on the overview).
+// Local sweep, p3-albedo + p4-chroma, real GPU, burnt-in-all-channels pixels of 2,081: 2.76 -> 1,483,
+// 2.2 -> 1,294, 1.8 -> 1,108, 1.4 -> 855. P3-3 (Venus still brightest) holds at every value tried.
+// It is no longer the measured real albedo: the overview clips because compressed orbits put her
+// 2.55 units from the sun, and the albedo is the only lever the rolloff work left.
+export const VENUS_ALBEDO_MULTIPLIER = 1.40;
 export const EARTH_ALBEDO_MULTIPLIER = 2.17;
 export const MARS_ALBEDO_MULTIPLIER = 0.75;
 export const JUPITER_ALBEDO_MULTIPLIER = 1.45;
