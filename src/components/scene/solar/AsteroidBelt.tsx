@@ -83,6 +83,12 @@ const BIG_PX_GONE = 18; // fully gone by this one
 // mapper and then trips the bloom threshold. That is the entire reason the belt read as
 // gold: it was blowing out, not reflecting. At ~20% sRGB the same rock lands near 0.25
 // radiance — a rock lit by a star, which is what it is.
+// ASTEROID-BACKLIT: a rock seen against the sun is lit only on grazing facets (small N.L) that
+// the camera also sees edge-on (small N.V); three's GGX visibility term divides by N.V, so the
+// specular of those facets ran to ~89/255 on a rock whose diffuse is ~10 - the bright speckles.
+// The specular fades in over the first ROCK_SPEC_GATE of N.L, so it only exists where the lamp
+// hits the facet head-on enough for it to be a highlight rather than that blow-up.
+const ROCK_SPEC_GATE = 0.3;
 const ROCK_COLORS = ['#37312c', '#413a32', '#2c2723', '#4a3f34', '#252220', '#544738'];
 // Dust catches the same light but is seen in bulk, so it is tinted a touch warmer.
 const DUST_COLORS = ['#7d6a55', '#8e7a61', '#6b5c4c', '#9a8365'];
@@ -334,6 +340,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       // Measurement seam (ASTEROID-BACKLIT): both default to 1 = stock behaviour.
       shader.uniforms.uDither = { value: 1 };
       shader.uniforms.uSpec = { value: 1 };
+      shader.uniforms.uGate = { value: ROCK_SPEC_GATE };
       rockShader.current = shader;
       // Projected diameter of this instance, in drawing px, carried to the fragment stage.
       // `instanceMatrix` column 0 is the instance's x axis, so its length is the x scale —
@@ -357,7 +364,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         if (!CHUNK.includes(SPEC)) throw new Error('ASTEROID-BACKLIT: three\'s specular line has moved');
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <lights_physical_pars_fragment>',
-          'uniform float uSpec;\n' + CHUNK.replace(SPEC, 'reflectedLight.directSpecular += uSpec * irradiance * BRDF_GGX_Multiscatter(')
+          'uniform float uSpec;\nuniform float uGate;\n' + CHUNK.replace(SPEC, 'reflectedLight.directSpecular += uSpec * smoothstep( 0.0, uGate, dot( geometryNormal, directLight.direction ) ) * irradiance * BRDF_GGX_Multiscatter(')
         );
       }
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -407,10 +414,11 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     if (rockShader.current) rockShader.current.uniforms.uProjScale.value = projScale;
     // ASTEROID-BACKLIT measurement seam (HUD builds only): switch one layer at a time.
     if (HUD_AVAILABLE) {
-      const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean; dither?: boolean; spec?: boolean } }).__beltDebug;
+      const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean; dither?: boolean; spec?: boolean; gate?: number } }).__beltDebug;
       if (rockShader.current) {
         rockShader.current.uniforms.uDither.value = dbg?.dither === false ? 0 : 1;
         rockShader.current.uniforms.uSpec.value = dbg?.spec === false ? 0 : 1;
+        rockShader.current.uniforms.uGate.value = dbg?.gate ?? ROCK_SPEC_GATE;
       }
       if (dustPts.current) dustPts.current.visible = dbg?.dust !== false;
       if (bandMesh.current) bandMesh.current.visible = dbg?.band !== false;
