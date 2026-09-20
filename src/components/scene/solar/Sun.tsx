@@ -375,8 +375,12 @@ const promFrag = /* glsl */ `
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
   }
   void main() {
-    float ux = vUv.x * 2.0 - 1.0;
-    float uy = vUv.y;
+    // Shape drawn in a frame 1.18x larger than the quad so the tongues and the fill have room to die out before the quad's edge
+    float ex = vUv.x * 2.0 - 1.0;
+    float ey = vUv.y;
+    float edge = (1.0 - smoothstep(0.62, 0.98, abs(ex))) * (1.0 - smoothstep(0.62, 0.98, ey));
+    float ux = ex * 1.18;
+    float uy = ey * 1.18;
     float d = length(vec2(ux, uy));
     float ang = atan(uy, ux);               // 0..pi along the arch
     float thin = 1.0 - 0.7 * smoothstep(0.15, 1.0, uy);
@@ -408,7 +412,7 @@ const promFrag = /* glsl */ `
     a *= 0.88 + 0.12 * sin(t * 2.3 + uSeed * 3.0) * sin(t * 0.9 + uSeed);
     a = clamp(a, 0.0, 1.0);
     vec3 col = mix(vec3(1.0, 0.36, 0.13), vec3(1.0, 0.68, 0.34), clamp(hot * 0.8, 0.0, 1.0));
-    gl_FragColor = vec4(col * a * 0.6 * uOpacity, 1.0);
+    gl_FragColor = vec4(col * a * 0.6 * uOpacity * edge, 1.0);
   }
 `;
 function Prominences() {
@@ -436,14 +440,14 @@ function Prominences() {
       const ph = u - cycle;
       // Each cycle re-rolls where the loop stands and how big it is, deterministically.
       const rnd = makeRng(SEED.prominences + i * 7919 + cycle * 104729);
-      const a = rnd() * Math.PI * 2;
+      const a = rnd() * Math.PI * 2 + (ph - 0.5) * 0.10;   // the loop creeps along the limb over its life
       const big = rnd() < 0.2 ? 0.38 : 0.13 + rnd() * 0.13;
       const span = SUN_R * (0.18 + rnd() * 0.24);
-      const env = ph < 0.2 ? smooth01(ph / 0.2) : ph > 0.75 ? smooth01((1 - ph) / 0.25) : 1;
+      const env = smooth01(ph / 0.3) * smooth01((1 - ph) / 0.3);
       // The third loop is the occasional one: it sits out about a third of the time.
       const present = i < 2 ? 1 : smooth01((Math.sin(cycle * 2.399 + i) + 0.4) * 2);
       const flare = 1 + 1.6 * Math.exp(-Math.pow((ph - 0.5) * L.len / 1.0, 2));
-      const h = SUN_R * big * (0.35 + 0.65 * env);
+      const h = SUN_R * big * (0.25 + 0.75 * env) * (1 + 0.06 * Math.sin(t * 0.7 + i * 2.0));
       const m = g.children[i] as THREE.Mesh;
       // Chord centre a hair inside the limb so the roots tuck under the silhouette.
       const anchor = SUN_R * 0.975 + h * 0.5;
