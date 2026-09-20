@@ -15,6 +15,7 @@ import {
 } from '@/lib/chromeMask';
 
 const _dbs = new THREE.Vector2();
+const _sunP = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -75,7 +76,8 @@ const NEAR_FULL = 3.4; // fully solid beyond this
 // whole belt from above at any camera distance, while leaving the overview's rare
 // ~11px chunks alone.
 const BIG_PX_FADE = 10; // start dissolving at this projected diameter (drawing px)
-const BIG_PX_GONE = 18; // fully gone by this one
+const BIG_PX_GONE = 18;
+const SUN_DISC_R = 1.5; // Sun.tsx SUN_R, world units (belt group is unscaled) // fully gone by this one
 
 // Rocky palette — cool basalt greys through warm carbonaceous browns, and DARK. The old
 // palette sat around 42% sRGB; at the belt's distance the sun delivers an irradiance of
@@ -348,6 +350,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       shader.uniforms.uDither = { value: 1 };
       shader.uniforms.uSpec = { value: 1 };
       shader.uniforms.uStock = { value: 0 };
+      shader.uniforms.uSun = { value: new THREE.Vector3(0, 0, 0) };
       rockShader.current = shader;
       // Projected diameter of this instance, in drawing px, carried to the fragment stage.
       // `instanceMatrix` column 0 is the instance's x axis, so its length is the x scale —
@@ -363,7 +366,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         'void main() {',
-        `${chromeMaskGLSL}\nuniform float uDither;\nvarying float vRockPx;\nvoid main() {`
+        `${chromeMaskGLSL}\nuniform float uDither;\nuniform vec3 uSun;\nvarying float vRockPx;\nvoid main() {`
       );
       {
         const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
@@ -379,8 +382,12 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         `#include <clipping_planes_fragment>
          {
            float _camD = length( vViewPosition );
+           // The apparent-size dissolve is a per-pixel hash: over the dark sky its holes are
+           // invisible, over the sun disc each hole shows a bright granule and the rock face
+           // reads as speckled. In front of the disc the rock stays solid (a dark silhouette).
+           float _onSun = ( uSun.z > 0.0 && uStock < 0.5 ) ? 1.0 - smoothstep( uSun.z * 0.95, uSun.z * 1.2, distance( gl_FragCoord.xy, uSun.xy ) ) : 0.0;
            float _keep = smoothstep( ${NEAR_GONE.toFixed(2)}, ${NEAR_FULL.toFixed(2)}, _camD )
-                       * ( 1.0 - smoothstep( ${BIG_PX_FADE.toFixed(1)}, ${BIG_PX_GONE.toFixed(1)}, vRockPx ) )
+                       * mix( 1.0 - smoothstep( ${BIG_PX_FADE.toFixed(1)}, ${BIG_PX_GONE.toFixed(1)}, vRockPx ), 1.0, _onSun )
                        * chromeKeep( gl_FragCoord.xy );
            if ( uDither < 0.5 ) _keep = ( _keep > 0.0 ) ? 1.0 : 0.0;
            if ( _keep < 0.999 ) {
@@ -418,7 +425,20 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       dustMat.current.uniforms.uProjScale.value = projScale;
     }
     if (bandMat.current) bandMat.current.uniforms.uTime.value = t;
-    if (rockShader.current) rockShader.current.uniforms.uProjScale.value = projScale;
+    if (rockShader.current) {
+      rockShader.current.uniforms.uProjScale.value = projScale;
+      // Sun disc on screen (drawing px, gl_FragCoord origin bottom-left) for the rock dissolve.
+      const g = groupRef.current;
+      if (g) {
+        _sunP.setFromMatrixPosition(g.matrixWorld);
+        const dist = _sunP.distanceTo(state.camera.position);
+        _sunP.project(state.camera);
+        const sz = state.gl.getDrawingBufferSize(_dbs);
+        const u = rockShader.current.uniforms.uSun.value as THREE.Vector3;
+        if (_sunP.z > 1) u.set(0, 0, 0);
+        else u.set((_sunP.x * 0.5 + 0.5) * sz.x, (_sunP.y * 0.5 + 0.5) * sz.y, (SUN_DISC_R * projScale) / dist);
+      }
+    }
     // ASTEROID-BACKLIT measurement seam (HUD builds only): switch one layer at a time.
     if (HUD_AVAILABLE) {
       const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean; dither?: boolean; spec?: boolean; stock?: boolean } }).__beltDebug;
