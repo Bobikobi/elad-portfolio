@@ -60,3 +60,12 @@ backlit rocks with bright pixels 17 -> 12 (of 27), pixel share 25.43% -> 17.57%.
 `nodither` figure (16.0% / 11) within the dust and glow band that lift the footprint; crops show solid dark
 silhouettes. Yaw -1.0 / pitch 0.4 and pitch < 0 not re-run after the fix (before it: 9 -> 4 with fix 1).
 Open, owner's eye: rocks just outside the disc are lifted to grey by the additive glow band.
+
+## Round 3 (owner: it worked, a little remains; "dust drags, keep dust off the asteroids")
+
+Fix: dust points and glow band moved to the opaque queue with renderOrder -1 (additive, never depth-written), so
+every opaque surface drawn later overwrites them. Preview of 495a9bb, yaw 1.0 / pitch 0.4, two runs identical, 27 rocks:
+pixel share 17.57% -> 5.57%, rocks with a bright pixel 12 -> 9, footprint mean 25.2 -> 15.0. `base` now equals
+`bare` (dust and band off) exactly, so neither layer touches a rock face any more. The remaining 5.57% is sun granule
+at footprint edges of rocks that straddle the disc rim, not dust; crops show solid dark silhouettes.
+Side effect by design: dust in front of a planet or the sun is now hidden by it. Not measured: dust look elsewhere in the belt (owner's eye).
