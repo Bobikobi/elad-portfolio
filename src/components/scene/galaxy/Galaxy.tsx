@@ -23,7 +23,7 @@ interface GalaxyProps {
 // of four thin wires. The core is ivory rather than gold because it is the only warm thing left
 // in the frame and gold at this density smeared across 41% of the picture.
 const PARAMS = {
-  radius: 5.4,
+  radius: 5.15,
   branches: 2,
   spin: 0.42,
   randomness: 0.22,
@@ -113,7 +113,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       scales[i] = 0.5 + rnd() * 0.8;
       // Rim fade: the old cloud had a hard outer edge that the frame cut off, so the galaxy ran
       // off three borders. The last quarter of the radius fades out instead.
-      const rim = 1 - smoothstep(0.5, 0.92, t);
+      const rim = 1 - smoothstep(0.48, 0.88, t);
       dims[i] = bulge ? PARAMS.bulgeGain : laneKeep * rim * PARAMS.discDim;
     }
 

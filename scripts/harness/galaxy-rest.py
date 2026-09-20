@@ -19,8 +19,12 @@ Five numbers per frame, all from the frozen at-rest galaxy capture:
                          integrates. It is the BLOB CONNECTED TO THE BRIGHTEST PIXEL, not every
                          pixel over the threshold: bright arms also cross 200, and a bounding box
                          over all of them measured the galaxy's width rather than the core's.
-  G4 arm structure     - angular Fourier magnitudes of the light in the galaxy annulus, m = 2 and m = 4,
-                         each as a share of the ring's mean. Two arms read when |c2| > |c4|.
+  G4 arm structure     - angular Fourier magnitudes, m = 2 and m = 4, of the light in the galaxy
+                         annulus, DEPROJECTED first: the disc is tilted, so a circle on screen cuts
+                         an ellipse and the ellipse's own harmonics land on m4. Measured flat, the
+                         four-branch master (m4 0.193) and a clean two-arm build (m4 0.184) are
+                         indistinguishable; deprojected they are 0.132 and 0.028. The frame is
+                         circularised from the second moments of the light inside the disc.
   G5 edges dissolve    - GALAXY light (luma above the sky floor) in the outer 40 px band,
                          left + right + bottom; the top is sky. The sky's own level is excluded so
                          this criterion is about the galaxy running off the frame, not about the sky.
@@ -97,13 +101,26 @@ def measure(run: str, tag: str) -> dict:
         yy, xx = np.mgrid[0:h, 0:w]
         cy = float((yy * light).sum() / tot); cx = float((xx * light).sum() / tot)
 
-    # Angular profile in the annulus that holds the arms: 0.25 to 0.75 of the distance from the
-    # core to the nearest frame edge, so the ring is always inside the picture.
+    # Angular profile in the annulus that holds the arms, out to the distance from the core to the
+    # nearest frame edge so the ring is always inside the picture. The disc is deprojected first:
+    # its second moments give the tilt, the frame is rotated and stretched back to circular, and
+    # only then is the angular profile taken.
     rmax = min(cx, w - cx, cy, h - cy)
     yy, xx = np.mgrid[0:h, 0:w]
-    r = np.hypot(xx - cx, yy - cy)
-    th = np.arctan2(yy - cy, xx - cx)
-    ring = (r >= 0.25 * rmax) & (r <= 0.75 * rmax)
+    dx, dy = xx - cx, yy - cy
+    wgt = np.where(np.hypot(dx, dy) <= rmax, light, 0)
+    sw = max(float(wgt.sum()), 1e-9)
+    cov = np.array([[float((wgt * dx * dx).sum()) / sw, float((wgt * dx * dy).sum()) / sw],
+                    [float((wgt * dx * dy).sum()) / sw, float((wgt * dy * dy).sum()) / sw]])
+    ev, evec = np.linalg.eigh(cov)
+    q = float(np.sqrt(max(ev[0], 1e-9) / max(ev[1], 1e-9)))  # minor / major
+    phi = float(np.arctan2(evec[1, 1], evec[0, 1]))
+    cs, sn = np.cos(-phi), np.sin(-phi)
+    u = dx * cs - dy * sn
+    v = (dx * sn + dy * cs) / max(q, 1e-6)
+    r = np.hypot(u, v)
+    th = np.arctan2(v, u)
+    ring = (r >= 0.3 * rmax) & (r <= 0.9 * rmax)
     bins = 360
     idx = ((th[ring] + np.pi) / (2 * np.pi) * bins).astype(int) % bins
     prof = np.bincount(idx, weights=light[ring], minlength=bins) / np.maximum(np.bincount(idx, minlength=bins), 1)
@@ -121,7 +138,7 @@ def measure(run: str, tag: str) -> dict:
         'G2_light_below_midline_pct': round(lower * 100, 2),
         'G3_core': {'px_over_200': int(core.sum()), 'box_w_pct': round(core_w, 2), 'box_h_pct': round(core_h, 2)},
         'G4_arms': {'m2': round(float(f[2]), 4), 'm4': round(float(f[4]), 4), 'm2_over_m4': round(float(f[2] / max(f[4], 1e-9)), 2),
-                    'lane_depth': round(lane, 3)},
+                    'lane_depth': round(lane, 3), 'axis_ratio': round(q, 3)},
         'G5_edge_galaxy_light': round(float(band.mean()), 2),
         'G5_sides': {'left': round(float(light[:, :BORDER].mean()), 2),
                      'right': round(float(light[:, -BORDER:].mean()), 2),
