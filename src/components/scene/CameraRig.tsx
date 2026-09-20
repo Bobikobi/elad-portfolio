@@ -227,9 +227,12 @@ const REVEAL_HOLD_CAP = 0.4;   // s - past this the floor alone governs
 const REVEAL_FADE = 0.35; // s
 const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
-// Immersive welcome: low + close, looking ACROSS the galaxy plane so it fills the
-// frame and spills off the left/right edges (you're inside space, not viewing a disc).
-const LOOK = new THREE.Vector3(0, 0.5, 0);
+// GALAXY-REST replaces the old welcome decision. It used to look at y = 0.5 so the disc
+// filled the frame and spilled off the left and right edges ("you're inside space, not
+// viewing a disc"); the owner's direction is now a tilted galaxy across the LOWER half with
+// its edges dissolving into black. Looking higher tilts the camera up, which drops the disc
+// down the frame without moving the galaxy or the dive's path.
+const LOOK = new THREE.Vector3(0, 1.45, 0);
 // T4 dive choreography — a cubic-Bézier S-curve that PITCHES THROUGH the disc plane
 // (y: +2.6 above → −0.9 below), not parallel to it, so the galaxy disc is never a flat
 // horizontal band. Ends inside a spiral ARM (offset from centre, Sol's neighbourhood);
@@ -240,7 +243,9 @@ const DIVE_C2 = new THREE.Vector3(2.9, 0.4, 3.2);
 const DIVE_P1 = new THREE.Vector3(3.7, -0.9, 1.5);
 // Look pitches from looking-DOWN at the core (camera above the plane) to looking-UP at
 // the arm (camera below it) — the disc sweeps across the frame at an angle.
-const LOOK_START = new THREE.Vector3(0, 0.25, 0);
+// Same point as LOOK: the dive must start from exactly where the welcome shot was looking,
+// or the handover at scroll 0.015 jumps the look target.
+const LOOK_START = new THREE.Vector3(0, 1.45, 0);
 const LOOK_END = new THREE.Vector3(5.2, 0.9, -1.5);
 const _tmp = new THREE.Vector3();
 /** Cubic Bézier into `out`. */
