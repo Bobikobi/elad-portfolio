@@ -2,7 +2,9 @@
 
 Five numbers per frame, all from the frozen at-rest galaxy capture:
 
-  G1 behind the name   - mean and 99th-percentile luma inside the h1 rect grown by 12 px.
+  G1 behind the name   - light ABOVE THE SKY FLOOR inside the h1 rect grown by 12 px, mean and p99.
+                         Measured above the floor because the sky itself sits at ~31 of 255 there,
+                         so an absolute bar under that number could not be met by any galaxy change.
   G2 lower half        - share of the frame's light (luma above the sky floor) below the midline.
   G3 compact core      - the galaxy is a point cloud, so single points reach 255 all over the disc;
                          the core is measured on a 15 px box-blurred frame, which is what the eye
@@ -46,7 +48,7 @@ def measure(run: str, tag: str) -> dict:
     n = meta['name']
     x0, y0 = max(0, int(n['x']) - 12), max(0, int(n['y']) - 12)
     x1, y1 = min(w, int(n['x'] + n['w']) + 12), min(h, int(n['y'] + n['h']) + 12)
-    box = lum[y0:y1, x0:x1]
+    box = light[y0:y1, x0:x1]
 
     tot = float(light.sum())
     lower = float(light[h // 2:].sum()) / tot if tot else 0.0

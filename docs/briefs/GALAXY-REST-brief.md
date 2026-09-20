@@ -17,7 +17,7 @@ core is a broad smear rather than a point. The name sits on top of the upper arm
 
 | | measured |
 |---|---|
-| behind the name (h1 rect + 12 px) | mean **44.77**, p99 **89.1** |
+| behind the name (h1 rect + 12 px), above the sky floor | mean **13.29**, p99 **57.6** |
 | share of the light below the midline | **80.22%** |
 | core (15 px blur, luma >= 200) | **50,804 px**, box **41.39%** of the frame wide |
 | four-fold angular component m4 / m2 / lane depth | **0.1819** / 0.5619 / 0.781 |
@@ -36,8 +36,11 @@ Only **m4** separates the four-branch signature from two arms, so only m4 carrie
 
 ## Criteria (measured twice on a deployed preview)
 
-- **G1 darkness behind the name.** Inside the visible h1 rect grown by 12 px: mean <= **20**
-  and p99 <= **45** (today 44.77 / 89.1).
+- **G1 darkness behind the name.** Inside the visible h1 rect grown by 12 px, counting only light
+  above the sky floor: mean <= **3.0** and p99 <= **25** (today 13.29 / 57.6). Measured above the
+  floor on purpose: the sky at that height is already 31.5 of 255, so an absolute bar below that
+  could not be met by anything this stage is allowed to change. Whether the sky itself should be
+  darker is G6, the owner's eye.
 - **G2 the galaxy sits low.** Share of the frame's light below the midline >= **90%** (today 80.22%).
 - **G3 a compact core.** The blurred core's bounding box <= **20%** of the frame width, and it still
   exists: >= 2,000 px over luma 200 (today 41.39%, 50,804 px).
