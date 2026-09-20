@@ -5,7 +5,8 @@
  *
  *   BASE=<preview url> TAG=base node scripts/harness/belt-backlit.mjs
  *
- * Configurations differ by exactly one layer: base, nodust, noband, bare (both off).
+ * Configurations differ by one switch: base, nodust, noband, nodither (rock apparent-size
+ * dissolve off), nospec (rock specular off); bare = dust and band both off.
  * Nothing is written unless ANGLE/Vulkan reports a real GPU.
  */
 import puppeteer from 'puppeteer-core';
@@ -19,7 +20,10 @@ const TAG = process.env.TAG || 'run';
 const VW = Number(process.env.VW || 1440);
 const VH = Number(process.env.VH || 900);
 const SETTLE = Number(process.env.SETTLE || 14000);
-const FRAME = Number(process.env.FRAME || 1200);
+const SCROLL_FRAME = Number(process.env.SCROLL_FRAME || 1000);
+const FRAME = Number(process.env.FRAME || 1600);
+const YAW = Number(process.env.YAW || 0);
+const PITCH = Number(process.env.PITCH || 0.30);
 const EXTRA_QS = process.env.EXTRA_QS || '';
 const OUT = process.env.OUT || path.join(process.cwd(), '.harness-out', `belt-backlit-${TAG}`);
 fs.mkdirSync(OUT, { recursive: true });
@@ -51,6 +55,15 @@ try {
 
   await page.goto(`${BASE}/?hud=1&tier=high&fixedStep${EXTRA_QS ? `&${EXTRA_QS}` : ''}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await new Promise((r) => setTimeout(r, SETTLE));
+  await page.evaluate(async (frame) => { await window.__clock.waitForFrame(frame); }, SCROLL_FRAME);
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+  const orbitSet = await page.evaluate((y, p) => {
+    const sc = window.__scene?.getState?.();
+    if (!sc?.setOrbit) return false;
+    sc.setOrbit(y, p);
+    return true;
+  }, YAW, PITCH);
+  if (!orbitSet) await fail('setOrbit seam unavailable');
   const frozen = await page.evaluate(async (frame) => {
     const c = window.__clock;
     if (!c) return null;
@@ -77,6 +90,8 @@ try {
     nodust: { dust: false, band: true },
     noband: { dust: true, band: false },
     bare: { dust: false, band: false },
+    nodither: { dither: false },
+    nospec: { spec: false },
   };
   for (const [name, cfg] of Object.entries(configs)) {
     await page.evaluate(async (c) => {

@@ -331,6 +331,9 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       shader.uniforms.uChrome = chromeRects;
       shader.uniforms.uChromeN = chromeCount;
       shader.uniforms.uProjScale = { value: 600 };
+      // Measurement seam (ASTEROID-BACKLIT): both default to 1 = stock behaviour.
+      shader.uniforms.uDither = { value: 1 };
+      shader.uniforms.uSpec = { value: 1 };
       rockShader.current = shader;
       // Projected diameter of this instance, in drawing px, carried to the fragment stage.
       // `instanceMatrix` column 0 is the instance's x axis, so its length is the x scale —
@@ -346,8 +349,17 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         'void main() {',
-        `${chromeMaskGLSL}\nvarying float vRockPx;\nvoid main() {`
+        `${chromeMaskGLSL}\nuniform float uDither;\nuniform float uSpec;\nvarying float vRockPx;\nvoid main() {`
       );
+      {
+        const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
+        const SPEC = 'reflectedLight.directSpecular += irradiance * BRDF_GGX_Multiscatter(';
+        if (!CHUNK.includes(SPEC)) throw new Error('ASTEROID-BACKLIT: three\'s specular line has moved');
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <lights_physical_pars_fragment>',
+          CHUNK.replace(SPEC, 'reflectedLight.directSpecular += uSpec * irradiance * BRDF_GGX_Multiscatter(')
+        );
+      }
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <clipping_planes_fragment>',
         `#include <clipping_planes_fragment>
@@ -356,6 +368,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
            float _keep = smoothstep( ${NEAR_GONE.toFixed(2)}, ${NEAR_FULL.toFixed(2)}, _camD )
                        * ( 1.0 - smoothstep( ${BIG_PX_FADE.toFixed(1)}, ${BIG_PX_GONE.toFixed(1)}, vRockPx ) )
                        * chromeKeep( gl_FragCoord.xy );
+           if ( uDither < 0.5 ) _keep = ( _keep > 0.0 ) ? 1.0 : 0.0;
            if ( _keep < 0.999 ) {
              float _h = fract( sin( dot( gl_FragCoord.xy, vec2(12.9898, 78.233) ) ) * 43758.5453 );
              if ( _h > _keep ) discard;
@@ -394,7 +407,11 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     if (rockShader.current) rockShader.current.uniforms.uProjScale.value = projScale;
     // ASTEROID-BACKLIT measurement seam (HUD builds only): switch one layer at a time.
     if (HUD_AVAILABLE) {
-      const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean } }).__beltDebug;
+      const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean; dither?: boolean; spec?: boolean } }).__beltDebug;
+      if (rockShader.current) {
+        rockShader.current.uniforms.uDither.value = dbg?.dither === false ? 0 : 1;
+        rockShader.current.uniforms.uSpec.value = dbg?.spec === false ? 0 : 1;
+      }
       if (dustPts.current) dustPts.current.visible = dbg?.dust !== false;
       if (bandMesh.current) bandMesh.current.visible = dbg?.band !== false;
     }
