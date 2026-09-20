@@ -16,18 +16,23 @@ Five numbers per frame, all from the frozen at-rest galaxy capture:
                          because the sky itself carries most of the frame's light.
   G3 compact core      - the galaxy is a point cloud, so single points reach 255 all over the disc;
                          the core is measured on a 15 px box-blurred frame, which is what the eye
-                         integrates. It is the BLOB CONNECTED TO THE BRIGHTEST PIXEL, not every
-                         pixel over the threshold: bright arms also cross 200, and a bounding box
-                         over all of them measured the galaxy's width rather than the core's.
+                         integrates. It is the BLOB CONNECTED TO THE BRIGHTEST PIXEL, reported as
+                         its AREA and as the vertical half-width through the peak. Its bounding box
+                         is not reported as a criterion: one bright nebula touching the blob drags
+                         the box across the frame while the core itself has not moved (two builds
+                         with an identical core measured 18.3% and 25.8% wide).
   G4 arm structure     - angular Fourier magnitudes, m = 2 and m = 4, of the light in the galaxy
                          annulus, DEPROJECTED first: the disc is tilted, so a circle on screen cuts
                          an ellipse and the ellipse's own harmonics land on m4. Measured flat, the
                          four-branch master (m4 0.193) and a clean two-arm build (m4 0.184) are
                          indistinguishable; deprojected they are 0.132 and 0.028. The frame is
                          circularised from the second moments of the light inside the disc.
-  G5 edges dissolve    - GALAXY light (luma above the sky floor) in the outer 40 px band,
-                         left + right + bottom; the top is sky. The sky's own level is excluded so
-                         this criterion is about the galaxy running off the frame, not about the sky.
+  G5 edges dissolve    - GALAXY light (luma above the sky floor) in the outer 40 px band, reported
+                         per side. The sky's own level is excluded so this is about the galaxy
+                         running off the frame, not about the sky. The sides carry the criterion;
+                         the bottom gets a looser one, because a galaxy laid across the lower half
+                         of the frame necessarily approaches the bottom edge, and the only ways to
+                         empty that band are to shrink it or lift it out of the lower half.
 
 The sky floor is the median luma of the top 60 rows, which no build puts galaxy light into.
 """
@@ -90,14 +95,24 @@ def measure(run: str, tag: str) -> dict:
     rows = np.nonzero(body.any(axis=1))[0]
     top_row = float(rows.min()) / h if rows.size else 1.0
 
-    core = component(blur(lum, 15) >= CORE_L, blur(lum, 15))
+    bl = blur(lum, 15)
+    core = component(bl >= CORE_L, bl)
     if core.any():
         ys, xs = np.nonzero(core)
-        core_w = float(xs.max() - xs.min() + 1) / w * 100
-        core_h = float(ys.max() - ys.min() + 1) / h * 100
+        core_area = float(core.sum()) / (w * h) * 100
         cy, cx = float(ys.mean()), float(xs.mean())
+        # Vertical half-width through the brightest pixel: the core's own size, across the disc
+        # rather than along the arms, so a bright ridge leaving the core cannot inflate it.
+        py, px = np.unravel_index(int(bl.argmax()), bl.shape)
+        col, half = bl[:, px], bl[py, px] / 2
+        y0 = y1 = py
+        while y0 > 0 and col[y0 - 1] >= half:
+            y0 -= 1
+        while y1 < h - 1 and col[y1 + 1] >= half:
+            y1 += 1
+        core_fwhm = float(y1 - y0 + 1) / h * 100
     else:
-        core_w = core_h = 0.0
+        core_area = core_fwhm = 0.0
         yy, xx = np.mgrid[0:h, 0:w]
         cy = float((yy * light).sum() / tot); cx = float((xx * light).sum() / tot)
 
@@ -128,19 +143,16 @@ def measure(run: str, tag: str) -> dict:
     # Dust lanes: how deep the darkest angular sector runs under the ring's own mean.
     lane = float(1 - prof.min() / max(prof.mean(), 1e-6))
 
-    band = np.concatenate([light[:, :BORDER].ravel(), light[:, -BORDER:].ravel(), light[-BORDER:, :].ravel()])
-
     return {
         'tag': tag,
         'G1_name_box': {'over_row_pct': round(float((box_rel > 12).mean()) * 100, 3),
                         'p99_over_row': round(float(np.percentile(box_rel, 99)), 1)},
         'G2_body_top_row': round(top_row, 3),
         'G2_light_below_midline_pct': round(lower * 100, 2),
-        'G3_core': {'px_over_200': int(core.sum()), 'box_w_pct': round(core_w, 2), 'box_h_pct': round(core_h, 2)},
+        'G3_core': {'area_pct': round(core_area, 3), 'fwhm_y_pct': round(core_fwhm, 2), 'px': int(core.sum())},
         'G4_arms': {'m2': round(float(f[2]), 4), 'm4': round(float(f[4]), 4), 'm2_over_m4': round(float(f[2] / max(f[4], 1e-9)), 2),
                     'lane_depth': round(lane, 3), 'axis_ratio': round(q, 3)},
-        'G5_edge_galaxy_light': round(float(band.mean()), 2),
-        'G5_sides': {'left': round(float(light[:, :BORDER].mean()), 2),
+        'G5_edges': {'left': round(float(light[:, :BORDER].mean()), 2),
                      'right': round(float(light[:, -BORDER:].mean()), 2),
                      'bottom': round(float(light[-BORDER:, :].mean()), 2)},
         'sky_floor': round(floor, 2),
