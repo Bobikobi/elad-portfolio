@@ -232,17 +232,17 @@ const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRin
 // viewing a disc"); the owner's direction is now a tilted galaxy across the LOWER half with
 // its edges dissolving into black. Looking higher tilts the camera up, which drops the disc
 // down the frame without moving the galaxy or the dive's path.
-const LOOK = new THREE.Vector3(0, 1.72, 0);
+const LOOK = new THREE.Vector3(0, 1.5, 0);
 // T4 dive choreography — a cubic-Bézier S-curve that PITCHES THROUGH the disc plane
 // (y: +2.6 above → −0.9 below), not parallel to it, so the galaxy disc is never a flat
 // horizontal band. Ends inside a spiral ARM (offset from centre, Sol's neighbourhood);
 // the gold core slides sideways to hang in the background.
 // GALAXY-REST round 2 (owner: "the galaxy is too small, spread it wider"): the welcome shot
-// moved from z 9 to z 7.3 and the look target up with it, so the disc is larger in frame and
+// moved from z 9 to z 8 and the camera lower, so the disc is both larger and flatter in frame, so the disc is larger in frame and
 // still lies across the lower half. The dive START must be the same point the idle shot sits at
 // or scroll 0.015 jumps the camera, so P0 moves with it; C1/C2/P1 and the path's shape are
 // untouched.
-const DIVE_P0 = new THREE.Vector3(0, 2.35, 7.3);
+const DIVE_P0 = new THREE.Vector3(0, 2.0, 8.0);
 const DIVE_C1 = new THREE.Vector3(-0.7, 2.5, 6.4);
 const DIVE_C2 = new THREE.Vector3(2.9, 0.4, 3.2);
 const DIVE_P1 = new THREE.Vector3(3.7, -0.9, 1.5);
@@ -250,7 +250,7 @@ const DIVE_P1 = new THREE.Vector3(3.7, -0.9, 1.5);
 // the arm (camera below it) — the disc sweeps across the frame at an angle.
 // Same point as LOOK: the dive must start from exactly where the welcome shot was looking,
 // or the handover at scroll 0.015 jumps the look target.
-const LOOK_START = new THREE.Vector3(0, 1.72, 0);
+const LOOK_START = new THREE.Vector3(0, 1.5, 0);
 const LOOK_END = new THREE.Vector3(5.2, 0.9, -1.5);
 const _tmp = new THREE.Vector3();
 /** Cubic Bézier into `out`. */
@@ -828,8 +828,8 @@ export default function CameraRig() {
         // one that makes the near dust slide against the far arms.
         _tgt.set(
           Math.sin(t * 0.09) * 1.7 + px * 2.5,
-          2.35 + Math.sin(t * 0.075) * 0.55 + py * 1.5,
-          7.3 + Math.cos(t * 0.085) * 1.3
+          2.0 + Math.sin(t * 0.075) * 0.45 + py * 1.4,
+          8.0 + Math.cos(t * 0.085) * 1.3
         );
         applyOrbit(_tgt, LOOK, orbit.current.yaw, orbit.current.pitch); // drag-to-rotate (T6)
         damp3(cam.position, _tgt, 0.5, dt);
