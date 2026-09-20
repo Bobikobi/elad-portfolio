@@ -15,8 +15,11 @@ const OUTER = 0.8; // no detail past here: beyond it the arms themselves are fad
 
 /** A point on a spiral arm (matches Galaxy's params) with a little scatter. */
 function armPoint(rng: () => number): [number, number, number] {
-  const radius = 1 + Math.pow(rng(), 0.7) * (RADIUS * OUTER - 1);
-  const branch = (Math.floor(rng() * BRANCHES) / BRANCHES) * Math.PI * 2;
+  // Radius spread evenly and an angular scatter across the arm: two branches plus a power law
+  // piled all 22 pockets into two clumps near the core, which read as pink bokeh balls rather
+  // than star-birth regions lying along the arms.
+  const radius = 1.5 + rng() * (RADIUS * OUTER - 1.5);
+  const branch = (Math.floor(rng() * BRANCHES) / BRANCHES) * Math.PI * 2 + (rng() - 0.5) * 0.9;
   const spin = radius * SPIN;
   const scatter = () => (rng() - 0.5) * 0.5;
   return [Math.cos(branch + spin) * radius + scatter(), scatter() * 0.4, Math.sin(branch + spin) * radius + scatter()];
@@ -38,7 +41,7 @@ export default function GalaxyDetail() {
     const rng = makeRng(SEED.galaxyDetail);
     return Array.from({ length: 22 }, () => ({
       pos: armPoint(rng),
-      scale: 0.3 + rng() * 0.5,
+      scale: 0.22 + rng() * 0.32,
       hue: rng() > 0.5 ? '#e0559b' : '#c0407a',
     }));
   }, []);
@@ -75,7 +78,7 @@ export default function GalaxyDetail() {
       ))}
       {hii.map((h, i) => (
         <sprite key={`hii${i}`} position={h.pos} scale={[h.scale, h.scale, 1]}>
-          <spriteMaterial map={soft} color={h.hue} transparent opacity={0.5} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+          <spriteMaterial map={soft} color={h.hue} transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </sprite>
       ))}
       {heroStars.map((h, i) => (
