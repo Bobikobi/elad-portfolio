@@ -31,9 +31,11 @@ const PARAMS = {
   armSpread: 0.42, // radians of angular scatter at the rim: broad arms, not wires
   bulgeShare: 0.14, // points drawn into the compact core instead of the disc
   bulgeRadius: 0.85,
-  laneOffset: 0.34, // radians inside each arm where the dust lane runs
-  laneWidth: 0.14,
-  laneDepth: 0.82, // how much of a point's light the lane takes
+  laneOffset: 0.38, // where the dust lane runs across the arm, as a share of the arm's half-width
+  laneWidth: 0.16,
+  laneDepth: 0.85, // how much of a point's light the lane takes
+  discDim: 0.58, // arms read grey-blue instead of white, and stop merging into the core
+  bulgeGain: 2.1, // the core is the one thing allowed to saturate
   coreColor: '#FFF4E2', // ivory
   midColor: '#4D8DFF', // --cosmic-blue
   edgeColor: '#6D5AE6', // --galaxy-indigo
@@ -78,8 +80,11 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       // Dust lane: a band at a fixed angular offset inside each arm, taking most of the light
       // from the points that fall in it. Additive blending cannot darken, so a lane can only be
       // made by NOT drawing there.
-      const inLane = !bulge
-        && Math.abs(Math.abs(spread + wobble) - PARAMS.laneOffset * (0.4 + t)) < PARAMS.laneWidth * (0.4 + t);
+      // Position across the arm, in units of the arm's own half-width, so the lane keeps its
+      // proportions from the core to the rim instead of being a fixed angle.
+      const half = PARAMS.armSpread * (0.25 + t);
+      const across = spread / half;
+      const inLane = !bulge && Math.abs(Math.abs(across) - PARAMS.laneOffset) < PARAMS.laneWidth;
       const laneKeep = inLane ? 1 - PARAMS.laneDepth : 1;
 
       const rand = () =>
@@ -105,8 +110,8 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       scales[i] = 0.5 + rnd() * 0.8;
       // Rim fade: the old cloud had a hard outer edge that the frame cut off, so the galaxy ran
       // off three borders. The last quarter of the radius fades out instead.
-      const rim = 1 - smoothstep(0.72, 1.0, t);
-      dims[i] = laneKeep * (bulge ? 1 : rim);
+      const rim = 1 - smoothstep(0.55, 0.96, t);
+      dims[i] = bulge ? PARAMS.bulgeGain : laneKeep * rim * PARAMS.discDim;
     }
 
     const geo = new THREE.BufferGeometry();

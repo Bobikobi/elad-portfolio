@@ -29,7 +29,10 @@ export default function Dust({ count = 70 }: { count?: number }) {
     const rnd = makeRng(SEED.foregroundDust);
     for (let i = 0; i < count; i++) {
       pos[i * 3] = (rnd() - 0.5) * 26;
-      pos[i * 3 + 1] = (rnd() - 0.5) * 16;
+      // GALAXY-REST: biased below the eye line. Motes used to fill the empty sky where the name
+      // sits, and a slow rotation kept sending new ones through it; the direction is uninterrupted
+      // darkness behind the name, so the volume now hugs the disc instead of the whole box.
+      pos[i * 3 + 1] = -2.6 + (rnd() - 0.5) * 9;
       pos[i * 3 + 2] = (rnd() - 0.5) * 22;
     }
     const g = new THREE.BufferGeometry();
