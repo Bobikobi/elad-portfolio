@@ -340,34 +340,49 @@ const SHOW_CORONA_SHELL = false; // corona backside shell (scale 1.28) - primary
 const SHOW_ANAMORPHIC = false;   // short horizontal gold streak - it crossed the disc
 
 /**
- * Solar prominences - plasma LOOPS standing on the limb, each on its own lifetime.
+ * Solar prominences - magma loops that belong to the sphere.
  *
- * SUN-4. The flame-lick version (one root, a tapered sprite) read as detached bright blobs
- * beside the sun. A prominence is a loop with two roots, so each of these is an arch whose
- * chord sits on the limb; the sphere's depth test hides the roots under the silhouette, so
- * both feet are visibly planted and nothing floats. Two are normally up, a third comes and
- * goes, heights 0.08-0.18 R with an occasional 0.25 R, lifetimes 18-26 s and staggered.
- * A life is grow (first 20%), hold (55%), drain (last 25%); once per life a footpoint flares
- * for about two seconds. The ring still BILLBOARDS to the camera so the loops ride the silhouette
- * from every vantage.
+ * SUN-4. Earlier builds drew each loop as a flat sprite billboarded to the camera, so when the
+ * view moved the arches slid around the limb like stickers on the glass. Each loop is now real
+ * geometry in the sun's own frame (it turns with the surface): two feet on the sphere, three
+ * nested tube strands rising between them, seen correctly from any angle and hidden by the
+ * sphere's depth test when they stand behind it. A life is ~30-44 s: the plasma FILLS the loop
+ * from both feet upward (the crest lights last), holds while the strands sway and bright knots
+ * creep along them, then drains from the crest back down to the feet. Nothing scales as a whole,
+ * so nothing reads as a bubble inflating. The tube is soft-edged toward its silhouette (view
+ * angle) so it reads as glowing plasma, not a wire.
  */
 const PROM_COUNT = 3;
+const PROM_STRANDS = 3;
+const PROM_SEG = 48;
+const PROM_RING = 6;
 const smooth01 = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
   return t * t * (3 - 2 * t);
 };
 const promVert = /* glsl */ `
-  varying vec2 vUv;
-  void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+  attribute float aU;
+  attribute float aK;
+  varying vec3 vN;
+  varying vec3 vV;
+  varying float vU;
+  varying float vK;
+  void main() {
+    vU = aU; vK = aK;
+    vN = normalMatrix * normal;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vV = -mv.xyz;
+    gl_Position = projectionMatrix * mv;
+  }
 `;
-// The loops BURN: each strand's radius is pushed around by drifting noise (stronger toward the crest),
-// bright knots of plasma travel along the strands in alternating directions, and the outer fringe
-// licks upward in short tongues. Nothing here is a texture, so nothing repeats.
 const promFrag = /* glsl */ `
   uniform float uTime;
-  uniform float uOpacity;
+  uniform float uFill;
   uniform float uSeed;
-  varying vec2 vUv;
+  varying vec3 vN;
+  varying vec3 vV;
+  varying float vU;
+  varying float vK;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -375,64 +390,122 @@ const promFrag = /* glsl */ `
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
   }
   void main() {
-    // Shape drawn in a frame 1.18x larger than the quad so the tongues and the fill have room to die out before the quad's edge
-    float ex = vUv.x * 2.0 - 1.0;
-    float ey = vUv.y;
-    float edge = (1.0 - smoothstep(0.62, 0.98, abs(ex))) * (1.0 - smoothstep(0.62, 0.98, ey));
-    float ux = ex * 1.18;
-    float uy = ey * 1.18;
-    float d = length(vec2(ux, uy));
-    float ang = atan(uy, ux);               // 0..pi along the arch
-    float thin = 1.0 - 0.7 * smoothstep(0.15, 1.0, uy);
+    float m = 1.0 - abs(2.0 * vU - 1.0);            // 0 at the feet, 1 at the crest
     float t = uTime;
-    float a = 0.0;
-    float hot = 0.0;
-    for (int i = 0; i < 3; i++) {
-      float fi = float(i);
-      float r = 0.93 - 0.085 * fi;
-      float w = (0.085 - 0.015 * fi) * thin;
-      float k = 1.0 - 0.32 * fi;
-      float dir = mod(fi, 2.0) < 0.5 ? 1.0 : -1.0;
-      // turbulence: the strand wanders in radius, more so near the crest, and never in step with its neighbours
-      float wob = (vnoise(vec2(ang * 3.0 + uSeed + fi * 5.1 - t * 0.55 * dir, t * 0.9 + fi * 3.7)) - 0.5) * 0.11 * (0.3 + 0.7 * smoothstep(0.0, 0.9, uy));
-      float dd = d - wob;
-      float s = exp(-pow((dd - r) / w, 2.0));
-      // plasma knots streaming along the strand
-      float flow = vnoise(vec2(ang * 4.0 - t * 1.4 * dir + fi * 7.3 + uSeed, fi * 2.0 + t * 0.35));
-      float knot = smoothstep(0.35, 0.85, flow);
-      a += k * s * (0.45 + 0.7 * knot);
-      hot += k * s * knot;
-    }
-    // footpoints pool brighter, and short tongues lick up off the outer fringe
-    a *= 1.0 + 0.9 * exp(-uy / 0.14);
-    float lick = vnoise(vec2(ang * 9.0 + uSeed, t * 1.6)) * smoothstep(0.98, 1.12, d) * (1.0 - smoothstep(1.12, 1.30, d));
-    a += 0.35 * lick * smoothstep(0.0, 0.4, uy + 0.1);
-    a += 0.34 * smoothstep(0.98, 0.35, d) * (1.0 - 0.6 * uy) * (0.6 + 0.6 * vnoise(vec2(ang * 5.0 + uSeed, t * 0.7 + d * 4.0)));
-    // whole loop breathes a little so it never sits still
-    a *= 0.88 + 0.12 * sin(t * 2.3 + uSeed * 3.0) * sin(t * 0.9 + uSeed);
-    a = clamp(a, 0.0, 1.0);
-    vec3 col = mix(vec3(1.0, 0.36, 0.13), vec3(1.0, 0.68, 0.34), clamp(hot * 0.8, 0.0, 1.0));
-    gl_FragColor = vec4(col * a * 0.6 * uOpacity * edge, 1.0);
+    float wob = vnoise(vec2(vU * 5.0 + vK * 3.1 + uSeed, t * 0.10)) - 0.5;
+    // the plasma fills from the feet upward and drains from the crest downward, with a ragged front
+    float edge = uFill * 1.35 - 0.25;
+    float vis = 1.0 - smoothstep(edge - 0.2, edge, m + 0.14 * wob);
+    float dir = mod(vK, 2.0) < 0.5 ? 1.0 : -1.0;
+    float n = 0.65 * vnoise(vec2(vU * 6.0 - t * 0.16 * dir + uSeed + vK * 7.0, vK * 2.0 + t * 0.05))
+            + 0.35 * vnoise(vec2(vU * 15.0 - t * 0.28 * dir + uSeed * 1.7, vK * 5.0 + t * 0.09));
+    float bright = 0.5 + 1.0 * smoothstep(0.25, 0.8, n);
+    bright *= 1.0 + 0.9 * pow(1.0 - m, 3.0);        // footpoints pool brighter
+    float fr = pow(clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0), 1.4);
+    float hot = clamp((bright - 0.7) * 0.9, 0.0, 1.0);
+    vec3 col = mix(vec3(0.95, 0.24, 0.07), vec3(1.0, 0.50, 0.20), hot);
+    gl_FragColor = vec4(col * fr * bright * vis * 0.21, 1.0);
   }
 `;
-function Prominences() {
+const _pc = new THREE.Vector3();
+const _pt = new THREE.Vector3();
+const _pb = new THREE.Vector3();
+const _pp = new THREE.Vector3();
+const _pq = new THREE.Vector3();
+const _pT = new THREE.Vector3();
+const _pn = new THREE.Vector3();
+const _pr = new THREE.Vector3();
+function makePromGeometry() {
+  const per = PROM_SEG + 1;
+  const nv = PROM_STRANDS * per * PROM_RING;
+  const g = new THREE.BufferGeometry();
+  const aU = new Float32Array(nv);
+  const aK = new Float32Array(nv);
+  const idx: number[] = [];
+  for (let k = 0; k < PROM_STRANDS; k++) {
+    for (let i = 0; i <= PROM_SEG; i++) {
+      for (let j = 0; j < PROM_RING; j++) {
+        const v = (k * per + i) * PROM_RING + j;
+        aU[v] = i / PROM_SEG;
+        aK[v] = k;
+        if (i < PROM_SEG) {
+          const v2 = (k * per + i + 1) * PROM_RING + j;
+          const j2 = (j + 1) % PROM_RING;
+          const va = (k * per + i) * PROM_RING + j2;
+          const vb = (k * per + i + 1) * PROM_RING + j2;
+          idx.push(v, v2, vb, v, vb, va);
+        }
+      }
+    }
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nv * 3), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nv * 3), 3));
+  g.setAttribute('aU', new THREE.BufferAttribute(aU, 1));
+  g.setAttribute('aK', new THREE.BufferAttribute(aK, 1));
+  g.setIndex(idx);
+  return g;
+}
+const STRAND_H = [1.0, 0.82, 0.66];
+const STRAND_SPAN = [1.0, 0.9, 0.8];
+const STRAND_SIDE = [0.0, 0.25, -0.25];
+const STRAND_RAD = [1.0, 0.8, 0.65];
+/** Writes one loop's tubes into g: feet at +-span/2 around surface point c, plane spanned by c and t. */
+function fillPromGeometry(g: THREE.BufferGeometry, c: THREE.Vector3, t: THREE.Vector3, span: number, height: number, lean: number, time: number, seed: number) {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute;
+  const nor = g.getAttribute('normal') as THREE.BufferAttribute;
+  _pb.crossVectors(t, c).normalize();
+  const per = PROM_SEG + 1;
+  const theta = span / SUN_R / 2;
+  for (let k = 0; k < PROM_STRANDS; k++) {
+    for (let i = 0; i <= PROM_SEG; i++) {
+      const u = (i / PROM_SEG) * 2 - 1;
+      const bump = 1 - u * u;
+      const sway = Math.sin(u * 3.1 + time * 0.23 + seed + k * 1.7);
+      const phi = u * theta * STRAND_SPAN[k] + lean * bump + 0.02 * sway * bump;
+      const r = SUN_R * (0.965 + height * STRAND_H[k] * Math.pow(bump, 0.7) * (1 + 0.06 * Math.sin(time * 0.31 + seed + k)));
+      const side = STRAND_SIDE[k] * SUN_R * 0.05 * bump + 0.005 * SUN_R * Math.sin(u * 4 + time * 0.19 + k * 2.3 + seed) * bump;
+      _pp.copy(c).multiplyScalar(Math.cos(phi)).addScaledVector(t, Math.sin(phi)).multiplyScalar(r).addScaledVector(_pb, side);
+      // tangent by a small step along u
+      const u2 = u + 0.02;
+      const bump2 = 1 - u2 * u2;
+      const phi2 = u2 * theta * STRAND_SPAN[k] + lean * bump2 + 0.02 * Math.sin(u2 * 3.1 + time * 0.23 + seed + k * 1.7) * bump2;
+      const r2 = SUN_R * (0.965 + height * STRAND_H[k] * Math.pow(Math.max(bump2, 0), 0.7) * (1 + 0.06 * Math.sin(time * 0.31 + seed + k)));
+      _pq.copy(c).multiplyScalar(Math.cos(phi2)).addScaledVector(t, Math.sin(phi2)).multiplyScalar(r2).addScaledVector(_pb, side);
+      _pT.subVectors(_pq, _pp).normalize();
+      _pn.crossVectors(_pb, _pT).normalize();
+      const rad = SUN_R * 0.012 * STRAND_RAD[k] * (1 + 0.7 * Math.pow(1 - bump, 3) + 0.18 * Math.sin(u * 9 + time * 0.4 + k));
+      for (let j = 0; j < PROM_RING; j++) {
+        const al = (j / PROM_RING) * Math.PI * 2;
+        _pr.copy(_pb).multiplyScalar(Math.cos(al)).addScaledVector(_pn, Math.sin(al));
+        const v = (k * per + i) * PROM_RING + j;
+        pos.setXYZ(v, _pp.x + _pr.x * rad, _pp.y + _pr.y * rad, _pp.z + _pr.z * rad);
+        nor.setXYZ(v, _pr.x, _pr.y, _pr.z);
+      }
+    }
+  }
+  pos.needsUpdate = true;
+  nor.needsUpdate = true;
+}
+function Prominences({ spin }: { spin: React.RefObject<THREE.Mesh | null> }) {
   const group = useRef<THREE.Group>(null);
+  const geos = useMemo(() => Array.from({ length: PROM_COUNT }, () => makePromGeometry()), []);
   const uniforms = useMemo(
-    () => Array.from({ length: PROM_COUNT }, (_, i) => ({ uTime: { value: 0 }, uOpacity: { value: 0 }, uSeed: { value: i * 17.3 } })),
+    () => Array.from({ length: PROM_COUNT }, (_, i) => ({ uTime: { value: 0 }, uFill: { value: 0 }, uSeed: { value: i * 17.3 } })),
     [],
   );
   const life = useMemo(() => {
     const rnd = makeRng(SEED.prominences);
     return Array.from({ length: PROM_COUNT }, (_, i) => ({
-      len: 18 + rnd() * 8,
-      offset: (i / PROM_COUNT) * 22 + rnd() * 4,
+      len: 30 + rnd() * 14,
+      offset: (i / PROM_COUNT) * 34 + rnd() * 6,
     }));
   }, []);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     const g = group.current;
     if (!g) return;
-    g.quaternion.copy(state.camera.quaternion);
+    // The loops turn with the surface they stand on.
+    if (spin.current) g.rotation.y = spin.current.rotation.y;
     for (let i = 0; i < PROM_COUNT; i++) {
       const L = life[i];
       const u = (t + L.offset) / L.len;
@@ -440,32 +513,39 @@ function Prominences() {
       const ph = u - cycle;
       // Each cycle re-rolls where the loop stands and how big it is, deterministically.
       const rnd = makeRng(SEED.prominences + i * 7919 + cycle * 104729);
-      const a = rnd() * Math.PI * 2 + (ph - 0.5) * 0.10;   // the loop creeps along the limb over its life
-      const big = rnd() < 0.2 ? 0.38 : 0.13 + rnd() * 0.13;
+      // Stand near the limb as the resting camera sees it (world z ~ 0), where a loop reads in profile; the
+      // surface turns under it, so the direction is pre-rotated back by the turn expected by mid-life.
+      const az = rnd() * Math.PI * 2;
+      const zc = (rnd() - 0.5) * 0.5;
+      const rr = Math.sqrt(1 - zc * zc);
+      const turn = (spin.current ? spin.current.rotation.y : 0) + 0.03 * L.len * (0.5 - ph);
+      const wx = rr * Math.cos(az);
+      _pc.set(wx * Math.cos(turn) - zc * Math.sin(turn), rr * Math.sin(az), wx * Math.sin(turn) + zc * Math.cos(turn));
+      const psi = rnd() * Math.PI * 2;
+      const big = rnd() < 0.2 ? 0.5 : 0.18 + rnd() * 0.16;
       const span = SUN_R * (0.18 + rnd() * 0.24);
-      const env = smooth01(ph / 0.3) * smooth01((1 - ph) / 0.3);
+      const lean = (rnd() - 0.5) * 0.10;
       // The third loop is the occasional one: it sits out about a third of the time.
       const present = i < 2 ? 1 : smooth01((Math.sin(cycle * 2.399 + i) + 0.4) * 2);
-      const flare = 1 + 1.6 * Math.exp(-Math.pow((ph - 0.5) * L.len / 1.0, 2));
-      const h = SUN_R * big * (0.25 + 0.75 * env) * (1 + 0.06 * Math.sin(t * 0.7 + i * 2.0));
-      const m = g.children[i] as THREE.Mesh;
-      // Chord centre a hair inside the limb so the roots tuck under the silhouette.
-      const anchor = SUN_R * 0.975 + h * 0.5;
-      m.position.set(Math.cos(a) * anchor, Math.sin(a) * anchor, 0);
-      m.scale.set(span, h, 1);
-      m.rotation.z = a - Math.PI / 2;
-      const un = (m.material as THREE.ShaderMaterial).uniforms;
+      const fill = smooth01(ph / 0.4) * smooth01((1 - ph) / 0.4) * present;
+      _pt.set(0, 1, 0).cross(_pc);
+      if (_pt.lengthSq() < 1e-4) _pt.set(1, 0, 0);
+      _pt.normalize();
+      _pb.crossVectors(_pc, _pt);
+      _pt.multiplyScalar(Math.cos(psi)).addScaledVector(_pb, Math.sin(psi)).normalize();
+      fillPromGeometry(geos[i], _pc, _pt, span, big * (0.5 + 0.5 * smooth01(ph / 0.5)), lean, t, i * 17.3 + cycle * 3.1);
+      const un = ((g.children[i] as THREE.Mesh).material as THREE.ShaderMaterial).uniforms;
       un.uTime.value = t;
       un.uSeed.value = i * 17.3 + cycle * 3.1;
-      un.uOpacity.value = Math.min(1, 0.85 * env * present * flare);
+      un.uFill.value = fill;
+      (g.children[i] as THREE.Mesh).visible = fill > 0.001;
     }
   });
   return (
     <group ref={group}>
-      {uniforms.map((un, i) => (
-        <mesh key={i}>
-          <planeGeometry args={[1, 1]} />
-          <shaderMaterial vertexShader={promVert} fragmentShader={promFrag} uniforms={un} transparent blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+      {geos.map((geo, i) => (
+        <mesh key={i} geometry={geo} frustumCulled={false}>
+          <shaderMaterial vertexShader={promVert} fragmentShader={promFrag} uniforms={uniforms[i]} transparent blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </mesh>
       ))}
     </group>
@@ -605,7 +685,7 @@ export default function Sun() {
         <sphereGeometry args={[SUN_R, 96, 96]} />
         <shaderMaterial ref={sunMat} vertexShader={sunVert} fragmentShader={sunFrag} uniforms={uniforms} toneMapped={false} />
       </mesh>
-      <Prominences />
+      <Prominences spin={meshRef} />
       <Corona />
       {/* Fresnel-ish corona shell */}
       {SHOW_CORONA_SHELL && (
