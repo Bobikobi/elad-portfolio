@@ -500,8 +500,12 @@ function Prominences({ spin }: { spin: React.RefObject<THREE.Mesh | null> }) {
       offset: (i / PROM_COUNT) * 34 + rnd() * 6,
     }));
   }, []);
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
+  const clk = useRef(0);
+  useFrame((_, dt) => {
+    // Own clock: the scene's elapsedTime restarts when the act mounts, and every phase here
+    // (fill, sway, knots) jumped with it. This one only ever moves forward, and only smoothly.
+    clk.current += Math.min(dt, 0.1);
+    const t = clk.current;
     const g = group.current;
     if (!g) return;
     // The loops turn with the surface they stand on.
@@ -516,9 +520,12 @@ function Prominences({ spin }: { spin: React.RefObject<THREE.Mesh | null> }) {
       // Stand near the limb as the resting camera sees it (world z ~ 0), where a loop reads in profile; the
       // surface turns under it, so the direction is pre-rotated back by the turn expected by mid-life.
       const az = rnd() * Math.PI * 2;
-      const zc = (rnd() - 0.5) * 0.5;
+      // Rotation carries a point toward the viewer on the left of the disc and away on the right, so a loop
+      // starts behind the limb (left) or in front of it (right) and sweeps through the visible window.
+      const zc = (Math.cos(az) < 0 ? -0.42 : 0.5) + (rnd() - 0.5) * 0.12;
       const rr = Math.sqrt(1 - zc * zc);
-      const turn = (spin.current ? spin.current.rotation.y : 0) + 0.03 * L.len * (0.5 - ph);
+      const rate = HUD_AVAILABLE && SPIN_PINNED ? 0 : 0.03;
+      const turn = (spin.current ? spin.current.rotation.y : 0) - rate * L.len * ph;
       const wx = rr * Math.cos(az);
       _pc.set(wx * Math.cos(turn) - zc * Math.sin(turn), rr * Math.sin(az), wx * Math.sin(turn) + zc * Math.cos(turn));
       const psi = rnd() * Math.PI * 2;
@@ -527,7 +534,11 @@ function Prominences({ spin }: { spin: React.RefObject<THREE.Mesh | null> }) {
       const lean = (rnd() - 0.5) * 0.10;
       // The third loop is the occasional one: it sits out about a third of the time.
       const present = i < 2 ? 1 : smooth01((Math.sin(cycle * 2.399 + i) + 0.4) * 2);
-      const fill = smooth01(ph / 0.4) * smooth01((1 - ph) / 0.4) * present;
+      let fill = smooth01(ph / 0.4) * smooth01((1 - ph) / 0.4) * present * smooth01(t / 8);
+      // Once the surface carries the loop over the face of the disc it fades out instead of glowing through it.
+      const rot = spin.current ? spin.current.rotation.y : 0;
+      const czNow = -_pc.x * Math.sin(rot) + _pc.z * Math.cos(rot);
+      fill *= 1 - smooth01((czNow - 0.02) / 0.22);
       _pt.set(0, 1, 0).cross(_pc);
       if (_pt.lengthSq() < 1e-4) _pt.set(1, 0, 0);
       _pt.normalize();
