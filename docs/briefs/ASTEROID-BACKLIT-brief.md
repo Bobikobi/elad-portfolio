@@ -6,8 +6,8 @@ unclear speckles on their faces, where they should be only shadowed.
 
 ## Suspects, and what inspection already says (before any pixel)
 
-1. Specular with no terminator gate (the EDGE-FLASH mechanism, PR #38). **Unlikely by
-   inspection.** That patch lives in `Planet`'s own `onBeforeCompile` (SolarAct.tsx) and rewrites
+1. Specular with no terminator gate (the EDGE-FLASH mechanism, PR #38). **CONFIRMED BY MEASUREMENT (the inspection call below was wrong,
+   see ASTEROID-BACKLIT-verify.md).** Original inspection note: unlikely - That patch lives in `Planet`'s own `onBeforeCompile` (SolarAct.tsx) and rewrites
    three's `lights_physical_pars_fragment` for that material only. The rocks use a stock
    `meshStandardMaterial`, whose `dotNL` is the hard `saturate(N.L)`. The blow-up needed a soft
    irradiance times a hard-zero BRDF dotNL, and the rocks have no soft irradiance. Still to be
