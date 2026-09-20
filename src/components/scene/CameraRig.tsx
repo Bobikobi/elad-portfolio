@@ -822,16 +822,22 @@ export default function CameraRig() {
       const p = scrollProgress;
       if (p < 0.015) {
         // WELCOME_IDLE — low, close, looking across the plane; gentle drift + parallax.
-        // The drift used to be +-0.7 across and +-0.5 in depth at nine units out, which reads as
-        // a still picture with a slow wobble (owner: "too small for a three-dimensional view").
-        // Roughly doubled, and the depth term is now the largest of the three, because it is the
-        // one that makes the near dust slide against the far arms.
+        // The drift used to be +-0.7 across and +-0.5 in depth at nine units out, which reads as a
+        // still picture with a slow wobble (owner: "too small for a three-dimensional view").
+        // Sliding the camera sideways is the wrong way to make it bigger: measured over a full
+        // cycle it took the galaxy off the bottom-left corner (the outer band went 4.3 to 30.8
+        // between two phases of the same build). The motion is an ORBIT around the galaxy
+        // instead - +-7.5 degrees of yaw and +-3 of pitch - which is a stronger depth cue,
+        // because the near arm and the far arm move opposite ways, and it cannot take the
+        // composition off the frame. Depth breathing stays; the pointer keeps its own offset.
         _tgt.set(
-          Math.sin(t * 0.09) * 1.7 + px * 2.5,
-          2.0 + Math.sin(t * 0.075) * 0.45 + py * 1.4,
-          8.0 + Math.cos(t * 0.085) * 1.3
+          px * 1.8,
+          2.0 + py * 1.2,
+          8.0 + Math.cos(t * 0.085) * 0.9
         );
-        applyOrbit(_tgt, LOOK, orbit.current.yaw, orbit.current.pitch); // drag-to-rotate (T6)
+        applyOrbit(_tgt, LOOK,
+          orbit.current.yaw + Math.sin(t * 0.09) * 0.13,   // drag-to-rotate (T6) + idle orbit
+          orbit.current.pitch + Math.sin(t * 0.062) * 0.05);
         damp3(cam.position, _tgt, 0.5, dt);
         damp(cam, 'fov', 55, 0.5, dt);
         cam.lookAt(LOOK.x, LOOK.y, LOOK.z);
