@@ -11,7 +11,7 @@ import {
   SUN_LAMP_INTENSITY,
   SUN_LAMP_OVERVIEW_SCALE,
 } from '@/lib/photometry';
-import { softSprite, flameSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
+import { softSprite, arcSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 
 /**
@@ -147,7 +147,7 @@ const sunFrag = /* glsl */ `
     // Wide and SHALLOW. A narrow window with a big weight draws a net over the disc - the
     // contrast between a real granule and its lane is maybe a fifth of the disc's range, not
     // half of it, and at half the surface reads as a lychee skin rather than as plasma.
-    float cells = smoothstep(0.02, 0.34, w.y - w.x);
+    float cells = smoothstep(0.0, 0.46, w.y - w.x);
     // A little variation between neighbouring granules, so the pavement is not one tone.
     // P7: 12 -> 15 here and in the worley call above, and they must move together or the
     // per-cell tint stops lining up with the cells it is tinting. The power spectrum put
@@ -170,7 +170,13 @@ const sunFrag = /* glsl */ `
     // ball, because it does not touch which structure the eye lands on. The weights are
     // swapped instead, and the constant is trimmed to hold n's mean near 0.5 where the
     // amber lives, since the level decides the ramp stop as much as the pattern does.
-    float n = 0.15 + big * 0.18 + cells * 0.28 + perCell;
+    // SUN-4: the pavement stops leading. At 0.28 the cells carried the face and it read as
+    // cobblestone - the owner's own word for it was a "grainy speckle" on an orange-brown ball.
+    // Broad thermal patches now lead (0.18 -> 0.34) and the cells become a texture inside
+    // them (0.28 -> 0.15), so at thumbnail size the disc resolves into large warm shapes and the
+    // granules only appear when you look for them. The constant follows so n keeps its mean
+    // near 0.47, where the ramp below puts the gold.
+    float n = 0.20 + big * 0.36 + cells * 0.09 + perCell * 0.5;
     // SUN-2. The surface had the large blotches and nothing else - measured, its
     // high-frequency energy was 1.3 luminance units against 6.5 for the large structure, and
     // that is what makes a photographed sun read as smooth instead of boiling. A detail
@@ -188,7 +194,7 @@ const sunFrag = /* glsl */ `
     // criterion asks for 6-20s, because a visitor should see it move without waiting four
     // minutes for it.
     float gr = grain(p*13.6 + vec3(uTime*0.00162, -uTime*0.0018, uTime*0.0012));
-    n += (gr - 0.5) * 0.13;
+    n += (gr - 0.5) * 0.22;
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
     //
@@ -225,8 +231,12 @@ const sunFrag = /* glsl */ `
     // sun bright enough to sit in ACES's shoulder is a sun with no shading, and the two
     // cannot both be had. How bright it should be from here is the owner's call, not a
     // measurement - the criteria constrain the gradient, never the level.
-    vec3 dark = vec3(0.255, 0.092, 0.052);
-    vec3 mid  = vec3(0.439, 0.196, 0.102);
+    // SUN-4: the dark and mid stops leave brown for amber-gold. The owner read the disc as a
+    // flat orange-brown ball; a photosphere is white-gold at its heart and only turns amber
+    // toward the limb, and the limb tint below now supplies that. Red stays under the
+    // shoulder (mid red 0.56 x 1.5 = 0.84) so SUN-3's gradient survives.
+    vec3 dark = vec3(0.400, 0.185, 0.075);
+    vec3 mid  = vec3(0.700, 0.430, 0.170);
     // The hot stop is the one place red should NOT lead: a hotter patch of a photosphere is
     // whiter, not redder. Red barely rises from the mid stop while green doubles.
     // P7: 0.510,0.419,0.267 -> 0.690,0.566,0.361, the same hue scaled by 1.35.
@@ -291,16 +301,15 @@ const sunFrag = /* glsl */ `
     // gap is what bloom, the god rays and the corona put back. Deepening the floor darkens
     // the limb WITHOUT touching the centre, so it moves S4 and leaves S2 alone - the same
     // reason the hot stop was the right lever for S2.
-    col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.15, 1.0, limb);
+    col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.09, 1.0, limb);
+    // SUN-4: the limb is cooler as well as darker - blue and then green fall away faster than
+    // red, so the rim turns amber instead of just grey-orange. Red is untouched on purpose.
+    col *= mix(vec3(1.0, 0.62, 0.34), vec3(1.0), smoothstep(0.10, 0.65, limb));
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 const SUN_R = 1.5;
-// SUN-3: 7 -> 5. Seven arcs at the old width and length covered 8.9% of the silhouette
-// with spikes reaching 1.76 sun-radii; five shorter, narrower ones measure 1.1% and 1.09 R.
-// A limb with a few things happening on it reads more alive than one with a ring of them.
-const PROM_COUNT = 5;
 
 // R2.2 milky-halo fix. A bisection (Debug HUD + corner luminance) showed the washed
 // "milky halo" around the sun on arrival — worst on mobile — came from the additive gold
@@ -317,80 +326,66 @@ const SHOW_CORONA_SHELL = false; // corona backside shell (scale 1.28) - primary
 const SHOW_ANAMORPHIC = false;   // short horizontal gold streak - it crossed the disc
 
 /**
- * Solar prominences — flame arcs licking off the limb, each on its own irregular cycle so
- * some are erupting while others fade (spec: break in 10-25s cycles).
+ * Solar prominences - plasma LOOPS standing on the limb, each on its own lifetime.
  *
- * B3: they used to read as orange petals stuck to the sun, for two reasons. The sprite was
- * the shared ROUND softSprite stretched 0.5 × 2.0 — an ellipse, not a flame — and the ring
- * lived in the sun's own local XY plane, so as the camera moved off that axis the "limb"
- * arcs slid inward over the disc and became lobes sitting on the face. Now: a tapered
- * flame texture whose base is at the limb, the group BILLBOARDS to the camera so the ring
- * always rides the silhouette from every vantage, and the colour/opacity sit close enough
- * to the sun's own hot rim that they read as part of it.
+ * SUN-4. The flame-lick version (one root, a tapered sprite) read as detached bright blobs
+ * beside the sun. A prominence is a loop with two roots, so each of these is an arch whose
+ * chord sits on the limb; the sphere's depth test hides the roots under the silhouette, so
+ * both feet are visibly planted and nothing floats. Two are normally up, a third comes and
+ * goes, heights 0.08-0.18 R with an occasional 0.25 R, lifetimes 18-26 s and staggered.
+ * A life is grow (first 20%), hold (55%), drain (last 25%); once per life a footpoint flares
+ * for about two seconds. The ring still BILLBOARDS to the camera so the loops ride the silhouette
+ * from every vantage.
  */
+const PROM_COUNT = 3;
+const smooth01 = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+};
 function Prominences() {
   const group = useRef<THREE.Group>(null);
-  const tex = useMemo(() => flameSprite(), []);
-  const proms = useMemo(() => {
+  const tex = useMemo(() => arcSprite(), []);
+  const life = useMemo(() => {
     const rnd = makeRng(SEED.prominences);
-    return Array.from({ length: PROM_COUNT }, (_, i) => {
-      const a = (i / PROM_COUNT) * Math.PI * 2 + rnd() * 0.5;
-      return {
-        a,
-        x: Math.cos(a),
-        y: Math.sin(a),
-        len: 0.8 + rnd() * 1.1,
-        speed: 0.06 + rnd() * 0.09,
-        phase: rnd() * 6.28,
-      };
-    });
+    return Array.from({ length: PROM_COUNT }, (_, i) => ({
+      len: 18 + rnd() * 8,
+      offset: (i / PROM_COUNT) * 22 + rnd() * 4,
+    }));
   }, []);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     const g = group.current;
     if (!g) return;
-    // Billboard: the ring of arcs lives in the plane facing the camera, so every one of
-    // them is on the silhouette no matter where the camera has flown to.
     g.quaternion.copy(state.camera.quaternion);
-    for (let i = 0; i < proms.length; i++) {
-      const pr = proms[i];
-      // Irregular eruption envelope: mostly small, occasionally licks out far.
-      const base = 0.5 + 0.5 * Math.sin(t * pr.speed + pr.phase);
-      const burst = Math.max(0, Math.sin(t * pr.speed * 0.5 + pr.phase * 1.7) - 0.72) * 3.4;
-      const e = Math.min(1.4, base * 0.5 + burst);
+    for (let i = 0; i < PROM_COUNT; i++) {
+      const L = life[i];
+      const u = (t + L.offset) / L.len;
+      const cycle = Math.floor(u);
+      const ph = u - cycle;
+      // Each cycle re-rolls where the loop stands and how big it is, deterministically.
+      const rnd = makeRng(SEED.prominences + i * 7919 + cycle * 104729);
+      const a = rnd() * Math.PI * 2;
+      const big = rnd() < 0.2 ? 0.25 : 0.08 + rnd() * 0.10;
+      const span = SUN_R * (0.12 + rnd() * 0.18);
+      const env = ph < 0.2 ? smooth01(ph / 0.2) : ph > 0.75 ? smooth01((1 - ph) / 0.25) : 1;
+      // The third loop is the occasional one: it sits out about a third of the time.
+      const present = i < 2 ? 1 : smooth01((Math.sin(cycle * 2.399 + i) + 0.4) * 2);
+      const flare = 1 + 1.6 * Math.exp(-Math.pow((ph - 0.5) * L.len / 1.0, 2));
+      const h = SUN_R * big * (0.35 + 0.65 * env);
       const s = g.children[i] as THREE.Sprite;
-      // SUN-3. These are the "weird sparkles", and the numbers say why: at 0.30 + len*0.34*e
-      // a fully-erupted arc put its tip at 2.19 SUN_R, i.e. it stuck a sun-and-a-bit out
-      // past the limb. Measured on the render the visible reach was 1.74 R - the faint tip
-      // does not register - and at that length a tapered sprite has stopped being a flame
-      // and become a straight hard-edged ray, which is exactly what it looked like.
-      //
-      // A real prominence is a few percent of the solar radius; even the record ones are
-      // well under half. These now top out at 0.19 R of arc, tip at 1.19 SUN_R, which is
-      // still far more than nature and is the point - it has to be seen at a 350px disc.
-      const l = SUN_R * (0.06 + pr.len * 0.075 * e);
-      // The flame's BASE is at v=0, i.e. the bottom edge of the sprite, so the sprite's
-      // centre has to sit half a length outboard for the base to land on the limb.
-      const anchor = SUN_R * 0.985 + l * 0.5;
-      s.position.set(pr.x * anchor, pr.y * anchor, 0);
-      // Narrower too, and for the other half of C3: width is what decides how much of the
-      // silhouette is covered, and five arcs at the old width still spanned ~15%.
-      s.scale.set(SUN_R * (0.10 + 0.07 * e), l, 1);
-      // SUN-2: the arcs sat at 0.05-0.25 on additive blending, against a rim the bloom has
-      // already lit - close to invisible, so the limb read as a clean circle with nothing
-      // happening on it. Raised enough to be seen against dark space at the silhouette,
-      // still driven entirely by each arc's own eruption envelope.
-      (s.material as THREE.SpriteMaterial).opacity = 0.07 + 0.26 * e;
-      s.material.rotation = pr.a - Math.PI / 2;
+      // Chord centre a hair inside the limb so the roots tuck under the silhouette.
+      const anchor = SUN_R * 0.975 + h * 0.5;
+      s.position.set(Math.cos(a) * anchor, Math.sin(a) * anchor, 0);
+      s.scale.set(span, h, 1);
+      s.material.rotation = a - Math.PI / 2;
+      (s.material as THREE.SpriteMaterial).opacity = Math.min(1, 0.85 * env * present * flare);
     }
   });
   return (
     <group ref={group}>
-      {proms.map((_, i) => (
+      {Array.from({ length: PROM_COUNT }, (_, i) => (
         <sprite key={i}>
-          {/* Close to the sun's own hot rim, not a separate orange - the arcs must read as
-              the star's edge coming apart, never as decoration laid on top of it. */}
-          <spriteMaterial map={tex} color={'#ffb469'} transparent opacity={0.1} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+          <spriteMaterial map={tex} color={'#ff8a4a'} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </sprite>
       ))}
     </group>
