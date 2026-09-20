@@ -52,6 +52,11 @@ export const NEUTRAL_APERTURE = 1;
 // are toneMapped:false and untouched by this.
 export const SUN_LAMP_INTENSITY = 200;
 export const SUN_LAMP_DISTANCE = 90;
+/** Lamp scale while no world is focused (the overview). Exposure cannot do this job: the ACES
+ *  shoulder moved lit faces only ~9 levels for a 0.6 aperture, so the light itself is scaled. */
+// Local sweep, overview lit-face mean (Uranus / Saturn / Mars / Earth / Neptune): 1.0 -> 212/239/222/136/101,
+// 0.5 -> 189/227/181/98/91, 0.25 -> 133/203/127/76/68. Neptune stays over P3-2's 60 floor.
+export const SUN_LAMP_OVERVIEW_SCALE = 0.25;
 // P3 change 2, and a DELIBERATE DEPARTURE FROM PHYSICS under RULING 3 (2026-08-17):
 // the owner ruled that appearance beats physical accuracy where the two collide.
 //
