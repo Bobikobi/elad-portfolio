@@ -92,10 +92,7 @@ try {
     bare: { dust: false, band: false },
     nodither: { dither: false },
     nospec: { spec: false },
-    ph02: { gate: 0.2, mode: 2 },
-    ph04: { gate: 0.4, mode: 2 },
-    ph06: { gate: 0.6, mode: 2 },
-    ph08: { gate: 0.8, mode: 2 },
+    stock: { stock: true },
   };
   for (const [name, cfg] of Object.entries(configs)) {
     await page.evaluate(async (c) => {

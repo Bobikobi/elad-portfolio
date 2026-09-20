@@ -6,7 +6,7 @@ from PIL import Image
 X = 48
 run = sys.argv[1]
 d = json.load(open(f'{run}/probe.json'))
-cfgs = ['base', 'nodust', 'noband', 'bare', 'nodither', 'nospec', 'ph02', 'ph04', 'ph06', 'ph08']
+cfgs = ['base', 'nodust', 'noband', 'bare', 'nodither', 'nospec', 'stock']
 img = {c: np.asarray(Image.open(f'{run}/{c}.png').convert('RGB')).astype(float) for c in cfgs}
 luma = {c: 0.2126*a[..., 0] + 0.7152*a[..., 1] + 0.0722*a[..., 2] for c, a in img.items()}
 H, W = luma['base'].shape

@@ -83,20 +83,17 @@ const BIG_PX_GONE = 18; // fully gone by this one
 // mapper and then trips the bloom threshold. That is the entire reason the belt read as
 // gold: it was blowing out, not reflecting. At ~20% sRGB the same rock lands near 0.25
 // radiance — a rock lit by a star, which is what it is.
-// ASTEROID-BACKLIT: a rock seen against the sun is lit only on grazing facets (small N.L) that
-// the camera also sees edge-on (small N.V); three's GGX visibility term divides by N.V, so the
-// specular of those facets ran to ~89/255 on a rock whose diffuse is ~10 - the bright speckles.
-// The specular fades in over the first ROCK_SPEC_GATE of N.L, so it only exists where the lamp
-// hits the facet head-on enough for it to be a highlight rather than that blow-up.
-const ROCK_SPEC_GATE = 0.3;
+// ASTEROID-BACKLIT: seen against the sun, a rock is lit only on its grazing rim, and there the
+// GGX specular (Fresnel -> 1 when the light opposes the view) put ~89/255 on a rock whose
+// diffuse is ~10 - the bright speckles. Measured 2026-09-20: N.L, N.V and V.H gates did not
+// remove it; a gate on the phase angle did. The specular fades out as the light direction
+// turns against the view direction: 0 at dot(L,V) <= -0.6 (phase 127 deg and beyond), full at
+// -0.2. Rocks lit from the front or the side keep their highlight.
 const ROCK_GATE_GLSL = /* glsl */ `
 uniform float uSpec;
-uniform float uGate;
-uniform float uGateMode;
-float rockSpecGate( vec3 n, vec3 v, vec3 l ) {
-  if ( uGateMode < 0.5 ) return smoothstep( 0.0, uGate, dot( n, l ) ) * smoothstep( 0.0, uGate, dot( n, v ) );
-  if ( uGateMode < 1.5 ) return smoothstep( 0.0, uGate, dot( v, normalize( l + v ) ) );
-  return smoothstep( -0.6, -0.6 + uGate, dot( l, v ) );
+uniform float uStock;
+float rockSpecGate( vec3 l, vec3 v ) {
+  return uStock > 0.5 ? 1.0 : smoothstep( -0.6, -0.2, dot( l, v ) );
 }
 `;
 const ROCK_COLORS = ['#37312c', '#413a32', '#2c2723', '#4a3f34', '#252220', '#544738'];
@@ -350,8 +347,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       // Measurement seam (ASTEROID-BACKLIT): both default to 1 = stock behaviour.
       shader.uniforms.uDither = { value: 1 };
       shader.uniforms.uSpec = { value: 1 };
-      shader.uniforms.uGate = { value: ROCK_SPEC_GATE };
-      shader.uniforms.uGateMode = { value: 0 };
+      shader.uniforms.uStock = { value: 0 };
       rockShader.current = shader;
       // Projected diameter of this instance, in drawing px, carried to the fragment stage.
       // `instanceMatrix` column 0 is the instance's x axis, so its length is the x scale —
@@ -375,7 +371,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         if (!CHUNK.includes(SPEC)) throw new Error('ASTEROID-BACKLIT: three\'s specular line has moved');
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <lights_physical_pars_fragment>',
-          ROCK_GATE_GLSL + CHUNK.replace(SPEC, 'reflectedLight.directSpecular += uSpec * rockSpecGate( geometryNormal, geometryViewDir, directLight.direction ) * irradiance * BRDF_GGX_Multiscatter(')
+          ROCK_GATE_GLSL + CHUNK.replace(SPEC, 'reflectedLight.directSpecular += uSpec * rockSpecGate( directLight.direction, geometryViewDir ) * irradiance * BRDF_GGX_Multiscatter(')
         );
       }
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -425,12 +421,11 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     if (rockShader.current) rockShader.current.uniforms.uProjScale.value = projScale;
     // ASTEROID-BACKLIT measurement seam (HUD builds only): switch one layer at a time.
     if (HUD_AVAILABLE) {
-      const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean; dither?: boolean; spec?: boolean; gate?: number; mode?: number } }).__beltDebug;
+      const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean; dither?: boolean; spec?: boolean; stock?: boolean } }).__beltDebug;
       if (rockShader.current) {
         rockShader.current.uniforms.uDither.value = dbg?.dither === false ? 0 : 1;
         rockShader.current.uniforms.uSpec.value = dbg?.spec === false ? 0 : 1;
-        rockShader.current.uniforms.uGate.value = dbg?.gate ?? ROCK_SPEC_GATE;
-        rockShader.current.uniforms.uGateMode.value = dbg?.mode ?? 0;
+        rockShader.current.uniforms.uStock.value = dbg?.stock ? 1 : 0;
       }
       if (dustPts.current) dustPts.current.visible = dbg?.dust !== false;
       if (bandMesh.current) bandMesh.current.visible = dbg?.band !== false;
