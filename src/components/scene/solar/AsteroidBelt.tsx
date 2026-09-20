@@ -289,7 +289,36 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         worstKeepInsideChrome: +worstKeep.toFixed(4),
       };
     };
-    return () => { delete w.__beltProbe; };
+    // Rocks seen against the sun: the sun is behind the rock as the camera sees it, so the
+    // face the camera sees is the one the lamp cannot reach. Sorted by projected size.
+    w.__beltBacklit = (minPx = 4) => {
+      const g = group();
+      if (!g) return null;
+      g.updateWorldMatrix(true, false);
+      camera.updateMatrixWorld();
+      const size = gl.getDrawingBufferSize(new THREE.Vector2());
+      const projScale = camera.projectionMatrix.elements[5] * size.y * 0.5;
+      const sun = new THREE.Vector3().setFromMatrixPosition(g.matrixWorld);
+      const out: { x: number; y: number; px: number; cosPhase: number; dist: number; i: number }[] = [];
+      const p = new THREE.Vector3();
+      const a = new THREE.Vector3();
+      const b = new THREE.Vector3();
+      belt.rocks.forEach((r, i) => {
+        p.set(Math.cos(r.angle) * r.radius, r.y, Math.sin(r.angle) * r.radius).applyMatrix4(g.matrixWorld);
+        const dist = p.distanceTo(camera.position);
+        const px = (2 * r.size * Math.max(...r.lump) * projScale) / dist;
+        if (px < minPx) return;
+        a.copy(sun).sub(p).normalize();
+        b.copy(camera.position).sub(p).normalize();
+        const cosPhase = a.dot(b);
+        const s = p.clone().project(camera);
+        if (s.z > 1 || Math.abs(s.x) > 0.98 || Math.abs(s.y) > 0.98) return;
+        out.push({ x: (s.x * 0.5 + 0.5) * size.x, y: (1 - (s.y * 0.5 + 0.5)) * size.y, px, cosPhase, dist, i });
+      });
+      out.sort((m, n) => n.px - m.px);
+      return { w: size.x, h: size.y, sun: (() => { const s = sun.clone().project(camera); return { x: (s.x * 0.5 + 0.5) * size.x, y: (1 - (s.y * 0.5 + 0.5)) * size.y }; })(), rocks: out };
+    };
+    return () => { delete w.__beltProbe; delete w.__beltBacklit; };
   }, [belt, camera, gl]);
 
   // Near-camera dissolve + chrome mask, injected into the standard material so the rocks
@@ -345,6 +374,8 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
   // error; the mounted material is the thing that actually owns the uniform.
   const dustMat = useRef<THREE.ShaderMaterial>(null);
   const bandMat = useRef<THREE.ShaderMaterial>(null);
+  const dustPts = useRef<THREE.Points>(null);
+  const bandMesh = useRef<THREE.Mesh>(null);
   useFrame((state, dt) => {
     // Same treatment as the dust, and the belt needed it more: at 0.025 rad/s it was the
     // fastest-drifting speck field in a world close-up.
@@ -361,6 +392,12 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
     }
     if (bandMat.current) bandMat.current.uniforms.uTime.value = t;
     if (rockShader.current) rockShader.current.uniforms.uProjScale.value = projScale;
+    // ASTEROID-BACKLIT measurement seam (HUD builds only): switch one layer at a time.
+    if (HUD_AVAILABLE) {
+      const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean } }).__beltDebug;
+      if (dustPts.current) dustPts.current.visible = dbg?.dust !== false;
+      if (bandMesh.current) bandMesh.current.visible = dbg?.band !== false;
+    }
   });
 
   return (
@@ -384,7 +421,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
           is one annulus with a gaussian radial profile and the same five-stream angular
           clumping as the bodies (it shares the group, so the clumps stay registered with
           the rocks that made them). Additive, never depth-written, and clamped low. */}
-      <mesh geometry={bandGeo} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} raycast={() => null}>
+      <mesh ref={bandMesh} geometry={bandGeo} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} raycast={() => null}>
         <shaderMaterial
           ref={bandMat}
           uniforms={bandUniforms}
@@ -400,7 +437,7 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       {/* Dust: the nine-in-ten of the belt that is too small to be an object. Additive and
           depth-TESTED (never depth-written) so a planet still occludes it, but a dense
           stretch of it glows the way a real dust band catches sunlight. */}
-      <points geometry={dustGeo} frustumCulled={false}>
+      <points ref={dustPts} geometry={dustGeo} frustumCulled={false}>
         <shaderMaterial
           ref={dustMat}
           uniforms={dustUniforms}
