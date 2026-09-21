@@ -19,11 +19,15 @@ Five numbers per frame, all from the frozen at-rest galaxy capture:
                          because the sky itself carries most of the frame's light.
   G3 compact core      - the galaxy is a point cloud, so single points reach 255 all over the disc;
                          the core is measured on a 15 px box-blurred frame, which is what the eye
-                         integrates. It is the BLOB CONNECTED TO THE BRIGHTEST PIXEL, reported as
-                         its AREA and as the vertical half-width through the peak. Its bounding box
-                         is not reported as a criterion: one bright nebula touching the blob drags
-                         the box across the frame while the core itself has not moved (two builds
-                         with an identical core measured 18.3% and 25.8% wide).
+                         integrates. It is the BLOB CONNECTED TO THE BRIGHTEST PIXEL, measured
+                         against the GALAXY rather than against the frame: its area over the body's
+                         area, and its vertical half-width over the body's height. A share of the
+                         frame is not a property of the core - moving the camera from z 9 to z 8
+                         changed it by half with the core untouched - and "compact core" has to
+                         survive the owner asking for a bigger galaxy. Its bounding box is not used
+                         at all: one bright nebula touching the blob drags the box across the frame
+                         while the core has not moved (two builds with an identical core measured
+                         18.3% and 25.8% wide).
   G4 arm structure     - angular Fourier magnitudes, m = 2 and m = 4, of the light in the galaxy
                          annulus, DEPROJECTED first: the disc is tilted, so a circle on screen cuts
                          an ellipse and the ellipse's own harmonics land on m4. Measured flat, the
@@ -164,11 +168,13 @@ def measure(run: str, tag: str) -> dict:
 
     tot = float(light.sum())
     lower = float(light[h // 2:].sum()) / tot if tot else 0.0
-    body = blur(lum, 15) >= 120
+    bl = blur(lum, 15)
+    body = bl >= 120
     rows = np.nonzero(body.any(axis=1))[0]
     top_row = float(rows.min()) / h if rows.size else 1.0
+    body_px = max(int(body.sum()), 1)
+    body_h = max(float(rows.max() - rows.min() + 1), 1.0) if rows.size else 1.0
 
-    bl = blur(lum, 15)
     core = component(bl >= CORE_L, bl)
     if core.any():
         ys, xs = np.nonzero(core)
@@ -239,7 +245,13 @@ def measure(run: str, tag: str) -> dict:
                         'p99_over_row': round(float(np.percentile(box_rel, 99)), 1)},
         'G2_body_top_row': round(top_row, 3),
         'G2_light_below_midline_pct': round(lower * 100, 2),
-        'G3_core': {'area_pct': round(core_area, 3), 'fwhm_y_pct': round(core_fwhm, 2), 'px': int(core.sum())},
+        # The two criterion numbers are the core against the GALAXY, not against the frame:
+        # "compact core" has to survive the owner asking for a bigger galaxy, and moving the
+        # camera from z 9 to z 8 changed the core's share of the frame by half while the core
+        # itself was untouched. The frame shares stay as context.
+        'G3_core': {'over_body': round(float(core.sum()) / body_px, 4),
+                    'fwhm_over_body': round(core_fwhm / 100 * lum.shape[0] / body_h, 4),
+                    'area_pct': round(core_area, 3), 'fwhm_y_pct': round(core_fwhm, 2), 'px': int(core.sum())},
         'G4_arms': {'m2': round(float(f[2]), 4), 'm4': round(float(f[4]), 4), 'm2_over_m4': round(float(f[2] / max(f[4], 1e-9)), 2),
                     'lane_depth': round(lane, 3), 'axis_ratio': round(q, 3), 'deproj': deproj},
         'G5_edges': {'left': round(float(light[:, :BORDER].mean()), 2),
@@ -256,8 +268,8 @@ WORST = {
     'G1_name_box.over_row_pct': max,
     'G1_name_box.p99_over_row': max,
     'G2_body_top_row': min,          # a smaller top row means the galaxy reaches higher
-    'G3_core.area_pct': max,
-    'G3_core.fwhm_y_pct': max,
+    'G3_core.over_body': max,
+    'G3_core.fwhm_over_body': max,
     'G3_core.px': min,               # the core must still EXIST
     'G4_arms.m2': min,               # the arms must still be there
     'G4_arms.m4': max,

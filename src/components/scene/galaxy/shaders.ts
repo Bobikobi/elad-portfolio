@@ -18,7 +18,6 @@ export const galaxyVertexShader = /* glsl */ `
   void main() {
     vec4 modelPosition = modelMatrix * vec4(position, 1.0);
 
-    // Spin: inner stars rotate faster than outer ones (angular velocity ~ 1/radius).
     float angle = atan(modelPosition.x, modelPosition.z);
     float radius = length(modelPosition.xz);
 
@@ -26,7 +25,18 @@ export const galaxyVertexShader = /* glsl */ `
     // under additive blending instead of clipping to white.
     // aDim carries the dust lanes and the rim fade, both decided once on the CPU.
     vAlpha = mix(0.35, 0.9, smoothstep(0.0, 3.5, radius)) * aDim;
-    float angleOffset = (1.0 / (radius + 0.35)) * uTime * 0.28;
+
+    // GALAXY-REST: the spin was differential - angular velocity ~ 1/radius, which is the right
+    // law for an individual STAR and the wrong one for the arm pattern. Applied to the pattern
+    // it winds the arms up: across the annulus that holds them it accumulates 9.7 radians of
+    // shear in under two minutes, and measured on the deployed build the two-arm signal in the
+    // mid disc fell from 0.71 at 27 seconds to 0.05 at 92. The galaxy turns itself into
+    // concentric rings while the visitor watches - the exact thing this stage exists to remove,
+    // which means fixing the first frame fixed nothing. This is the winding problem, and real
+    // spirals answer it the same way: the arms are a density wave whose PATTERN turns at one
+    // speed at every radius, so the shape is permanent. The bulge is a symmetric blob and loses
+    // nothing by turning at the same rate as the disc.
+    float angleOffset = uTime * 0.045;
     angle += angleOffset;
     modelPosition.x = sin(angle) * radius;
     modelPosition.z = cos(angle) * radius;
