@@ -29,9 +29,11 @@ export const galaxyVertexShader = /* glsl */ `
     // GALAXY-REST: the spin was differential - angular velocity ~ 1/radius, which is the right
     // law for an individual STAR and the wrong one for the arm pattern. Applied to the pattern
     // it winds the arms up: across the annulus that holds them it accumulates 9.7 radians of
-    // shear in under two minutes, and measured on the deployed build the two-arm signal in the
-    // mid disc fell from 0.71 at 27 seconds to 0.05 at 92. The galaxy turns itself into
-    // concentric rings while the visitor watches - the exact thing this stage exists to remove,
+    // shear in under two minutes. Measured on the deployed build, between 27 and 110 seconds the
+    // two-arm signal in the mid disc fell from 0.494 to 0.286, while out at radius 3-4 the
+    // FOUR-fold signal rose from 0.024 to 0.139 - arms shearing into rings, in both numbers at
+    // once. The galaxy does that while the visitor watches - the exact thing this stage exists to
+    // remove,
     // which means fixing the first frame fixed nothing. This is the winding problem, and real
     // spirals answer it the same way: the arms are a density wave whose PATTERN turns at one
     // speed at every radius, so the shape is permanent. The bulge is a symmetric blob and loses

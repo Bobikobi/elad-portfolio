@@ -135,21 +135,31 @@ def disc_coords(cam: dict, w: int, h: int):
     return dx / safe, dz / safe, ok
 
 
-def projected_axis_ratio(cam: dict, w: int, h: int, radius: float = 3.0) -> float:
-    """Minor / major of the screen ellipse that a disc circle of this radius projects to.
+def projected_circle(cam: dict, w: int, h: int, radius: float):
+    """(minor/major, major axis in px) of the screen ellipse a disc circle projects to.
 
-    Reported, not a criterion: it is what the tilt actually is at this phase, so a swing in it
-    is the camera moving and a swing in m4 at a steady axis ratio is the galaxy.
+    The axis ratio is reported, not a criterion: it is what the tilt actually is at this phase,
+    so a swing in it is the camera moving and a swing in m4 at a steady axis ratio is the galaxy.
+    The major axis is the RULER: a length in pixels that a known length in the galaxy occupies at
+    this exact camera. Measuring the core against it asks how big the core is compared with the
+    galaxy, which is what "compact core" means, instead of how big it is compared with the frame,
+    which is a question about the camera.
     """
     a = np.linspace(0, 2 * np.pi, 361)[:-1]
     hm = plane_homography(cam, w, h)
     pts = hm @ np.stack([np.cos(a) * radius, np.sin(a) * radius, np.ones_like(a)])
     if np.any(np.abs(pts[2]) < 1e-9):
-        return 0.0
+        return 0.0, 1.0
     xy = pts[:2] / pts[2]
     xy = xy - xy.mean(axis=1, keepdims=True)
     ev = np.linalg.eigvalsh(np.cov(xy))
-    return float(np.sqrt(max(ev[0], 1e-9) / max(ev[1], 1e-9)))
+    q = float(np.sqrt(max(ev[0], 1e-9) / max(ev[1], 1e-9)))
+    return q, float(4 * np.sqrt(max(ev[1], 1e-9)))  # 2 sigma each way = the ellipse's full major axis
+
+
+# The world radius used as the ruler. Fixed, and inside BOTH the candidate's disc (5.15) and
+# master's (6.0), so the two builds are measured against the same length in the galaxy.
+RULER_R = 4.0
 
 
 def measure(run: str, tag: str) -> dict:
@@ -203,7 +213,7 @@ def measure(run: str, tag: str) -> dict:
         r = np.hypot(dx, dz)
         th = np.arctan2(dz, dx)
         ring = ok & (r >= RING_IN) & (r <= RING_OUT)
-        q = projected_axis_ratio(cam, w, h)
+        q, ruler = projected_circle(cam, w, h, RULER_R)
         deproj = 'camera'
     else:
         # Fallback for captures taken before the camera was published: fit the tilt from the
@@ -225,6 +235,7 @@ def measure(run: str, tag: str) -> dict:
         r = np.hypot(u, v)
         th = np.arctan2(v, u)
         ring = (r >= 0.3 * rmax) & (r <= 0.9 * rmax)
+        ruler = 2.0 * rmax
         deproj = 'moments'
 
     bins = 360
@@ -249,8 +260,14 @@ def measure(run: str, tag: str) -> dict:
         # "compact core" has to survive the owner asking for a bigger galaxy, and moving the
         # camera from z 9 to z 8 changed the core's share of the frame by half while the core
         # itself was untouched. The frame shares stay as context.
-        'G3_core': {'over_body': round(float(core.sum()) / body_px, 4),
-                    'fwhm_over_body': round(core_fwhm / 100 * lum.shape[0] / body_h, 4),
+        # The criterion is the core measured against the GALAXY: its vertical half-width in
+        # units of the projected disc ruler, and its area in units of that ruler squared.
+        # "Compact core" has to survive the owner asking for a bigger galaxy, and moving the
+        # camera from z 9 to z 8 changed the core's share of the FRAME by half with the core
+        # untouched. The frame shares stay as context.
+        'G3_core': {'fwhm_over_disc': round(core_fwhm / 100 * h / max(ruler, 1e-6), 4),
+                    'area_over_disc': round(float(core.sum()) / max(ruler * ruler, 1e-6), 4),
+                    'ruler_px': round(ruler, 1), 'over_body': round(float(core.sum()) / body_px, 4),
                     'area_pct': round(core_area, 3), 'fwhm_y_pct': round(core_fwhm, 2), 'px': int(core.sum())},
         'G4_arms': {'m2': round(float(f[2]), 4), 'm4': round(float(f[4]), 4), 'm2_over_m4': round(float(f[2] / max(f[4], 1e-9)), 2),
                     'lane_depth': round(lane, 3), 'axis_ratio': round(q, 3), 'deproj': deproj},
@@ -268,11 +285,12 @@ WORST = {
     'G1_name_box.over_row_pct': max,
     'G1_name_box.p99_over_row': max,
     'G2_body_top_row': min,          # a smaller top row means the galaxy reaches higher
-    'G3_core.over_body': max,
-    'G3_core.fwhm_over_body': max,
+    'G3_core.fwhm_over_disc': max,
+    'G3_core.area_over_disc': max,
     'G3_core.px': min,               # the core must still EXIST
-    'G4_arms.m2': min,               # the arms must still be there
-    'G4_arms.m4': max,
+    'G4_arms.m2': min,               # the arms must still be there, and be TWO
+    'G4_arms.m2_over_m4': min,
+    'G4_arms.m4': max,               # reported: on its own it rewards a galaxy with no structure
     'G5_edges.left': max,
     'G5_edges.right': max,
     'G5_edges.bottom': max,
