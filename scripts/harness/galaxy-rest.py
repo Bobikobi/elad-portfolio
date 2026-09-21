@@ -157,9 +157,16 @@ def projected_circle(cam: dict, w: int, h: int, radius: float):
     return q, float(4 * np.sqrt(max(ev[1], 1e-9)))  # 2 sigma each way = the ellipse's full major axis
 
 
-# The world radius used as the ruler. Fixed, and inside BOTH the candidate's disc (5.15) and
-# master's (6.0), so the two builds are measured against the same length in the galaxy.
+# The world radius used as the ruler. Fixed, and inside every disc this branch has measured -
+# master's 6.0 and the candidate's 5.15 then 6.3 - so the builds are compared against the same
+# length in the galaxy. It must stay fixed for the same reason the ring does: an instrument that
+# moves with the thing it measures reports nothing.
 RULER_R = 4.0
+
+
+def band_ratio(outer: np.ndarray, inner: np.ndarray) -> float:
+    """Outer band's mean over the mean of the band just inside it. Below 1 = light is falling."""
+    return float(outer.mean()) / max(float(inner.mean()), 1e-6)
 
 
 def measure(run: str, tag: str) -> dict:
@@ -256,10 +263,6 @@ def measure(run: str, tag: str) -> dict:
                         'p99_over_row': round(float(np.percentile(box_rel, 99)), 1)},
         'G2_body_top_row': round(top_row, 3),
         'G2_light_below_midline_pct': round(lower * 100, 2),
-        # The two criterion numbers are the core against the GALAXY, not against the frame:
-        # "compact core" has to survive the owner asking for a bigger galaxy, and moving the
-        # camera from z 9 to z 8 changed the core's share of the frame by half while the core
-        # itself was untouched. The frame shares stay as context.
         # The criterion is the core measured against the GALAXY: its vertical half-width in
         # units of the projected disc ruler, and its area in units of that ruler squared.
         # "Compact core" has to survive the owner asking for a bigger galaxy, and moving the
@@ -271,9 +274,19 @@ def measure(run: str, tag: str) -> dict:
                     'area_pct': round(core_area, 3), 'fwhm_y_pct': round(core_fwhm, 2), 'px': int(core.sum())},
         'G4_arms': {'m2': round(float(f[2]), 4), 'm4': round(float(f[4]), 4), 'm2_over_m4': round(float(f[2] / max(f[4], 1e-9)), 2),
                     'lane_depth': round(lane, 3), 'axis_ratio': round(q, 3), 'deproj': deproj},
+        # The criterion is the TAPER, not the level. "Edges dissolving into black" is a statement
+        # about the falloff: a cloud that still carries light at the border but is visibly falling
+        # there is dissolving, and a small galaxy with black margins is not more dissolved, it is
+        # just smaller. The owner asked twice for a wider galaxy, and an absolute cap answers that
+        # by shrinking it. Each side compares the outermost 40 px band with the 40 px band
+        # immediately inside it; below 1 the light is on its way out at the frame's edge. The
+        # absolute levels stay as a guard against a bright wall at the border.
         'G5_edges': {'left': round(float(light[:, :BORDER].mean()), 2),
                      'right': round(float(light[:, -BORDER:].mean()), 2),
-                     'bottom': round(float(light[-BORDER:, :].mean()), 2)},
+                     'bottom': round(float(light[-BORDER:, :].mean()), 2),
+                     'taper_left': round(band_ratio(light[:, :BORDER], light[:, BORDER:2 * BORDER]), 3),
+                     'taper_right': round(band_ratio(light[:, -BORDER:], light[:, -2 * BORDER:-BORDER]), 3),
+                     'taper_bottom': round(band_ratio(light[-BORDER:, :], light[-2 * BORDER:-BORDER, :]), 3)},
         'sky_floor': round(floor, 2),
         'frame_mean': round(float(lum.mean()), 3),
         'centre': [round(cx, 1), round(cy, 1)],
@@ -291,7 +304,10 @@ WORST = {
     'G4_arms.m2': min,               # the arms must still be there, and be TWO
     'G4_arms.m2_over_m4': min,
     'G4_arms.m4': max,               # reported: on its own it rewards a galaxy with no structure
-    'G5_edges.left': max,
+    'G5_edges.taper_left': max,   # the criterion: is the light still falling at the border
+    'G5_edges.taper_right': max,
+    'G5_edges.taper_bottom': max,
+    'G5_edges.left': max,         # guard against a bright wall at the border
     'G5_edges.right': max,
     'G5_edges.bottom': max,
 }

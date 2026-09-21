@@ -19,10 +19,14 @@ interface Pocket {
   tint: string;
   op: number;
 }
-// GALAXY-REST: the pockets were seeded out to radius 4.6, where the point cloud now fades out.
-// A nebula that does not fade is what reaches the frame border, so the outer ones are pulled in
+// GALAXY-REST: the pockets were seeded out to radius 4.6, where the point cloud faded out.
+// A nebula that does not fade is what reaches the frame border, so the outer ones were pulled in
 // and dimmed; the arms keep their colour, the picture stops running off the edges.
-const PULL_IN = 0.76;
+//
+// Round 3 returns them to their authored radii. The disc is 6.3 now and does not begin to fade
+// until 3.9, so 4.6 is no longer past the cloud's edge - it sits in the arms, which is where a
+// star-birth region belongs. The two outermost stay dimmed.
+const PULL_IN = 1.0;
 const POCKETS: Pocket[] = [
   { img: 'lagoon', pos: [2.8, 0.15, 1.6], scale: 3.2, tint: '#e88fb0', op: 0.5 }, // pink HII
   { img: 'orion', pos: [-3.2, 0.1, -1.2], scale: 3.6, tint: '#c99ce0', op: 0.42 }, // violet HII

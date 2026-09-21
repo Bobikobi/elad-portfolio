@@ -22,8 +22,18 @@ interface GalaxyProps {
 // arms, and the per-point angular spread below is what makes them broad and irregular instead
 // of four thin wires. The core is ivory rather than gold because it is the only warm thing left
 // in the frame and gold at this density smeared across 41% of the picture.
+// GALAXY-REST round 3: the owner, twice, "the galaxy is too small, spread it wider". The
+// projected disc was never the problem - a circle at radius 4 already spans 1550 px of a
+// 1440 px frame. What made it read as a small blob in the middle was the RIM FADE: it
+// started at 0.48 of the radius and was complete at 0.88, so half the disc's radius carried
+// no light and the visible galaxy ended around 0.68 of it. The fade starts later and runs to
+// the very rim now, the radius grows with it, and the radial law pushes points outward so
+// the larger disc is not paid for by thinning the arms.
 const PARAMS = {
-  radius: 5.15,
+  radius: 6.3,
+  rimStart: 0.62, // share of the radius where the cloud begins to dissolve
+  rimEnd: 1.0,
+  radialPower: 0.72, // < 1 pushes points outward; at 0.9 the outer arms went thin as the disc grew
   branches: 2,
   spin: 0.42,
   randomness: 0.22,
@@ -66,7 +76,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       // which is what makes the core a point instead of the inner half of the disc.
       const radius = bulge
         ? Math.pow(rnd(), 2.6) * PARAMS.bulgeRadius
-        : 0.35 + Math.pow(rnd(), 0.9) * (PARAMS.radius - 0.35);
+        : 0.35 + Math.pow(rnd(), PARAMS.radialPower) * (PARAMS.radius - 0.35);
       const branchAngle = ((i % PARAMS.branches) / PARAMS.branches) * Math.PI * 2;
       const spinAngle = radius * PARAMS.spin;
       // Angular scatter across the arm, widening outward, with a cube law so the arm has a
@@ -112,8 +122,11 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
 
       scales[i] = 0.5 + rnd() * 0.8;
       // Rim fade: the old cloud had a hard outer edge that the frame cut off, so the galaxy ran
-      // off three borders. The last quarter of the radius fades out instead.
-      const rim = 1 - smoothstep(0.48, 0.88, t);
+      // off three borders. The outer third of the radius fades out instead, and the fade now
+      // runs all the way to the rim rather than finishing at 0.88 - a cloud that still carries
+      // light at the frame's edge but is visibly FALLING there is what "dissolving into black"
+      // means; stopping early is how the galaxy ended up small and centred.
+      const rim = 1 - smoothstep(PARAMS.rimStart, PARAMS.rimEnd, t);
       dims[i] = bulge ? PARAMS.bulgeGain : laneKeep * rim * PARAMS.discDim;
     }
 
