@@ -9,6 +9,7 @@ export const galaxyVertexShader = /* glsl */ `
   attribute float aScale;
   attribute vec3 aRandomness;
   attribute vec3 aColor;
+  attribute float aDim;
 
   varying vec3 vColor;
   varying float vDistanceFade;
@@ -17,14 +18,27 @@ export const galaxyVertexShader = /* glsl */ `
   void main() {
     vec4 modelPosition = modelMatrix * vec4(position, 1.0);
 
-    // Spin: inner stars rotate faster than outer ones (angular velocity ~ 1/radius).
     float angle = atan(modelPosition.x, modelPosition.z);
     float radius = length(modelPosition.xz);
 
     // Dim each core star so the dense center accumulates into a soft gold glow
     // under additive blending instead of clipping to white.
-    vAlpha = mix(0.35, 0.9, smoothstep(0.0, 3.5, radius));
-    float angleOffset = (1.0 / (radius + 0.35)) * uTime * 0.28;
+    // aDim carries the dust lanes and the rim fade, both decided once on the CPU.
+    vAlpha = mix(0.35, 0.9, smoothstep(0.0, 3.5, radius)) * aDim;
+
+    // GALAXY-REST: the spin was differential - angular velocity ~ 1/radius, which is the right
+    // law for an individual STAR and the wrong one for the arm pattern. Applied to the pattern
+    // it winds the arms up: across the annulus that holds them it accumulates 9.7 radians of
+    // shear in under two minutes. Measured on the deployed build, between 27 and 110 seconds the
+    // two-arm signal in the mid disc fell from 0.494 to 0.286, while out at radius 3-4 the
+    // FOUR-fold signal rose from 0.024 to 0.139 - arms shearing into rings, in both numbers at
+    // once. The galaxy does that while the visitor watches - the exact thing this stage exists to
+    // remove,
+    // which means fixing the first frame fixed nothing. This is the winding problem, and real
+    // spirals answer it the same way: the arms are a density wave whose PATTERN turns at one
+    // speed at every radius, so the shape is permanent. The bulge is a symmetric blob and loses
+    // nothing by turning at the same rate as the disc.
+    float angleOffset = uTime * 0.045;
     angle += angleOffset;
     modelPosition.x = sin(angle) * radius;
     modelPosition.z = cos(angle) * radius;

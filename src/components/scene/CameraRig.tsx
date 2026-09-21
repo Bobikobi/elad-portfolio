@@ -227,20 +227,31 @@ const REVEAL_HOLD_CAP = 0.4;   // s - past this the floor alone governs
 const REVEAL_FADE = 0.35; // s
 const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
-// Immersive welcome: low + close, looking ACROSS the galaxy plane so it fills the
-// frame and spills off the left/right edges (you're inside space, not viewing a disc).
-const LOOK = new THREE.Vector3(0, 0.5, 0);
+// GALAXY-REST replaces the old welcome decision. It used to look at y = 0.5 so the disc
+// filled the frame and spilled off the left and right edges ("you're inside space, not
+// viewing a disc"); the owner's direction is now a tilted galaxy across the LOWER half with
+// its edges dissolving into black. Looking higher tilts the camera up, which drops the disc
+// down the frame without moving the galaxy or the dive's path.
+const LOOK = new THREE.Vector3(0, 1.5, 0);
 // T4 dive choreography — a cubic-Bézier S-curve that PITCHES THROUGH the disc plane
 // (y: +2.6 above → −0.9 below), not parallel to it, so the galaxy disc is never a flat
 // horizontal band. Ends inside a spiral ARM (offset from centre, Sol's neighbourhood);
 // the gold core slides sideways to hang in the background.
-const DIVE_P0 = new THREE.Vector3(0, 2.6, 9);
-const DIVE_C1 = new THREE.Vector3(-0.7, 2.5, 6.4);
+// GALAXY-REST round 2 (owner: "the galaxy is too small, spread it wider"): the welcome shot
+// moved from z 9 to z 8, so the disc is larger in frame and still lies across the lower half.
+// Round 3 lifts the camera instead - see WELCOME_IDLE. The dive START must be the same point
+// the idle shot sits at or scroll 0.015 jumps the camera, so P0 moves with it. C1 rises with P0
+// as well, because leaving it at 2.5 under a P0 at 4.6 turns the opening third of the dive into
+// a plunge; C2/P1 and the shape of the rest of the path are untouched.
+const DIVE_P0 = new THREE.Vector3(0, 4.6, 8.0);
+const DIVE_C1 = new THREE.Vector3(-0.7, 4.0, 6.4);
 const DIVE_C2 = new THREE.Vector3(2.9, 0.4, 3.2);
 const DIVE_P1 = new THREE.Vector3(3.7, -0.9, 1.5);
 // Look pitches from looking-DOWN at the core (camera above the plane) to looking-UP at
 // the arm (camera below it) — the disc sweeps across the frame at an angle.
-const LOOK_START = new THREE.Vector3(0, 0.25, 0);
+// Same point as LOOK: the dive must start from exactly where the welcome shot was looking,
+// or the handover at scroll 0.015 jumps the look target.
+const LOOK_START = new THREE.Vector3(0, 1.5, 0);
 const LOOK_END = new THREE.Vector3(5.2, 0.9, -1.5);
 const _tmp = new THREE.Vector3();
 /** Cubic Bézier into `out`. */
@@ -812,12 +823,33 @@ export default function CameraRig() {
       const p = scrollProgress;
       if (p < 0.015) {
         // WELCOME_IDLE — low, close, looking across the plane; gentle drift + parallax.
+        // The drift used to be +-0.7 across and +-0.5 in depth at nine units out, which reads as a
+        // still picture with a slow wobble (owner: "too small for a three-dimensional view").
+        // Sliding the camera sideways is the wrong way to make it bigger: measured over a full
+        // cycle it took the galaxy off the bottom-left corner (the outer band went 4.3 to 30.8
+        // between two phases of the same build). The motion is an ORBIT around the galaxy
+        // instead - +-7.5 degrees of yaw and +-3 of pitch - which is a stronger depth cue,
+        // because the near arm and the far arm move opposite ways, and it cannot take the
+        // composition off the frame. Depth breathing stays; the pointer keeps its own offset.
+        //
+        // Round 3, and this is the answer to "still small and only in the middle". The galaxy was
+        // never narrow - a circle at world radius 4 already projects 1550 px across a 1440 px
+        // frame. It was FLAT. At y 2.0 and z 8 the camera sits 14 degrees above the disc, so a
+        // circle in it comes back as an ellipse of axis ratio 0.31 and the whole galaxy reads as
+        // a thin ribbon lying across the middle with empty sky above and below it. Widening the
+        // cloud only made the ribbon longer, and it ran off the left and right borders instead
+        // (measured: the side bands went to 13.6 and 15.3). Lifting the camera to y 4.6 puts it
+        // 30 degrees above the plane, where the same circle comes back at about 0.5 and the
+        // galaxy occupies the frame in BOTH directions. LOOK stays at y 1.5, above the disc, so
+        // the sightline still tilts down and the galaxy still sits in the lower half.
         _tgt.set(
-          Math.sin(t * 0.08) * 0.7 + px * 1.5,
-          2.6 + Math.sin(t * 0.07) * 0.25 + py * 0.9,
-          9 + Math.cos(t * 0.08) * 0.5
+          px * 1.8,
+          4.6 + py * 1.2,
+          8.0 + Math.cos(t * 0.085) * 0.9
         );
-        applyOrbit(_tgt, LOOK, orbit.current.yaw, orbit.current.pitch); // drag-to-rotate (T6)
+        applyOrbit(_tgt, LOOK,
+          orbit.current.yaw + Math.sin(t * 0.09) * 0.13,   // drag-to-rotate (T6) + idle orbit
+          orbit.current.pitch + Math.sin(t * 0.062) * 0.05);
         damp3(cam.position, _tgt, 0.5, dt);
         damp(cam, 'fov', 55, 0.5, dt);
         cam.lookAt(LOOK.x, LOOK.y, LOOK.z);

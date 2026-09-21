@@ -4,14 +4,26 @@ import * as THREE from 'three';
 import { softSprite, makeSparkleMaterial } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 
-const RADIUS = 6;
-const BRANCHES = 4;
-const SPIN = 1.1;
+// GALAXY-REST: these used to be 6 / 4 / 1.1 - the galaxy's old four-branch, tightly wound shape.
+// The point cloud is two broad arms that fade out over their outer third, so the old numbers
+// scattered the pink pockets and hero stars over empty sky, including out at the frame edges.
+// They track the arms again, and stop short of the fade.
+//
+// Round 3 keeps them in step with Galaxy.tsx's PARAMS: the disc grew to 6.3 and its fade moved
+// out to 0.62, so detail that stopped at 0.8 of the OLD radius would now sit in the bright inner
+// half only and leave the widened arms bare.
+const RADIUS = 6.3;
+const BRANCHES = 2;
+const SPIN = 0.42;
+const OUTER = 0.78; // no detail past here: beyond it the arms themselves are fading out
 
 /** A point on a spiral arm (matches Galaxy's params) with a little scatter. */
 function armPoint(rng: () => number): [number, number, number] {
-  const radius = 1 + Math.pow(rng(), 0.7) * (RADIUS - 1);
-  const branch = (Math.floor(rng() * BRANCHES) / BRANCHES) * Math.PI * 2;
+  // Radius spread evenly from outside the core, plus an angular scatter across the arm: two
+  // branches with a power law piled all 22 pockets into two clumps against the core, which read as
+  // pink bokeh balls rather than star-birth regions along the arms, and swelled the measured core.
+  const radius = 2.2 + rng() * (RADIUS * OUTER - 2.2);
+  const branch = (Math.floor(rng() * BRANCHES) / BRANCHES) * Math.PI * 2 + (rng() - 0.5) * 0.6;
   const spin = radius * SPIN;
   const scatter = () => (rng() - 0.5) * 0.5;
   return [Math.cos(branch + spin) * radius + scatter(), scatter() * 0.4, Math.sin(branch + spin) * radius + scatter()];
@@ -33,7 +45,7 @@ export default function GalaxyDetail() {
     const rng = makeRng(SEED.galaxyDetail);
     return Array.from({ length: 22 }, () => ({
       pos: armPoint(rng),
-      scale: 0.3 + rng() * 0.5,
+      scale: 0.22 + rng() * 0.32,
       hue: rng() > 0.5 ? '#e0559b' : '#c0407a',
     }));
   }, []);
@@ -70,7 +82,7 @@ export default function GalaxyDetail() {
       ))}
       {hii.map((h, i) => (
         <sprite key={`hii${i}`} position={h.pos} scale={[h.scale, h.scale, 1]}>
-          <spriteMaterial map={soft} color={h.hue} transparent opacity={0.5} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+          <spriteMaterial map={soft} color={h.hue} transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
         </sprite>
       ))}
       {heroStars.map((h, i) => (

@@ -40,7 +40,7 @@ const GALAXIES: Patch[] = [
   { pos: [18, -30, -74], scale: 3.4, color: '#cfe0ff', op: 0.36 },
 ];
 
-export default function Nebula({ intensity = 1 }: { intensity?: number }) {
+export default function Nebula({ intensity = 1, anchor = 1 }: { intensity?: number; anchor?: number }) {
   const tex = useMemo(() => softSprite(), []);
   const group = useRef<THREE.Group>(null);
   // B4+: every patch drifts AND breathes on its own period, and the periods are chosen so
@@ -77,12 +77,18 @@ export default function Nebula({ intensity = 1 }: { intensity?: number }) {
       ))}
       {/* Galaxy-core anchor - the gold we came from, hanging small + low on the far
           horizon. Same gold + sprite as the sun's halo = the colour bridge between
-          acts. Kept distant and dim so it never competes with the real sun. */}
-      <sprite position={[-56, -12, -76]} scale={[20, 13, 1]}>
-        <spriteMaterial map={tex} color={CORE_GOLD} transparent opacity={0.3 * intensity} blending={THREE.AdditiveBlending} depthWrite={false} />
+          acts. Kept distant and dim so it never competes with the real sun.
+
+          GALAXY-REST: `anchor` is 0 in the galaxy act. This is the one thing here that is a
+          STORY object rather than backdrop, and the story has not happened yet at the welcome
+          frame - it was just a bright gold ellipse hanging half off the left border, and it was
+          the whole of the left edge band's reading (10.3 of 10.3, in master too). Solar keeps
+          it at exactly its old strength, so the six solar views do not move. */}
+      <sprite position={[-56, -12, -76]} scale={[20, 13, 1]} visible={anchor > 0}>
+        <spriteMaterial map={tex} color={CORE_GOLD} transparent opacity={0.3 * intensity * anchor} blending={THREE.AdditiveBlending} depthWrite={false} />
       </sprite>
-      <sprite position={[-56, -12, -75]} scale={[7, 5, 1]}>
-        <spriteMaterial map={tex} color={'#fff0d0'} transparent opacity={0.38 * intensity} blending={THREE.AdditiveBlending} depthWrite={false} />
+      <sprite position={[-56, -12, -75]} scale={[7, 5, 1]} visible={anchor > 0}>
+        <spriteMaterial map={tex} color={'#fff0d0'} transparent opacity={0.38 * intensity * anchor} blending={THREE.AdditiveBlending} depthWrite={false} />
       </sprite>
     </group>
   );
