@@ -128,6 +128,14 @@ export interface ClockFreezeHandle {
   state: () => ClockFreezeState;
 }
 
+/** The camera's own matrices at the frozen frame, for an EXACT deprojection of the disc. */
+export interface CameraReadState {
+  projection: number[];
+  world: number[];
+  position: [number, number, number];
+  fov: number;
+}
+
 type PendingClockBarrier = {
   ready: (control: ClockControl) => boolean;
   resolve: (state: ClockFreezeState) => void;
@@ -342,6 +350,24 @@ export function ClockFreezeProbe() {
 
     (window as unknown as { __clock?: ClockFreezeHandle }).__clock = handle;
 
+    // GALAXY-REST: the angular analysis has to undo the disc's tilt before it can ask whether
+    // the arms are two or four. Fitting that tilt per frame from the second moments of the
+    // picture takes in sky, stars and nebulae as well as the disc, and on three phases of one
+    // unchanged build it read 0.53 / 0.68 / 0.53 - a swing the galaxy never made. The disc
+    // lies in world y = 0, so the camera's own two matrices give the exact map from the plane
+    // to the screen at whatever phase the drift happens to be at. Read, never written.
+    const camera = (): CameraReadState => {
+      const cam = get().camera as THREE.PerspectiveCamera;
+      cam.updateMatrixWorld();
+      return {
+        projection: [...cam.projectionMatrix.elements],
+        world: [...cam.matrixWorld.elements],
+        position: [cam.position.x, cam.position.y, cam.position.z],
+        fov: cam.fov ?? 0,
+      };
+    };
+    (window as unknown as { __camera?: () => CameraReadState }).__camera = camera;
+
     return () => {
       if (c.frozen) {
         clock.elapsedTime = c.frozenAt;
@@ -351,8 +377,9 @@ export function ClockFreezeProbe() {
       for (const p of c.pending.splice(0)) p.resolve(clockSnapshot(c));
       restoreGetDelta(c);
       control.current = null;
-      const debugWindow = window as unknown as { __clock?: ClockFreezeHandle };
+      const debugWindow = window as unknown as { __clock?: ClockFreezeHandle; __camera?: () => CameraReadState };
       if (debugWindow.__clock === handle) delete debugWindow.__clock;
+      if (debugWindow.__camera === camera) delete debugWindow.__camera;
     };
   }, [get]);
 
