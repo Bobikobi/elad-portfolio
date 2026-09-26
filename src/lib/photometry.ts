@@ -9,7 +9,12 @@ export const AMBIENT_FILL_INTENSITY = 0.06;
 // Linear material-colour multipliers: real geometric albedo divided by each texture's
 // linear mean, from the P3 measurements in docs/briefs/PHOTOMETRY-megaplan.md.
 export const MERCURY_ALBEDO_MULTIPLIER = 0.60;
-export const VENUS_ALBEDO_MULTIPLIER = 2.76;
+// Venus 2.76 -> 1.40 (stage feat/venus-burnt-white; P4-3 bar <= 958 burnt px on the overview).
+// Local sweep, p3-albedo + p4-chroma, real GPU, burnt-in-all-channels pixels of 2,081: 2.76 -> 1,483,
+// 2.2 -> 1,294, 1.8 -> 1,108, 1.4 -> 855. P3-3 (Venus still brightest) holds at every value tried.
+// It is no longer the measured real albedo: the overview clips because compressed orbits put her
+// 2.55 units from the sun, and the albedo is the only lever the rolloff work left.
+export const VENUS_ALBEDO_MULTIPLIER = 1.40;
 export const EARTH_ALBEDO_MULTIPLIER = 2.17;
 export const MARS_ALBEDO_MULTIPLIER = 0.75;
 export const JUPITER_ALBEDO_MULTIPLIER = 1.45;
@@ -32,8 +37,15 @@ export const NEPTUNE_ALBEDO_MULTIPLIER = 4.38;
 // jupiter 140 / clip 0%, saturn 93 / 0%, mars 95 / 0.9%, earth 211 / 19.5% — Earth is the
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
+// Saturn re-measured (?orbitexp sweep, /projects, 1440x900, real GPU, preview of PR #43, disc from
+// ?ringprobe, 95% of R; 0.68 measured twice: 141.8 / 142.0): 0.68 -> mean 142 p99 248, 0.45 -> 131 / 243,
+// 0.3 -> 118 / 236, 1.0 -> 151 / 251; clipped >=250 is 0% throughout. 0.68 sat above the 90-135 band the
+// other worlds were held to; 0.45 is the smallest cut that lands inside it and keeps shoulder headroom.
+// Mars re-measured over one full turn (24 longitudes, ?orbitexp sweep, preview of PR #43): clipped share
+// of the disc, worst longitude 297.9 deg, 0.92 -> 11.10% (mean lum 115-164), 0.75 -> 3.55%, 0.6 -> 0.001%
+// (mean lum 96-148, average 121, inside the 90-135 band). 0.6 is the first value with 23 of 24 longitudes clean.
 // The string index signature permits an unmapped focus; CameraRig owns its neutral fallback.
-export const ORBIT_APERTURE: Record<string, number> = { earth: 0.45, mars: 0.92, jupiter: 0.50, saturn: 0.68, belt: 0.66 };
+export const ORBIT_APERTURE: Record<string, number> = { earth: 0.45, mars: 0.6, jupiter: 0.50, saturn: 0.45, belt: 0.66 };
 
 /** Renderer aperture before a world is selected and after departure from one. */
 export const NEUTRAL_APERTURE = 1;
@@ -47,6 +59,13 @@ export const NEUTRAL_APERTURE = 1;
 // are toneMapped:false and untouched by this.
 export const SUN_LAMP_INTENSITY = 200;
 export const SUN_LAMP_DISTANCE = 90;
+/** Lamp scale while no world is focused (the overview). Exposure cannot do this job: the ACES
+ *  shoulder moved lit faces only ~9 levels for a 0.6 aperture, so the light itself is scaled. */
+// Local sweep, overview lit-face mean (Uranus / Saturn / Mars / Earth / Neptune): 1.0 -> 212/239/222/136/101,
+// 0.5 -> 189/227/181/98/91, 0.25 -> 133/203/127/76/68. Neptune stays over P3-2's 60 floor.
+// Elad judged 0.25 still a bit bright and 0.18 / 0.12 too dark side by side (?lamp=, 2026-09-26);
+// 0.21 chosen by eye. Neptune was not re-measured at 0.21 and may sit just under the 60 floor.
+export const SUN_LAMP_OVERVIEW_SCALE = 0.21;
 // P3 change 2, and a DELIBERATE DEPARTURE FROM PHYSICS under RULING 3 (2026-08-17):
 // the owner ruled that appearance beats physical accuracy where the two collide.
 //

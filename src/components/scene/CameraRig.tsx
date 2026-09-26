@@ -18,8 +18,28 @@ const clampUnit = (x: number) => (x < -1 ? -1 : x > 1 ? 1 : x);
 
 // --- T1 swap machine constants -------------------------------------------------
 const DEV = process.env.NODE_ENV !== 'production';
+/** See the note at the `livePlanetRect` write below. Read once, at import. */
+const DISC_PROBE =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discprobe');
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
+
+/**
+ * `?orbitexp=0.7` overrides the focused world's aperture for one page load, so the values in
+ * ORBIT_APERTURE can be SWEPT and measured instead of guessed. The response is severely
+ * compressed at the top of the curve, so a value must never be inferred by eye. It does
+ * nothing on the overview and nothing without the parameter. Read once, at import.
+ */
+const ORBIT_APERTURE_OVERRIDE =
+  typeof window !== 'undefined'
+    ? (() => {
+        // Explicit parse: `?orbitexp=0` is a real sweep value and must not read as absent.
+        const v = new URLSearchParams(window.location.search).get('orbitexp');
+        if (v === null || v.trim() === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      })()
+    : null;
 
 // --- The ORBIT vantage is SOLVED, not dialled in --------------------------------------
 // The old construction was "sit A radians off the lit direction, then add a fixed vertical
@@ -224,7 +244,7 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 const REVEAL_FRAMES = 8;
 const REVEAL_MIN_FRAMES = 2;   // readiness floor - drawn frames, never wall-clock
 const REVEAL_HOLD_CAP = 0.4;   // s - past this the floor alone governs
-const REVEAL_FADE = 0.35; // s
+const REVEAL_FADE = 0.25; // s - was 0.35, the black stretch after the swap was the longest part of the dark
 const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
 // Immersive welcome: low + close, looking ACROSS the galaxy plane so it fills the
@@ -235,13 +255,15 @@ const LOOK = new THREE.Vector3(0, 0.5, 0);
 // horizontal band. Ends inside a spiral ARM (offset from centre, Sol's neighbourhood);
 // the gold core slides sideways to hang in the background.
 const DIVE_P0 = new THREE.Vector3(0, 2.6, 9);
-const DIVE_C1 = new THREE.Vector3(-0.7, 2.5, 6.4);
-const DIVE_C2 = new THREE.Vector3(2.9, 0.4, 3.2);
-const DIVE_P1 = new THREE.Vector3(3.7, -0.9, 1.5);
+const DIVE_C1 = new THREE.Vector3(0, 1.82, 6.3);
+const DIVE_C2 = new THREE.Vector3(2.8, 0.12, 3.0);
+// The dive now ENDS INSIDE the disc (y +0.08) instead of below it: the v2 path crossed the
+// plane and finished under an edge-on sheet, which read as "entering under the galaxy".
+const DIVE_P1 = new THREE.Vector3(3.7, 0.08, 1.5);
 // Look pitches from looking-DOWN at the core (camera above the plane) to looking-UP at
 // the arm (camera below it) — the disc sweeps across the frame at an angle.
 const LOOK_START = new THREE.Vector3(0, 0.25, 0);
-const LOOK_END = new THREE.Vector3(5.2, 0.9, -1.5);
+const LOOK_END = new THREE.Vector3(4.6, 0.05, -1.5); // level with the camera: it ends inside the disc, looking along it
 const _tmp = new THREE.Vector3();
 /** Cubic Bézier into `out`. */
 function cubicBezier(out: THREE.Vector3, p0: THREE.Vector3, c1: THREE.Vector3, c2: THREE.Vector3, p1: THREE.Vector3, e: number) {
@@ -396,6 +418,14 @@ function publishLimb(
   livePlanetRect.vw = vw;
   livePlanetRect.vh = vh;
   livePlanetRect.stamp = performance.now();
+  // `?discprobe=1` publishes that same disc to the DOM, so an exposure measurement can be
+  // taken over the disc the camera actually framed. The alternative - finding the planet by
+  // thresholding a screenshot - selects the bright half of the body and then reports how
+  // bright it is, which is how "over-exposed" and "clipped" get confused. Off by default;
+  // the cost when off is one boolean per frame.
+  if (DISC_PROBE) {
+    document.documentElement.dataset.planetDisc = `${cx.toFixed(1)},${cy.toFixed(1)},${(r / 8).toFixed(1)}`;
+  }
 }
 const _orbOff = new THREE.Vector3();
 const _orbAxis = new THREE.Vector3();
@@ -733,7 +763,14 @@ export default function CameraRig() {
         // sees the seam. So state the rule directly instead of hoping the damp implies it:
         // a frame that WOULD cross the swap point stops exactly on it. One frame at full
         // coverage is guaranteed, whatever the frame took.
-        if (prevGate !== pGate.current && (prevGate < SWAP_V) !== (pGate.current < SWAP_V)) {
+        // …but never FROM the swap point itself. The snap leaves the gate at exactly SWAP_V,
+        // which counts as the solar side, so on the way UP the next frame saw a "crossing"
+        // (0.9 is not < 0.9, the damped step below it is) and snapped it back, every frame,
+        // for as long as the scroll stayed above: the gate was pinned at 0.9, `desired` stayed
+        // solar, the swap never fired and the page stuck in the solar act with the curtain shut.
+        // Recorded on the pre-CROSSING build as well: a ramp from the solar system to the top
+        // ends in `solar` with the gate at 0.9000 for the whole way. Only the dive had escaped it.
+        if (prevGate !== SWAP_V && prevGate !== pGate.current && (prevGate < SWAP_V) !== (pGate.current < SWAP_V)) {
           pGate.current = SWAP_V;
         }
         const g = pGate.current;
@@ -828,15 +865,19 @@ export default function CameraRig() {
         cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, e);
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);
-        damp3(cam.position, _tgt, 0.22, dt);
+        // Pure function of scroll once the dive is under way, so scrolling back retraces the
+        // same frames (damping made the return a lagged, different path). A short damp only
+        // over the first 0.05 of scroll hides the hand-off from the idle drift pose.
+        const diveTau = 0.22 * (1 - clamp01((p - 0.015) / 0.05));
+        damp3(cam.position, _tgt, diveTau, dt);
         // FOV opens for speed on the way in, eases back near arrival (deceleration cue).
         const fov = 55 + 13 * Math.sin(clamp01(e) * Math.PI * 0.85);
-        damp(cam, 'fov', fov, 0.22, dt);
+        damp(cam, 'fov', fov, diveTau, dt);
         // Look pitches down→up as the camera crosses the plane, and a small extra pitch
         // bump mid-dive — so the disc sweeps across the frame at an angle, never a flat
         // horizontal band. The core (LOOK_END.x) slides off-side toward the arm.
         _look.copy(LOOK_START).lerp(LOOK_END, easeInOutCubic(e));
-        _look.y += 0.5 * Math.sin(e * Math.PI);
+        _look.y += 0.15 * Math.sin(e * Math.PI);
         cam.lookAt(_look.x, _look.y, _look.z);
         // Cinematic bank — a roll that tilts the disc diagonally (kills any residual
         // horizontal read). Frequency 0.85π so it stays banked THROUGH the late crossing
@@ -1085,7 +1126,7 @@ export default function CameraRig() {
     // as the departure meter scrubs back toward the overview, ease exposure back to 1.
     const fp = useScene.getState().focusedPlanet;
     const dep = fp ? clamp01(useScene.getState().departure) : 0;
-    const orbitExpo = fp ? ORBIT_APERTURE[fp] ?? NEUTRAL_APERTURE : NEUTRAL_APERTURE;
+    const orbitExpo = fp ? ORBIT_APERTURE_OVERRIDE ?? ORBIT_APERTURE[fp] ?? NEUTRAL_APERTURE : NEUTRAL_APERTURE;
     const expoTarget = act === 'solar' && fp ? orbitExpo + (NEUTRAL_APERTURE - orbitExpo) * dep : NEUTRAL_APERTURE;
     damp(state.gl, 'toneMappingExposure', expoTarget, 0.4, dt);
 
