@@ -9,6 +9,9 @@ pixels above level 200, and the mean of each channel. From those:
   C2  the jump        max |mean(t) - mean(t-1)| <= C2_JUMP, and no near-black frame with a
                       bright neighbour within C2_REACH frames
   C3  invented colour max |mean R - mean G| <= C3_RG
+  C5  the dead stretch how much of the scroll the frame spends near black (span <= C5_SPAN)
+                      and where that stretch may start (>= c5_from) - the criterion CROSSING v1
+                      did not have, and the one its owner's eye failed it on
 
 The bars live in the brief (docs/briefs/CROSSING-brief.md) and are repeated here so a run can
 be judged without it; changing one here without changing it there is a defect.
@@ -29,6 +32,7 @@ from PIL import Image
 # recordings, which keep the DOM on screen. The two scales do not convert.
 C1_MEAN = 80.0
 C1_BRIGHT_PCT = 8.0
+C1_UP_FROM = 0.10
 
 # C2: the settled solar system's own mean is 30.6, so a 25-level step is under one settled
 # scene's worth of change in a single frame. A bar on violence, not on speed.
@@ -40,9 +44,31 @@ C2_DARK = 20.0     # "near black"
 C2_BRIGHT = 100.0  # "bright"
 C2_REACH = 3       # frames either side
 
-# C3: |R-G| reads 1.4 at the galaxy and 7.8 at the settled solar system. 10 is just past the
-# looser end.
-C3_RG = 10.0
+# C3: |R-G| reads 1.4 at the galaxy and 7.8 at the settled solar system. The v1 bar of 10 is
+# what forced the fade to be COMPLETE by scroll 0.64 - the galaxy's own gold core fills the view
+# from there to the swap, so obeying 10 meant blacking it out. The bar is now the ember's own
+# measured split rounded up, and the reason it may move at all is that this colour is the
+# galaxy's, not an invention. Ceiling 20, which is where a warm frame starts to read as a tint
+# rather than as a lit object. See CROSSING-brief.md.
+C3_RG = 20.0
+
+# C5: the dead stretch. v1 shipped the frame under mean 20 across 0.444 of the whole scroll, in
+# both directions, with nothing changing inside it - the owner read it as the scene switching
+# off and the scroll sticking. Two numbers, because "how long" and "where" fail differently:
+#
+#   C5_SPAN  how much of the scroll is near black. The draft bar was 0.10 and is not reachable:
+#            the swap curtain alone holds the frame under 20 across 0.111 of the scroll, which
+#            follows from COVER_PLATEAU + COVER_FALLOFF in diveEnvelope and is the crossover
+#            itself. 0.15 is that geometry plus room for the last of the dive to dim into it.
+#   C5_FROM  where the darkness may begin: not before the curtain does. Coverage first leaves 0
+#            at scroll 0.8444, so anything dark before 0.84 is the dive going dark on its own -
+#            exactly v1's defect, which began at 0.556.
+C5_DARK = 20.0
+C5_SPAN = 0.15
+C5_FROM = 0.84
+# On the way back up the curtain's reveal tail runs below the plateau by the reveal's wall time
+# (~0.5 s), so the near-black run may end that much lower than the down direction's start.
+C5_FROM_UP = 0.80
 
 LUMA = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
 
@@ -92,6 +118,17 @@ def judge(run):
         return {"tag": meta["tag"], "error": "fewer than 10 frames"}
 
     means = [r["mean"] for r in rows]
+    # Before the up-run filter below, which reads each frame's scroll position.
+    attached = attach_state(run, stamps, rows)
+    c1_rows, c1_mean, c1_pct = rows, C1_MEAN, C1_BRIGHT_PCT
+    c5_from = C5_FROM
+    if meta.get("dir") == "up":
+        c1_rows = [r for r in rows if r.get("sp") is None or r["sp"] >= C1_UP_FROM] or rows
+        # The run's own resting galaxy is the reference: it drifts brighter with scene time.
+        tail = rows[-20:]
+        c1_mean = max(C1_MEAN, sum(r["mean"] for r in tail) / len(tail) + 1.0)
+        c1_pct = max(C1_BRIGHT_PCT, sum(r["pct200"] for r in tail) / len(tail) + 0.3)
+        c5_from = C5_FROM_UP
     jumps = [abs(means[i] - means[i - 1]) for i in range(1, len(means))]
     rg = [abs(r["r"] - r["g"]) for r in rows]
 
@@ -111,7 +148,13 @@ def judge(run):
     # split just says which of the two halves a failure is coming from: the dive (the
     # streak field and the veils, coverage still 0) or the curtain (SwapMask).
     phases = {}
-    if attach_state(run, stamps, rows):
+    dark_span = None
+    dark_sp = []
+    if attached:
+        # The dead stretch, measured where the passage actually is: frames captured before the
+        # ramp started are the page sitting still and are not part of it.
+        dark_sp = [r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK]
+        dark_span = round(max(dark_sp) - min(dark_sp), 4) if dark_sp else 0.0
         for name, sel in (
             ("rest", [r for r in rows if r.get("pre")]),
             ("dive", [r for r in rows if not r.get("pre") and r.get("cov") == 0]),
@@ -139,9 +182,21 @@ def judge(run):
         "dark_holes": holes,
         "phases": phases,
         "settled_mean": round(float(np.mean(means[-15:])), 1),
-        "C1": "PASS" if max(means) <= C1_MEAN and max(r["pct200"] for r in rows) <= C1_BRIGHT_PCT else "FAIL",
+        "dark_span": dark_span,
+        "dark_sp_range": [round(min(dark_sp), 3), round(max(dark_sp), 3)] if dark_sp else None,
+        # C1 judges the PASSAGE. On the way back up the recording ends on the galaxy at rest, whose
+        # brightness drifts from 76 to 80 with scene time (measured, the fade is at 0 there and C4a
+        # holds the rest frame byte-identical to master), so frames where the fade is under ~1.5%
+        # (sp < C1_UP_FROM) are not the passage. Down runs judge every frame, as before.
+        "C1": "PASS" if max(r["mean"] for r in c1_rows) <= c1_mean and max(r["pct200"] for r in c1_rows) <= c1_pct else "FAIL",
+        "dark_frames": sum(1 for r in rows if not r.get("pre") and r["mean"] < C5_DARK),
         "C2": "PASS" if max(jumps) <= C2_JUMP and not holes else "FAIL",
         "C3": "PASS" if max(rg) <= C3_RG else "FAIL",
+        # A run whose state could not be attached cannot answer C5 at all, and says so rather
+        # than passing by default.
+        "C5": (("PASS" if dark_span <= C5_SPAN
+                and (not dark_sp or min(dark_sp) >= c5_from)
+                else "FAIL") if dark_span is not None else "UNKNOWN"),
     }
     json.dump({"meta": meta, "rows": rows}, open(os.path.join(run, "frames.json"), "w"))
     return out

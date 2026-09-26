@@ -2,7 +2,6 @@
 import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useScene, type Quality } from '@/lib/sceneStore';
-import { isIdle } from './PerfPacer';
 
 /**
  * Quality governor v2 (R5.9). Replaces drei's raw `PerformanceMonitor onDecline`, which
@@ -181,12 +180,9 @@ export default function QualityGovernor() {
 
     // --- steady-state tier governance --------------------------------------------------
     if (now - started.current < WARMUP_S) return;
-    // An idle page is being paced to 30fps on purpose. Measuring it here reads as a
-    // machine that cannot hold the target and demotes the tier for a scene nobody was
-    // even interacting with — measured on the branch alias, where six of eight cosmic
-    // routes came back `low` purely because they had been left alone for 2.5 seconds.
-    // Frames only count while the loop is running free.
-    if (isIdle(performance.now())) { belowFor.current = 0; aboveFor.current = 0; return; }
+    // There used to be an idle exemption here: an idle page was throttled to 30fps on purpose
+    // and read as a failing machine. FramePacer no longer throttles, so every frame is a real
+    // one and the tier is judged on a page left alone too.
     fps.current = fps.current ? fps.current * 0.9 + (1 / dt) * 0.1 : 1 / dt;
 
     if (pinned.current) return; // an explicitly pinned tier is not up for renegotiation
