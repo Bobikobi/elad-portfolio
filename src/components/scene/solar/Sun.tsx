@@ -100,7 +100,10 @@ const sunVert = /* glsl */ `
     // clocks twice moved the granulation half-life 4.407s -> 4.408s, i.e. not at all.
     // SUN-2's C3 wants a live limb and is measured against this term, so it is slowed by
     // four rather than by twenty, and C3 must be re-measured before this stage is signed.
-    float d = fbm(normalize(position) * 3.0 + vec3(0.0, uTime * 0.023, 0.0));
+    // SUN-ALIVE: the radial wobble is gone. It moved every vertex, so the whole face swam and
+    // the loops' roots came loose from it; the living edge is now the spicule fringe in the
+    // corona. Kept at zero rather than deleted so the note above still has its subject.
+    float d = 0.5;
     // 0.09 -> 0.13. With the bloom no longer smeared across the limb the silhouette is
     // measured against the geometry itself rather than the glow around it, and the same
     // displacement that read as 1.55% of the radius through the haze reads as 1.16%
@@ -129,8 +132,8 @@ const sunFrag = /* glsl */ `
     // The large scale keeps its job and loses its dominance: real photospheres do vary in
     // brightness across the disc, but slowly and gently, and it was this term - a cloud -
     // that the whole surface was reading as.
-    float slow = fbm(p + vec3(0.0, uTime*0.0015, 0.0));
-    float fast = fbm(p*2.6 - vec3(0.0, uTime*0.0048, uTime*0.0015));
+    float slow = fbm(p + vec3(0.0, uTime*0.008, 0.0));
+    float fast = fbm(p*2.6 - vec3(0.0, uTime*0.024, uTime*0.008));
     float big = slow*0.55 + fast*0.45;
 
     // THE GRANULATION. ~36 cells across the disc, which is what a photograph of the sun
@@ -140,7 +143,8 @@ const sunFrag = /* glsl */ `
     // cell sizes, even lane widths, the look of dried mud rather than plasma. Pushing the
     // sample point around with the large-scale field first breaks the regularity in both
     // size and shape, and costs one extra noise lookup.
-    vec3 warp = vec3(slow - 0.5, fast - 0.5, noise(p * 1.9 + vec3(7.3)) - 0.5) * 1.5;
+    // SUN-ALIVE: the warp itself flows, so granules are carried along instead of only fading.
+    vec3 warp = vec3(slow - 0.5, fast - 0.5, noise(p * 1.9 + vec3(7.3, 0.0, uTime * 0.05)) - 0.5) * 1.5;
     vec2 w = worley(vPos * 17.0 + warp + vec3(0.0, uTime * 0.00042, uTime * 0.0006));
     // Bright inside the cell, dark in the narrow lane where the two nearest centres are
     // equidistant. The upper edge is deliberately low - a wide smoothstep here paints fat
@@ -316,6 +320,13 @@ const sunFrag = /* glsl */ `
       spot *= 1.0 - 0.42 * (1.0 - smoothstep(0.50, 1.0, d2)) - 0.45 * (1.0 - smoothstep(0.20, 0.45, d2));
     }
     col *= spot;
+    // SUN-ALIVE: local flare-ups. A 3D noise swept through time at ~3 s per feature: blobs
+    // swell, burn white-hot above the bloom threshold and fade, each in its own place and at
+    // its own moment. This replaces the global pulse (one brightness for the whole ball),
+    // which is what "burning" is not.
+    float evn = noise(pd * 7.0 + vec3(0.0, 0.0, uTime * 0.33));
+    float ev = smoothstep(0.62, 0.84, evn) * smoothstep(0.30, 0.60, n) * spot;
+    col = mix(col, hot, ev * 0.6) * (1.0 + 2.2 * ev);
     col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.09, 1.0, limb);
     // SUN-4: the limb is cooler as well as darker - blue and then green fall away faster than
     // red, so the rim turns amber instead of just grey-orange. Red is untouched on purpose.
@@ -368,9 +379,11 @@ const promVert = /* glsl */ `
   varying vec3 vV;
   varying float vU;
   varying float vK;
+  varying vec3 vW;
   void main() {
     vU = aU; vK = aK;
     vN = normalMatrix * normal;
+    vW = (modelMatrix * vec4(position, 1.0)).xyz;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vV = -mv.xyz;
     gl_Position = projectionMatrix * mv;
@@ -380,10 +393,13 @@ const promFrag = /* glsl */ `
   uniform float uTime;
   uniform float uFill;
   uniform float uSeed;
+  uniform vec3 uSunC;
+  uniform float uSunR;
   varying vec3 vN;
   varying vec3 vV;
   varying float vU;
   varying float vK;
+  varying vec3 vW;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -398,17 +414,25 @@ const promFrag = /* glsl */ `
     float edge = uFill * 1.35 - 0.25;
     float vis = 1.0 - smoothstep(edge - 0.2, edge, m + 0.14 * wob);
     float dir = mod(vK, 2.0) < 0.5 ? 1.0 : -1.0;
-    float n = 0.65 * vnoise(vec2(vU * 6.0 - t * 0.16 * dir + uSeed + vK * 7.0, vK * 2.0 + t * 0.05))
-            + 0.35 * vnoise(vec2(vU * 15.0 - t * 0.28 * dir + uSeed * 1.7, vK * 5.0 + t * 0.09));
+    // SUN-ALIVE: the knots travel ~0.25 of the arc per second (was 0.03), so plasma is seen
+    // running along the loop instead of a lit wire slowly changing its pattern.
+    float n = 0.65 * vnoise(vec2(vU * 6.0 - t * 1.6 * dir + uSeed + vK * 7.0, vK * 2.0 + t * 0.05))
+            + 0.35 * vnoise(vec2(vU * 15.0 - t * 3.5 * dir + uSeed * 1.7, vK * 5.0 + t * 0.09));
     float bright = 0.5 + 1.0 * smoothstep(0.25, 0.8, n);
     bright *= 1.0 + 0.9 * pow(1.0 - m, 3.0);        // footpoints pool brighter
     float fr = pow(clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0), 1.4);
     float hot = clamp((bright - 0.7) * 0.9, 0.0, 1.0);
     vec3 col = mix(vec3(0.95, 0.24, 0.07), vec3(1.0, 0.50, 0.20), hot);
-    gl_FragColor = vec4(col * fr * bright * vis * 0.21, 1.0);
+    // SUN-ALIVE: drawn only OUTSIDE the disc as the camera sees it. Additive light laid over
+    // the face read as a loop seen THROUGH the sun (owner, 2026-09-26). Per fragment: the
+    // viewing ray's closest approach to the sun's centre, against the sun's radius.
+    vec3 rd = normalize(vW - cameraPosition);
+    vec3 sc = uSunC - cameraPosition;
+    float miss = length(sc - rd * dot(sc, rd));
+    float outside = smoothstep(uSunR, uSunR * 1.012, miss);
+    gl_FragColor = vec4(col * fr * bright * vis * outside * 0.42, 1.0);
   }
 `;
-const _pc = new THREE.Vector3();
 const _pt = new THREE.Vector3();
 const _pb = new THREE.Vector3();
 const _pp = new THREE.Vector3();
@@ -416,6 +440,9 @@ const _pq = new THREE.Vector3();
 const _pT = new THREE.Vector3();
 const _pn = new THREE.Vector3();
 const _pr = new THREE.Vector3();
+const _pv = new THREE.Vector3();
+const _sunW = new THREE.Vector3();
+const _yAxis = new THREE.Vector3(0, 1, 0);
 function makePromGeometry() {
   const per = PROM_SEG + 1;
   const nv = PROM_STRANDS * per * PROM_RING;
@@ -474,7 +501,7 @@ function fillPromGeometry(g: THREE.BufferGeometry, c: THREE.Vector3, t: THREE.Ve
       _pq.copy(c).multiplyScalar(Math.cos(phi2)).addScaledVector(t, Math.sin(phi2)).multiplyScalar(r2).addScaledVector(_pb, side);
       _pT.subVectors(_pq, _pp).normalize();
       _pn.crossVectors(_pb, _pT).normalize();
-      const rad = SUN_R * 0.012 * STRAND_RAD[k] * (1 + 0.7 * Math.pow(1 - bump, 3) + 0.18 * Math.sin(u * 9 + time * 0.4 + k));
+      const rad = SUN_R * 0.008 * STRAND_RAD[k] * (1 + 0.7 * Math.pow(1 - bump, 3) + 0.18 * Math.sin(u * 9 + time * 0.4 + k));
       for (let j = 0; j < PROM_RING; j++) {
         const al = (j / PROM_RING) * Math.PI * 2;
         _pr.copy(_pb).multiplyScalar(Math.cos(al)).addScaledVector(_pn, Math.sin(al));
@@ -491,7 +518,7 @@ function Prominences({ spin }: { spin: React.RefObject<THREE.Mesh | null> }) {
   const group = useRef<THREE.Group>(null);
   const geos = useMemo(() => Array.from({ length: PROM_COUNT }, () => makePromGeometry()), []);
   const uniforms = useMemo(
-    () => Array.from({ length: PROM_COUNT }, (_, i) => ({ uTime: { value: 0 }, uFill: { value: 0 }, uSeed: { value: i * 17.3 } })),
+    () => Array.from({ length: PROM_COUNT }, (_, i) => ({ uTime: { value: 0 }, uFill: { value: 0 }, uSeed: { value: i * 17.3 }, uSunC: { value: new THREE.Vector3() }, uSunR: { value: SUN_R } })),
     [],
   );
   const life = useMemo(() => {
@@ -501,8 +528,12 @@ function Prominences({ spin }: { spin: React.RefObject<THREE.Mesh | null> }) {
       offset: (i / PROM_COUNT) * 34 + rnd() * 6,
     }));
   }, []);
+  // Where each loop stands, chosen ONCE per life and then fixed to the surface: roots never slide.
+  const placed = useRef(Array.from({ length: PROM_COUNT }, () => ({
+    cycle: -1, c: new THREE.Vector3(), t: new THREE.Vector3(), span: 0, big: 0, lean: 0,
+  })));
   const clk = useRef(0);
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     // Own clock: the scene's elapsedTime restarts when the act mounts, and every phase here
     // (fill, sway, knots) jumped with it. This one only ever moves forward, and only smoothly.
     clk.current += Math.min(dt, 0.1);
@@ -511,45 +542,56 @@ function Prominences({ spin }: { spin: React.RefObject<THREE.Mesh | null> }) {
     if (!g) return;
     // The loops turn with the surface they stand on.
     if (spin.current) g.rotation.y = spin.current.rotation.y;
+    g.updateMatrixWorld();
+    g.getWorldPosition(_sunW);
+    const sunRw = SUN_R * g.getWorldScale(_pr).x;
+    // The camera's direction in the loops' own (spinning) frame. SUN-4 assumed the resting
+    // camera sat on +Z; any orbit broke both the placement and the fade built on it.
+    _pv.copy(state.camera.position);
+    g.worldToLocal(_pv).normalize();
+    const rate = HUD_AVAILABLE && SPIN_PINNED ? 0 : 0.03;
     for (let i = 0; i < PROM_COUNT; i++) {
       const L = life[i];
       const u = (t + L.offset) / L.len;
       const cycle = Math.floor(u);
       const ph = u - cycle;
-      // Each cycle re-rolls where the loop stands and how big it is, deterministically.
-      const rnd = makeRng(SEED.prominences + i * 7919 + cycle * 104729);
-      // Stand near the limb as the resting camera sees it (world z ~ 0), where a loop reads in profile; the
-      // surface turns under it, so the direction is pre-rotated back by the turn expected by mid-life.
-      const az = rnd() * Math.PI * 2;
-      // Rotation carries a point toward the viewer on the left of the disc and away on the right, so a loop
-      // starts behind the limb (left) or in front of it (right) and sweeps through the visible window.
-      const zc = (Math.cos(az) < 0 ? -0.42 : 0.5) + (rnd() - 0.5) * 0.12;
-      const rr = Math.sqrt(1 - zc * zc);
-      const rate = HUD_AVAILABLE && SPIN_PINNED ? 0 : 0.03;
-      const turn = (spin.current ? spin.current.rotation.y : 0) - rate * L.len * ph;
-      const wx = rr * Math.cos(az);
-      _pc.set(wx * Math.cos(turn) - zc * Math.sin(turn), rr * Math.sin(az), wx * Math.sin(turn) + zc * Math.cos(turn));
-      const psi = rnd() * Math.PI * 2;
-      const big = rnd() < 0.2 ? 0.5 : 0.18 + rnd() * 0.16;
-      const span = SUN_R * (0.18 + rnd() * 0.24);
-      const lean = (rnd() - 0.5) * 0.10;
+      const P = placed.current[i];
+      if (P.cycle !== cycle) {
+        P.cycle = cycle;
+        // Each cycle re-rolls where the loop stands and how big it is, deterministically.
+        const rnd = makeRng(SEED.prominences + i * 7919 + cycle * 104729);
+        // On the limb as the camera sees it NOW, a little in front of or behind it...
+        _pt.set(0, 1, 0).cross(_pv);
+        if (_pt.lengthSq() < 1e-4) _pt.set(1, 0, 0);
+        _pt.normalize();
+        _pb.crossVectors(_pv, _pt);
+        const az = rnd() * Math.PI * 2;
+        const zc = (rnd() - 0.5) * 0.24;
+        const rr = Math.sqrt(1 - zc * zc);
+        P.c.copy(_pt).multiplyScalar(rr * Math.cos(az)).addScaledVector(_pb, rr * Math.sin(az)).addScaledVector(_pv, zc);
+        // ...carried back by the turn still to come before mid-life, so it stands in profile then.
+        P.c.applyAxisAngle(_yAxis, -rate * L.len * (0.5 - ph)).normalize();
+        const psi = rnd() * Math.PI * 2;
+        P.big = rnd() < 0.2 ? 0.4 : 0.1 + rnd() * 0.12;
+        P.span = SUN_R * (0.18 + rnd() * 0.24);
+        P.lean = (rnd() - 0.5) * 0.1;
+        _pt.set(0, 1, 0).cross(P.c);
+        if (_pt.lengthSq() < 1e-4) _pt.set(1, 0, 0);
+        _pt.normalize();
+        _pb.crossVectors(P.c, _pt);
+        P.t.copy(_pt).multiplyScalar(Math.cos(psi)).addScaledVector(_pb, Math.sin(psi)).normalize();
+      }
       // The third loop is the occasional one: it sits out about a third of the time.
       const present = i < 2 ? 1 : smooth01((Math.sin(cycle * 2.399 + i) + 0.4) * 2);
-      let fill = smooth01(ph / 0.4) * smooth01((1 - ph) / 0.4) * present * smooth01(t / 8);
-      // Once the surface carries the loop over the face of the disc it fades out instead of glowing through it.
-      const rot = spin.current ? spin.current.rotation.y : 0;
-      const czNow = -_pc.x * Math.sin(rot) + _pc.z * Math.cos(rot);
-      fill *= 1 - smooth01((czNow - 0.02) / 0.22);
-      _pt.set(0, 1, 0).cross(_pc);
-      if (_pt.lengthSq() < 1e-4) _pt.set(1, 0, 0);
-      _pt.normalize();
-      _pb.crossVectors(_pc, _pt);
-      _pt.multiplyScalar(Math.cos(psi)).addScaledVector(_pb, Math.sin(psi)).normalize();
-      fillPromGeometry(geos[i], _pc, _pt, span, big * (0.5 + 0.5 * smooth01(ph / 0.5)), lean, t, i * 17.3 + cycle * 3.1);
+      // No on-disc fade any more: the shader hides exactly the fragments that cover the disc.
+      const fill = smooth01(ph / 0.4) * smooth01((1 - ph) / 0.4) * present * smooth01(t / 8);
+      fillPromGeometry(geos[i], P.c, P.t, P.span, P.big * (0.5 + 0.5 * smooth01(ph / 0.5)), P.lean, t, i * 17.3 + cycle * 3.1);
       const un = ((g.children[i] as THREE.Mesh).material as THREE.ShaderMaterial).uniforms;
       un.uTime.value = t;
       un.uSeed.value = i * 17.3 + cycle * 3.1;
       un.uFill.value = fill;
+      un.uSunC.value.copy(_sunW);
+      un.uSunR.value = sunRw;
       (g.children[i] as THREE.Mesh).visible = fill > 0.001;
     }
   });
@@ -576,6 +618,8 @@ const _coronaCentre = new THREE.Vector3();
 const _coronaDir = new THREE.Vector3();
 const CORONA_OUTER = 1.45;
 const CORONA_GAIN = 0.5;
+const SPICULE_GAIN = 2.2;
+const _sunScale = new THREE.Vector3();
 const coronaVert = /* glsl */ `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
@@ -583,7 +627,9 @@ const coronaVert = /* glsl */ `
 const coronaFrag = /* glsl */ `
   uniform float uTime;
   uniform float uGain;
+  uniform float uSpic;
   varying vec2 vUv;
+  ${NOISE_GLSL}
   void main() {
     vec2 q = (vUv - 0.5) * 2.0 * ${glslFloat(CORONA_OUTER)};   // radius in units of R
     float rho = length(q);
@@ -594,16 +640,34 @@ const coronaFrag = /* glsl */ `
     float wisp = 1.0 + 0.20 * sin(3.0 * th + uTime * 0.09) * sin(2.0 * th - uTime * 0.07 + 1.7);
     float fade = 1.0 - smoothstep(${glslFloat(CORONA_OUTER - 0.3)}, ${glslFloat(CORONA_OUTER)}, rho);
     vec3 col = mix(vec3(1.0, 0.94, 0.82), vec3(1.0, 0.77, 0.54), smoothstep(0.0, 0.25, e));
-    gl_FragColor = vec4(col * amp * wisp * fade * uGain, 1.0);
+    // SUN-ALIVE: the spicule fringe. Short flame tongues standing on the limb, 1-4% of R
+    // tall and a few px wide, each living ~1-2 s, with gaps between them so the edge is torn
+    // rather than outlined. Seamless around the circle (3D noise on the direction, time as
+    // the third axis) and HDR, so the bloom catches the tips.
+    vec2 dir = q / rho;
+    float sp = noise(vec3(dir * 22.0, uTime * 0.8));
+    float tall = 0.010 + 0.032 * noise(vec3(dir * 9.0 + 3.1, uTime * 0.5));
+    float spic = smoothstep(0.58, 0.86, sp) * (1.0 - smoothstep(0.0, tall, e));
+    vec3 fringe = vec3(1.0, 0.60, 0.26) * spic * uSpic;
+    gl_FragColor = vec4(col * amp * wisp * fade * uGain + fringe, 1.0);
   }
 `;
 function Corona() {
   const mesh = useRef<THREE.Mesh>(null);
   const mat = useRef<THREE.ShaderMaterial>(null);
-  const uniforms = useMemo(() => ({ uTime: { value: 0 }, uGain: { value: CORONA_GAIN } }), []);
+  const uniforms = useMemo(() => ({ uTime: { value: 0 }, uGain: { value: CORONA_GAIN }, uSpic: { value: SPICULE_GAIN } }), []);
   useFrame((state, dt) => {
     const m = mesh.current;
     if (m) {
+      // SUN-ALIVE: the plane sits BEHIND the centre, so under perspective the sphere's
+      // silhouette crosses it at more than 1 R (about 1.06 R at the overview). The corona was
+      // drawn from 1.0 R, so its brightest band - and any fringe on it - was hidden behind the
+      // disc. Scale the plane so its unit circle is exactly the silhouette as seen now.
+      m.parent!.getWorldPosition(_coronaCentre);
+      const rw = SUN_R * m.parent!.getWorldScale(_sunScale).x;
+      const dist = Math.max(_coronaCentre.distanceTo(state.camera.position), rw * 1.05);
+      const limb = ((dist + rw * 0.35) * (rw / Math.sqrt(dist * dist - rw * rw))) / rw;
+      m.scale.setScalar(SUN_R * CORONA_OUTER * 2 * limb);
       // Face the camera POSITION, not its orientation: the sun is rarely on the view axis, and a
       // plane parallel to the view plane is tilted against the line to the sun, so its near half
       // rides in front of the sphere and paints a pale crescent over the disc (seen on the first
@@ -615,7 +679,13 @@ function Corona() {
       m.position.copy(m.parent!.worldToLocal(_coronaCentre.addScaledVector(_coronaDir, SUN_R * 0.35)));
       m.lookAt(state.camera.position);
     }
-    if (mat.current) mat.current.uniforms.uTime.value += dt;
+    if (mat.current) {
+      const un = mat.current.uniforms;
+      un.uTime.value += dt;
+      // The halo breathes: +-12% over ~12 s, two incommensurate sines so it never loops visibly.
+      const tt = un.uTime.value;
+      un.uGain.value = CORONA_GAIN * (1 + 0.08 * Math.sin(tt * 0.52) + 0.04 * Math.sin(tt * 0.21 + 2.0));
+    }
   });
   return (
     <mesh ref={mesh} scale={SUN_R * CORONA_OUTER * 2}>
@@ -678,7 +748,8 @@ export default function Sun() {
       u.uTime.value += dt;
       // Breathe on irregular slow noise + rare flare pulse (spec: sun is alive).
       const t = u.uTime.value;
-      pulse = 0.15 * Math.sin(t * 0.6) + 0.1 * Math.sin(t * 0.23 + 1.3) + Math.max(0, Math.sin(t * 0.11) - 0.9) * 3.0;
+      // SUN-ALIVE: +-25% -> +-2%. The brightness now lives in local flare-ups in the shader.
+      pulse = 0.02 * Math.sin(t * 0.6) + 0.01 * Math.sin(t * 0.23 + 1.3);
       u.uPulse.value = pulse;
     }
     // Debug-only: a harness measuring how fast the SURFACE evolves has to stop the sun
