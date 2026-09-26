@@ -364,16 +364,17 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       // the rock's radius times its lump factor.
       shader.vertexShader = shader.vertexShader.replace(
         'void main() {',
-        'uniform float uProjScale;\nvarying float vRockPx;\nvoid main() {'
+        'uniform float uProjScale;\nvarying float vRockPx;\nvarying float vRockHash;\nvoid main() {'
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <project_vertex>',
         `#include <project_vertex>
-         vRockPx = 2.0 * length( instanceMatrix[0].xyz ) * uProjScale / max( -mvPosition.z, 0.001 );`
+         vRockPx = 2.0 * length( instanceMatrix[0].xyz ) * uProjScale / max( -mvPosition.z, 0.001 );
+         vRockHash = fract( sin( dot( instanceMatrix[3].xyz, vec3( 12.9898, 78.233, 37.719 ) ) ) * 43758.5453 );`
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         'void main() {',
-        `${chromeMaskGLSL}\nuniform float uDither;\nuniform vec3 uSun;\nvarying float vRockPx;\nvoid main() {`
+        `${chromeMaskGLSL}\nuniform float uDither;\nuniform vec3 uSun;\nvarying float vRockPx;\nvarying float vRockHash;\nvoid main() {`
       );
       {
         const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
@@ -394,13 +395,15 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
            // The apparent-size dissolve is a per-pixel hash: over the dark sky its holes are
            // invisible, over the sun disc each hole shows a bright granule and the rock face
            // reads as speckled. In front of the disc the rock stays solid (a dark silhouette).
+           // The near-camera fade still applies there, so over the disc it draws one number
+           // per ROCK instead of per pixel: a rock is whole or gone, never holed.
            float _onSun = ( uSun.z > 0.0 && uStock < 0.5 ) ? 1.0 - smoothstep( uSun.z * 0.95, uSun.z * 1.2, distance( gl_FragCoord.xy, uSun.xy ) ) : 0.0;
            float _keep = smoothstep( ${NEAR_GONE.toFixed(2)}, ${NEAR_FULL.toFixed(2)}, _camD )
                        * mix( 1.0 - smoothstep( ${BIG_PX_FADE.toFixed(1)}, ${BIG_PX_GONE.toFixed(1)}, vRockPx ), 1.0, _onSun )
                        * chromeKeep( gl_FragCoord.xy );
            if ( uDither < 0.5 ) _keep = ( _keep > 0.0 ) ? 1.0 : 0.0;
            if ( _keep < 0.999 ) {
-             float _h = fract( sin( dot( gl_FragCoord.xy, vec2(12.9898, 78.233) ) ) * 43758.5453 );
+             float _h = _onSun > 0.5 ? vRockHash : fract( sin( dot( gl_FragCoord.xy, vec2(12.9898, 78.233) ) ) * 43758.5453 );
              if ( _h > _keep ) discard;
            }
          }`
