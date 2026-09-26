@@ -324,9 +324,9 @@ const sunFrag = /* glsl */ `
     // swell, burn white-hot above the bloom threshold and fade, each in its own place and at
     // its own moment. This replaces the global pulse (one brightness for the whole ball),
     // which is what "burning" is not.
-    float evn = noise(pd * 7.0 + vec3(0.0, 0.0, uTime * 0.33));
-    float ev = smoothstep(0.62, 0.84, evn) * smoothstep(0.30, 0.60, n) * spot;
-    col = mix(col, hot, ev * 0.6) * (1.0 + 2.2 * ev);
+    float evn = noise(pd * 12.0 + vec3(0.0, 0.0, uTime * 0.33));
+    float ev = smoothstep(0.70, 0.90, evn) * smoothstep(0.30, 0.60, n) * spot;
+    col = mix(col, hot, ev * 0.35) * (1.0 + 1.2 * ev);
     col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.09, 1.0, limb);
     // SUN-4: the limb is cooler as well as darker - blue and then green fall away faster than
     // red, so the rim turns amber instead of just grey-orange. Red is untouched on purpose.
@@ -430,7 +430,7 @@ const promFrag = /* glsl */ `
     vec3 sc = uSunC - cameraPosition;
     float miss = length(sc - rd * dot(sc, rd));
     float outside = smoothstep(uSunR, uSunR * 1.012, miss);
-    gl_FragColor = vec4(col * fr * bright * vis * outside * 0.42, 1.0);
+    gl_FragColor = vec4(col * fr * bright * vis * outside * 0.55, 1.0);
   }
 `;
 const _pt = new THREE.Vector3();
@@ -501,7 +501,7 @@ function fillPromGeometry(g: THREE.BufferGeometry, c: THREE.Vector3, t: THREE.Ve
       _pq.copy(c).multiplyScalar(Math.cos(phi2)).addScaledVector(t, Math.sin(phi2)).multiplyScalar(r2).addScaledVector(_pb, side);
       _pT.subVectors(_pq, _pp).normalize();
       _pn.crossVectors(_pb, _pT).normalize();
-      const rad = SUN_R * 0.008 * STRAND_RAD[k] * (1 + 0.7 * Math.pow(1 - bump, 3) + 0.18 * Math.sin(u * 9 + time * 0.4 + k));
+      const rad = SUN_R * 0.011 * STRAND_RAD[k] * (1 + 0.7 * Math.pow(1 - bump, 3) + 0.18 * Math.sin(u * 9 + time * 0.4 + k));
       for (let j = 0; j < PROM_RING; j++) {
         const al = (j / PROM_RING) * Math.PI * 2;
         _pr.copy(_pb).multiplyScalar(Math.cos(al)).addScaledVector(_pn, Math.sin(al));
@@ -618,7 +618,7 @@ const _coronaCentre = new THREE.Vector3();
 const _coronaDir = new THREE.Vector3();
 const CORONA_OUTER = 1.45;
 const CORONA_GAIN = 0.5;
-const SPICULE_GAIN = 2.2;
+const SPICULE_GAIN = 1.4;
 const _sunScale = new THREE.Vector3();
 const coronaVert = /* glsl */ `
   varying vec2 vUv;
@@ -646,9 +646,11 @@ const coronaFrag = /* glsl */ `
     // the third axis) and HDR, so the bloom catches the tips.
     vec2 dir = q / rho;
     float sp = noise(vec3(dir * 22.0, uTime * 0.8));
-    float tall = 0.010 + 0.032 * noise(vec3(dir * 9.0 + 3.1, uTime * 0.5));
-    float spic = smoothstep(0.58, 0.86, sp) * (1.0 - smoothstep(0.0, tall, e));
-    vec3 fringe = vec3(1.0, 0.60, 0.26) * spic * uSpic;
+    float tall = 0.020 + 0.050 * noise(vec3(dir * 9.0 + 3.1, uTime * 0.5));
+    float h = clamp(e / tall, 0.0, 1.0);
+    // The threshold rises with height, so each tongue narrows to a tip instead of a bead.
+    float spic = smoothstep(0.52 + 0.30 * h, 0.90, sp) * (1.0 - h);
+    vec3 fringe = vec3(1.0, 0.45, 0.15) * spic * uSpic;
     gl_FragColor = vec4(col * amp * wisp * fade * uGain + fringe, 1.0);
   }
 `;
