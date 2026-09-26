@@ -206,14 +206,14 @@ const sunFrag = /* glsl */ `
     // Domain-warped by a slow fbm so the threads curl, and swept through time fast enough
     // that a quarter of the disc visibly changes within ~2 s (measured: 4.5% before).
     vec3 fp = vPos * 3.2;
-    // Cost: 7 noise taps (a 2-channel, 2-octave warp + 3 octaves of turbulence). The first
+    // Cost: 6 noise taps (a 2-channel, 2-octave warp + 2 octaves of turbulence). The first
     // cut used 16 and measured 61 -> 52 fps on the reference iGPU.
     vec2 fq = vec2(grain(fp + vec3(0.0, uTime * 0.20, 0.0)),
                    grain(fp + vec3(5.2, 1.3, uTime * 0.17)));
     vec3 tp = fp * 2.0 + vec3(fq * 3.0, uTime * 0.5);
     float turb = 0.0, ta = 0.5;
-    for (int i = 0; i < 3; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
-    float fire = pow(clamp(1.0 - turb * 1.7, 0.0, 1.0), 3.0);
+    for (int i = 0; i < 2; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
+    float fire = pow(clamp(1.0 - turb * 2.0, 0.0, 1.0), 3.0);
     // The gaps between threads sit low on the ramp so the threads read against them - with
     // the gaps near the mid stop, the core boost carried everything to the ACES ceiling and
     // the centre measured as one white patch (tile contrast 6.5).
@@ -651,7 +651,7 @@ const _coronaCentre = new THREE.Vector3();
 const _coronaDir = new THREE.Vector3();
 const CORONA_OUTER = 1.45;
 const CORONA_GAIN = 0.5;
-const SPICULE_GAIN = 2.0;
+const SPICULE_GAIN = 2.2;
 const _sunScale = new THREE.Vector3();
 const coronaVert = /* glsl */ `
   varying vec2 vUv;
@@ -678,15 +678,17 @@ const coronaFrag = /* glsl */ `
     // rather than outlined. Seamless around the circle (3D noise on the direction, time as
     // the third axis) and HDR, so the bloom catches the tips.
     vec2 dir = q / rho;
-    float sp = noise(vec3(dir * 46.0, uTime * 0.8));
-    // SUN-BURN: ragged, not a ring. Heights vary 2-17% of R on a coarse angular noise that
-    // is squared, so most tongues are short and a few leap high.
-    float tn = noise(vec3(dir * 5.0 + 3.1, uTime * 0.45));
-    float tall = 0.020 + 0.150 * tn * tn;
-    float h = clamp(e / tall, 0.0, 1.0);
-    // The threshold rises with height, so each tongue narrows to a tip instead of a bead.
-    float spic = smoothstep(0.50 + 0.40 * h, 0.85 + 0.10 * h, sp) * (1.0 - h);
-    vec3 fringe = vec3(1.0, 0.34, 0.07) * spic * uSpic;
+    // SUN-BURN: a burning edge, not a ring and not spikes. The flame height is a coarse
+    // angular noise cubed - mostly low, a few tongues leaping to ~18% of R - and inside it a
+    // texture that streams OUTWARD (e grows with -time), swaying sideways with height, which
+    // is what makes it read as fire. Yellow at the root, red at the tips.
+    float tn = noise(vec3(dir * 4.0 + 3.1, uTime * 0.35));
+    float tall = 0.015 + 0.17 * tn * tn * tn + 0.03 * noise(vec3(dir * 13.0, uTime * 0.9));
+    float h = e / tall;
+    vec2 sway = vec2(-dir.y, dir.x) * e * 1.5 * sin(uTime * 1.3 + th * 7.0);
+    float flick = noise(vec3((dir + sway) * 34.0, e * 30.0 - uTime * 2.6));
+    float spic = (1.0 - smoothstep(0.0, 1.0, h)) * smoothstep(0.30 + 0.45 * h, 0.75, flick);
+    vec3 fringe = mix(vec3(1.0, 0.62, 0.20), vec3(1.0, 0.26, 0.05), clamp(h, 0.0, 1.0)) * spic * uSpic;
     gl_FragColor = vec4(col * amp * wisp * fade * uGain + fringe, 1.0);
   }
 `;
