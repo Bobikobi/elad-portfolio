@@ -684,9 +684,11 @@ function Corona() {
     if (mat.current) {
       const un = mat.current.uniforms;
       un.uTime.value += dt;
-      // The halo breathes: +-12% over ~12 s, two incommensurate sines so it never loops visibly.
+      // The halo breathes over ~12 s, two incommensurate sines so it never loops visibly. The
+      // swing is large on purpose: most of the glow around the disc is the disc's own bloom, so
+      // +-12% here measured as only a 2.5% change on screen; +-46% gives ~10%.
       const tt = un.uTime.value;
-      un.uGain.value = CORONA_GAIN * (1 + 0.08 * Math.sin(tt * 0.52) + 0.04 * Math.sin(tt * 0.21 + 2.0));
+      un.uGain.value = CORONA_GAIN * (1 + 0.32 * Math.sin(tt * 0.52) + 0.14 * Math.sin(tt * 0.21 + 2.0));
     }
   });
   return (
