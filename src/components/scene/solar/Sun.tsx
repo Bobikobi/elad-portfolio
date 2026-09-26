@@ -361,7 +361,7 @@ const sunFrag = /* glsl */ `
     // Per channel, green most and blue DOWN: ACES's input matrix feeds red and green into
     // blue, so a uniform boost measured as a blue-white centre (240,234,227), and even +35%
     // blue landed at 209. Blue has to fall in the input for the output to stay yellow.
-    col *= 1.0 + core * vec3(0.75, 1.05, -0.35);
+    col *= 1.0 + core * vec3(0.75, 1.05, -0.35) * (0.25 + 0.75 * fire);
     // Measured ceiling: x3 on the core reached only 243 of 255 through ACES, turned it white
     // (blue 232), and its bloom raised the halo 40% and the whole frame 16%. This is the knee.
     gl_FragColor = vec4(col, 1.0);
@@ -651,7 +651,7 @@ const _coronaCentre = new THREE.Vector3();
 const _coronaDir = new THREE.Vector3();
 const CORONA_OUTER = 1.45;
 const CORONA_GAIN = 0.5;
-const SPICULE_GAIN = 2.6;
+const SPICULE_GAIN = 2.0;
 const _sunScale = new THREE.Vector3();
 const coronaVert = /* glsl */ `
   varying vec2 vUv;
@@ -678,15 +678,15 @@ const coronaFrag = /* glsl */ `
     // rather than outlined. Seamless around the circle (3D noise on the direction, time as
     // the third axis) and HDR, so the bloom catches the tips.
     vec2 dir = q / rho;
-    float sp = noise(vec3(dir * 22.0, uTime * 0.8));
+    float sp = noise(vec3(dir * 46.0, uTime * 0.8));
     // SUN-BURN: ragged, not a ring. Heights vary 2-17% of R on a coarse angular noise that
     // is squared, so most tongues are short and a few leap high.
     float tn = noise(vec3(dir * 5.0 + 3.1, uTime * 0.45));
     float tall = 0.020 + 0.150 * tn * tn;
     float h = clamp(e / tall, 0.0, 1.0);
     // The threshold rises with height, so each tongue narrows to a tip instead of a bead.
-    float spic = smoothstep(0.48 + 0.30 * h, 0.80, sp) * (1.0 - h * h);
-    vec3 fringe = vec3(1.0, 0.40, 0.10) * spic * uSpic;
+    float spic = smoothstep(0.50 + 0.40 * h, 0.85 + 0.10 * h, sp) * (1.0 - h);
+    vec3 fringe = vec3(1.0, 0.34, 0.07) * spic * uSpic;
     gl_FragColor = vec4(col * amp * wisp * fade * uGain + fringe, 1.0);
   }
 `;
