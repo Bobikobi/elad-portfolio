@@ -684,11 +684,11 @@ function Corona() {
     if (mat.current) {
       const un = mat.current.uniforms;
       un.uTime.value += dt;
-      // The halo breathes over ~12 s, two incommensurate sines so it never loops visibly. The
-      // swing is large on purpose: most of the glow around the disc is the disc's own bloom, so
-      // +-12% here measured as only a 2.5% change on screen; +-46% gives ~10%.
+      // The halo breathes over ~12 s, two incommensurate sines so it never loops visibly. Most
+      // of the glow around the disc is the disc's own bloom, so this alone moved the screen by
+      // only 2.5-3%; the disc's slow pulse (Sun) uses the same sines and carries the rest.
       const tt = un.uTime.value;
-      un.uGain.value = CORONA_GAIN * (1 + 0.32 * Math.sin(tt * 0.52) + 0.14 * Math.sin(tt * 0.21 + 2.0));
+      un.uGain.value = CORONA_GAIN * (1 + 0.18 * Math.sin(tt * 0.52) + 0.07 * Math.sin(tt * 0.21 + 2.0));
     }
   });
   return (
@@ -752,8 +752,10 @@ export default function Sun() {
       u.uTime.value += dt;
       // Breathe on irregular slow noise + rare flare pulse (spec: sun is alive).
       const t = u.uTime.value;
-      // SUN-ALIVE: +-25% -> +-2%. The brightness now lives in local flare-ups in the shader.
-      pulse = 0.02 * Math.sin(t * 0.6) + 0.01 * Math.sin(t * 0.23 + 1.3);
+      // SUN-ALIVE: +-25% -> a slow +-10% breath. The flicker now lives in local flare-ups in
+      // the shader; this only feeds the bloom, which is most of the glow around the disc. Same
+      // two sines as the corona's breath (Corona), so disc glow and halo swell together.
+      pulse = 0.10 * Math.sin(t * 0.52) + 0.05 * Math.sin(t * 0.21 + 2.0);
       u.uPulse.value = pulse;
     }
     // Debug-only: a harness measuring how fast the SURFACE evolves has to stop the sun
