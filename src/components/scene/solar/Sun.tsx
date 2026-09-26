@@ -334,7 +334,7 @@ const sunFrag = /* glsl */ `
     // Red is LIFTED at the rim, not just green/blue cut: most of what sits on the rim pixels is
     // the core's bloom spilling outward, and cutting the surface's own green moved the hue by
     // 1 degree across three tries. The rim has to outshine the spill to carry its own colour.
-    col *= mix(vec3(1.35, 0.30, 0.06), vec3(1.0), smoothstep(0.10, 0.90, limb));
+    col *= mix(vec3(1.35, 0.20, 0.04), vec3(1.0), smoothstep(0.10, 0.90, limb));
     // SUN-HOT: the core burns toward yellow-white. Brighter and less saturated in the inner
     // half of the disc only, so the centre-to-rim gradient deepens instead of lifting the
     // whole ball. Targets (measured on screen): centre R,G >= 245, B >= 170, hue at the rim
@@ -343,7 +343,7 @@ const sunFrag = /* glsl */ `
     // Per channel, green most and blue DOWN: ACES's input matrix feeds red and green into
     // blue, so a uniform boost measured as a blue-white centre (240,234,227), and even +35%
     // blue landed at 209. Blue has to fall in the input for the output to stay yellow.
-    col *= 1.0 + core * vec3(0.75, 1.05, -0.35);
+    col *= 1.0 + core * vec3(2.2, 2.6, -0.2);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
