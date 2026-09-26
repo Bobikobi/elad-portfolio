@@ -9,6 +9,7 @@ import {
   SUN_LAMP_DECAY,
   SUN_LAMP_DISTANCE,
   SUN_LAMP_INTENSITY,
+  SUN_LAMP_OVERVIEW_SCALE,
 } from '@/lib/photometry';
 import { softSprite, flameSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
@@ -400,6 +401,7 @@ function Prominences() {
  *  corona, soft gold halo, living prominences and a slow pulse. Registers its mesh
  *  as the God Rays source. Its gold = the galaxy core's gold (one continuity). */
 export default function Sun() {
+  const lampRef = useRef<THREE.PointLight>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const streakRef = useRef<THREE.Sprite>(null);
   const setSunMesh = useScene((s) => s.setSunMesh);
@@ -415,6 +417,15 @@ export default function Sun() {
     setSunMesh(meshRef.current);
     return () => setSunMesh(null);
   }, [setSunMesh]);
+
+  useFrame((_, dt) => {
+    // The overview lights every world at once and read too bright; a focused world keeps the
+    // lamp its own aperture was calibrated against. Eased so a focus change is not a pop.
+    const l = lampRef.current;
+    if (!l) return;
+    const target = SUN_LAMP_INTENSITY * (useScene.getState().focusedPlanet ? 1 : SUN_LAMP_OVERVIEW_SCALE);
+    l.intensity += (target - l.intensity) * Math.min(1, dt * 3);
+  });
 
   useFrame((state, dt) => {
     const u = sunMat.current?.uniforms;
@@ -452,7 +463,7 @@ export default function Sun() {
   return (
     <group name="sun">
       {/* Lamp rationale and values live in photometry.ts. */}
-      <pointLight position={[0, 0, 0]} intensity={SUN_LAMP_INTENSITY} distance={SUN_LAMP_DISTANCE} decay={SUN_LAMP_DECAY} color="#fff0dc" />
+      <pointLight ref={lampRef} position={[0, 0, 0]} intensity={SUN_LAMP_INTENSITY} distance={SUN_LAMP_DISTANCE} decay={SUN_LAMP_DECAY} color="#fff0dc" />
       {/* Plasma surface (the God Rays source) */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[SUN_R, 96, 96]} />

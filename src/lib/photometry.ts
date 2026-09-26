@@ -9,7 +9,12 @@ export const AMBIENT_FILL_INTENSITY = 0.06;
 // Linear material-colour multipliers: real geometric albedo divided by each texture's
 // linear mean, from the P3 measurements in docs/briefs/PHOTOMETRY-megaplan.md.
 export const MERCURY_ALBEDO_MULTIPLIER = 0.60;
-export const VENUS_ALBEDO_MULTIPLIER = 2.76;
+// Venus 2.76 -> 1.40 (stage feat/venus-burnt-white; P4-3 bar <= 958 burnt px on the overview).
+// Local sweep, p3-albedo + p4-chroma, real GPU, burnt-in-all-channels pixels of 2,081: 2.76 -> 1,483,
+// 2.2 -> 1,294, 1.8 -> 1,108, 1.4 -> 855. P3-3 (Venus still brightest) holds at every value tried.
+// It is no longer the measured real albedo: the overview clips because compressed orbits put her
+// 2.55 units from the sun, and the albedo is the only lever the rolloff work left.
+export const VENUS_ALBEDO_MULTIPLIER = 1.40;
 export const EARTH_ALBEDO_MULTIPLIER = 2.17;
 export const MARS_ALBEDO_MULTIPLIER = 0.75;
 export const JUPITER_ALBEDO_MULTIPLIER = 1.45;
@@ -54,6 +59,11 @@ export const NEUTRAL_APERTURE = 1;
 // are toneMapped:false and untouched by this.
 export const SUN_LAMP_INTENSITY = 200;
 export const SUN_LAMP_DISTANCE = 90;
+/** Lamp scale while no world is focused (the overview). Exposure cannot do this job: the ACES
+ *  shoulder moved lit faces only ~9 levels for a 0.6 aperture, so the light itself is scaled. */
+// Local sweep, overview lit-face mean (Uranus / Saturn / Mars / Earth / Neptune): 1.0 -> 212/239/222/136/101,
+// 0.5 -> 189/227/181/98/91, 0.25 -> 133/203/127/76/68. Neptune stays over P3-2's 60 floor.
+export const SUN_LAMP_OVERVIEW_SCALE = 0.25;
 // P3 change 2, and a DELIBERATE DEPARTURE FROM PHYSICS under RULING 3 (2026-08-17):
 // the owner ruled that appearance beats physical accuracy where the two collide.
 //
