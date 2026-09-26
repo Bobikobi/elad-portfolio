@@ -400,6 +400,16 @@ function Prominences() {
 /** The burning sun: displaced plasma surface (HDR for Bloom/God Rays), fresnel
  *  corona, soft gold halo, living prominences and a slow pulse. Registers its mesh
  *  as the God Rays source. Its gold = the galaxy core's gold (one continuity). */
+/** `?lamp=0.15` overrides SUN_LAMP_OVERVIEW_SCALE for one page load, so the overview's
+ *  brightness can be chosen side by side instead of guessed. Read once, at import. */
+const LAMP_OVERRIDE = (() => {
+  if (typeof window === 'undefined') return null;
+  const v = new URLSearchParams(window.location.search).get('lamp');
+  if (v === null || v.trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+})();
+
 export default function Sun() {
   const lampRef = useRef<THREE.PointLight>(null);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -423,7 +433,7 @@ export default function Sun() {
     // lamp its own aperture was calibrated against. Eased so a focus change is not a pop.
     const l = lampRef.current;
     if (!l) return;
-    const target = SUN_LAMP_INTENSITY * (useScene.getState().focusedPlanet ? 1 : SUN_LAMP_OVERVIEW_SCALE);
+    const target = SUN_LAMP_INTENSITY * (useScene.getState().focusedPlanet ? 1 : LAMP_OVERRIDE ?? SUN_LAMP_OVERVIEW_SCALE);
     l.intensity += (target - l.intensity) * Math.min(1, dt * 3);
   });
 
