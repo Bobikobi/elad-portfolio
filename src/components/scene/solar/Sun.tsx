@@ -213,11 +213,11 @@ const sunFrag = /* glsl */ `
     vec3 tp = fp * 2.0 + vec3(fq * 3.0, uTime * 0.5);
     float turb = 0.0, ta = 0.5;
     for (int i = 0; i < 2; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
-    float fire = pow(clamp(1.0 - turb * 2.0, 0.0, 1.0), 3.0);
+    float fire = pow(clamp(1.0 - turb * 1.8, 0.0, 1.0), 3.0);
     // The gaps between threads sit low on the ramp so the threads read against them - with
     // the gaps near the mid stop, the core boost carried everything to the ACES ceiling and
     // the centre measured as one white patch (tile contrast 6.5).
-    n = 0.10 + n * 0.40 + fire * 0.85 - (1.0 - fq.x) * 0.08;
+    n = 0.05 + n * 0.30 + fire * 0.95 - (1.0 - fq.x) * 0.10;
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
     //
