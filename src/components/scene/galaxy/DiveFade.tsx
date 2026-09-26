@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
+import { HUD_AVAILABLE } from '../DebugHud';
 
 /**
  * CROSSING — the dive's fade to near-black, the thing the passage is made of.
@@ -14,10 +15,17 @@ import { useScene } from '@/lib/sceneStore';
  * asked for with clean eyes called it fireworks laid over a picture rather than flight, and
  * the cheapest way out was to travel through darkness instead of through glare.
  *
- * So the dive now DARKENS. One black plane locked in front of the camera, opacity ramped on
- * `scrollProgress`, closing over the second half of the descent — and by the time the swap
- * curtain's own coverage begins to rise the frame is already nearly black, so the crossover
- * has nothing left to flash.
+ * So the dive now DIMS. One near-black plane locked in front of the camera, opacity ramped on
+ * `scrollProgress`, taking the light out of the approach without taking the picture away: at
+ * its deepest it still passes about half the frame, so what the visitor flies into is the
+ * galaxy's own core burning down to an ember rather than a screen that has been switched off.
+ *
+ * CROSSING v2 — why "an ember" and not "black". v1 closed this plane to 94% by scroll 0.64 and
+ * shipped. Measured on the shipped build, the frame sat under mean 20 of 255 across 44% of the
+ * whole scroll, in both directions, and nothing in it changed: the owner read it as the scene
+ * switching off mid-flight and the scroll sticking. Darkness is the crossover's job and the
+ * swap curtain already does it over about a tenth of the scroll. This plane's job is only the
+ * two things the numbers actually demand — see FADE_MAX.
  *
  * Why `scrollProgress` and not `coverage`: coverage is the curtain's envelope, a narrow
  * symmetric hump around the swap that exists to hide the act-mount stall and is shaped by a
@@ -31,34 +39,42 @@ import { useScene } from '@/lib/sceneStore';
  */
 
 /**
- * Scroll progress at which the darkness starts closing, and where it is complete.
+ * Where the dimming starts and where it reaches full depth.
  *
- * FADE_TO is set by the colour, not by the light. With the veils gone, the frame's remaining
- * red-green split is the galaxy's own gold core (`#FFC978`) filling the view at the end of
- * the approach. Backing the measured frames out through the fade that was over them, the
- * split UNDER it runs 38 at scroll 0.61, 57 at 0.62 and 83 at 0.65 - it is still climbing
- * while the picture is already dim, which is why a dim gold frame kept carrying a cast of 13
- * at an earlier setting. The passage may carry at most 10 (the site reads 1.4 at the galaxy
- * and 7.8 at the settled solar system), and that is what puts the end of the fade at 0.64.
- * Ending at 0.68 measured 10.1, which passes nothing; the bar is not a target to touch.
+ * FADE_FROM is set by the light. Even with nothing added to it, the galaxy brightens as the
+ * camera flies in: measured with no plane at all, 76 mean at rest, 80 by scroll 0.20, a peak
+ * of 87 at 0.40. The passage may not be brighter than the rest state the visitor is already
+ * looking at (C1's bar, 80), so the dimming has to have started before the galaxy crosses it.
+ * A smoothstep is nearly flat at its foot, so the start sits well below 0.20: at 0.06 the
+ * plane is under 1.5% opaque for the whole first tenth of the scroll, where the welcome is
+ * still on screen, and starting there instead of 0.12 measured 78.2 mean and 7.70% of pixels
+ * above 200 against 79.4 and 7.95 - real margin on both of C1's numbers for nothing visible.
  *
- * FADE_FROM is set by the light. Even with nothing added, the galaxy brightens as the camera
- * flies into it: 76 at rest, 80 by scroll 0.21, 87 by 0.40. The passage may not be brighter
- * than the rest state the visitor is already looking at (bar: 80), so the darkness has to be
- * closing before the galaxy passes it. Starting at 0.20 - exactly where it crosses - measured
- * 80.4 against the bar of 80, so the start sits at 0.10 for real margin; the smoothstep is
- * nearly flat at its foot, so nothing visible happens until well after that. The fade is
- * long and gentle, 0.10 to 0.64, which is the point of it: a slow dimming reads as distance,
- * a short one as a cut.
+ * FADE_TO is set by the colour. The galaxy's gold core (`#FFC978`) fills the view over the end
+ * of the approach and carries a red-green split that peaks at 36 with no plane over it, around
+ * scroll 0.65, falling back to 9 by 0.80 as the camera passes it. C3 allows 20, so the plane
+ * has to be at its full depth by the time that peak arrives. Swept on a preview with `?fade`,
+ * full depth at 0.66 measured a split of 25.3, at 0.62 21.8, at 0.58 19.4 and at 0.55 16.7;
+ * 0.55 is the one with margin, and the bar is not a target to touch.
  */
-const FADE_FROM = 0.1;
-const FADE_TO = 0.64;
+const FADE_FROM = 0.06;
+const FADE_TO = 0.55;
 /**
- * Near-black, not black. Six percent of the galaxy reads through at full fade - far too
- * little to carry colour or glare (51 * 0.06 = 3), and enough that a visitor who stops
- * scrolling inside the passage is looking at a dark sky rather than at a dead screen.
+ * How deep it goes, and the reason v2 exists. A third of the frame still reaches the visitor: 36 of
+ * colour split becomes about 19, the 87 peak becomes about 66, and the darkest the dive itself
+ * ever gets is around 21 (see the return-trip note below) — the same brightness as the settled solar system on the other side.
+ * Nothing here is near black, so nothing here can read as frozen. The near-black stretch of the
+ * passage is the swap curtain's alone, which is 0.11 of the scroll wide by its own geometry
+ * (COVER_PLATEAU + COVER_FALLOFF in diveEnvelope) and is the crossover itself. Going deeper
+ * than this only buys colour: 0.68 measured a split of 19.4 with the frame under mean 20 from
+ * scroll 0.872, this one 16.7 from 0.867, and each step deeper starts the darkness earlier.
  */
-const FADE_MAX = 0.94;
+const FADE_MAX = 0.71;
+// 0.74 was the first pick and it was measured on the DOWN direction only. On the way back up the
+// same ember reads about 5 levels darker (19.0 at scroll 0.68-0.76 against 25 going down) and
+// dipped under the mean-20 line, stretching the near-black run to 0.25 of the scroll. Swept on the
+// return at a 360-frame ramp: 0.72 -> ember floor 20.5, colour 18.5; 0.71 -> 21.2, 19.0;
+// 0.70 -> 21.9, 19.5. 0.71 leaves about one level on each side of the two bars.
 
 /**
  * Fastest the plane may change, in opacity per second. The scroll is read raw, so a scroll
@@ -71,6 +87,22 @@ const FADE_MAX = 0.94;
  * anything under ~0.75 of the whole driver per second (about 2,100 px/s) is untouched.
  */
 const FADE_RATE = 2.0;
+
+/**
+ * `?fade=from,to,max` — the sweep knob these three numbers were chosen with, on the same
+ * seam as `?hl` in ExposureToneMap and gated the same way, so production always runs the
+ * constants above. Reading it once per mount is enough: the recorder sets it in the URL.
+ */
+const fadeParams = (): [number, number, number] => {
+  if (!HUD_AVAILABLE || typeof window === 'undefined') return [FADE_FROM, FADE_TO, FADE_MAX];
+  const raw = new URLSearchParams(window.location.search).get('fade');
+  if (!raw) return [FADE_FROM, FADE_TO, FADE_MAX];
+  const v = raw.split(',').map(Number);
+  if (v.length !== 3 || v.some((n) => !Number.isFinite(n)) || v[1] <= v[0] || v[2] < 0 || v[2] > 1) {
+    throw new Error(`?fade must be from,to,max with to > from and 0 <= max <= 1 - got "${raw}"`);
+  }
+  return [v[0], v[1], v[2]];
+};
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -87,11 +119,12 @@ export default function DiveFade() {
   // deep in the dive and the plane must be at its full value at once, under the swap curtain.
   // Ramping up from 0 there would let the bright galaxy show as the curtain releases.
   const shown = useRef<number | null>(null);
+  const [from, to, max] = useRef(fadeParams()).current;
 
   useFrame((state, delta) => {
     const m = plane.current;
     if (!m) return;
-    const target = smoothstep(FADE_FROM, FADE_TO, useScene.getState().scrollProgress) * FADE_MAX;
+    const target = smoothstep(from, to, useScene.getState().scrollProgress) * max;
     const cur = shown.current;
     const step = FADE_RATE * delta;
     const a = cur === null ? target : cur + Math.min(step, Math.max(-step, target - cur));

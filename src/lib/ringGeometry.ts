@@ -34,8 +34,16 @@ export interface RingTuning {
   gap: number;
   /** radial depth of a window (r1 - r0). */
   depth: number;
-  /** a window's tangential thickness AT rMid, so windows look equally thick despite the fan. */
+  /** a window's tangential thickness AT rMid, so windows look equally thick despite the fan.
+   *  This is now a CEILING rather than the value: the real thickness is solved from
+   *  `wantVisible` and whatever arc the clamp leaves. See the note by the two-pass scan. */
   thick: number;
+  /** how many windows the fan should hold - the owner's ruling, and the input the thickness
+   *  is solved from. */
+  wantVisible: number;
+  /** the thickness below which a preview stops reading as a picture. Where the geometry
+   *  cannot afford `wantVisible` windows at this size, fewer is the right answer. */
+  minThick: number;
   /** tangential px between two neighbouring windows, also measured at rMid. */
   cardGap: number;
   /** the fan's design half-angle, degrees. The real fan is clamped below it by whatever
@@ -75,6 +83,12 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
     // the previews off, or both, the low tier still measured 52.2-54.0. What is left is
     // the count itself, so the count is what gives.
     thick: 230,
+    // NEW-2, the owner's ruling: three or four previews in view on a desktop. Three is the
+    // target because the thickness is solved from it and a fourth would take ~30% off every
+    // window - and a window that is too thin stops being a picture, which is the other half
+    // of the same complaint. The floor is what guarantees that.
+    wantVisible: 3,
+    minThick: 128,
     cardGap: 16,
     fanDeg: 35,
     corner: 14,
@@ -98,6 +112,9 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
     gap: 40,
     depth: 240,
     thick: 300,
+    // Two on a phone: the ring is tight around a small limb and a third would be a sliver.
+    wantVisible: 2,
+    minThick: 150,
     cardGap: 16,
     fanDeg: 30,
     corner: 14,
@@ -220,14 +237,12 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   // A window is WIDEST at its outer arc, and in portrait that width runs across the phone.
   // Left alone, the tuned thickness puts the outer corners past both screen edges, which
   // is the one thing that would break the hairline: a border cut by the viewport.
-  const thick = portrait
+  const thick0 = portrait
     ? Math.min(k.thick, 2 * rMid * Math.asin(Math.min(0.9, (vw / 2 - 10) / r1)))
     : k.thick;
-  const dHalf = thick / 2 / rMid;
 
   const rIn = r0 + k.padInner;
   const contentDepth = depth - k.padInner - k.padOuter;
-  const contentHalf = Math.max(24, rIn * dHalf - k.padSide - k.corner * 0.35);
 
   // Defect 3 - the fan is clamped by the obstacles that are really on the screen rather
   // than by an angle chosen in the abstract: the navbar strip above, the viewport edges
@@ -242,7 +257,7 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   // the bottom cannot be reached. Horizontal is SOFT, because the ring is deliberately
   // wider than a phone and treating that as fatal collapsed the fan to nothing.
   const sideSlack = vw * 0.35;
-  const fits = (delta: number): boolean => {
+  const fits = (delta: number, dHalf: number): boolean => {
     for (let e = -1; e <= 1; e += 1) {
       const th = th0 + sweep * (delta + e * dHalf);
       for (const r of [r0, r1, (r0 + r1) / 2]) {
@@ -254,17 +269,59 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
     }
     return true;
   };
-  const scan = (dir: 1 | -1): number => {
+  const scan = (dir: 1 | -1, dHalf: number): number => {
     const step = design / 36;
     let best = 0;
     for (let a = step; a <= design + 1e-9; a += step) {
-      if (!fits(dir * a)) break;
+      if (!fits(dir * a, dHalf)) break;
       best = a;
     }
     return best;
   };
-  const fanUp = scan(-1);
-  const fanDown = scan(1);
+
+  // NEW-2 - the WINDOW COUNT is a target, and the thickness follows from it.
+  //
+  // It used to be the other way round: `thick` was a tuned constant and however many
+  // happened to fit in the clamped fan were what you got. Measured on production at
+  // 1440x900, that was ONE readable preview. In en and ru the fan clamps to 35 degrees
+  // above the fan centre and 5.8 below - the viewport floor stops it - which is 437px of
+  // arc at rMid against a pitch of 246, so 1.8 windows. Two were drawn and the second at an
+  // effective opacity of 0.24. That lopsided arc is also the whole of "clustered in the
+  // lower-left": the windows are evenly spaced BY CONSTRUCTION, and it is the arc they are
+  // spaced along that is short and off-centre.
+  //
+  // So: the owner's ruling (3-4 on desktop, 2 in portrait) is the input, and the thickness
+  // is solved for it. Two passes, because the fan's clamp depends on the half-angle and the
+  // half-angle depends on the thickness - measure the fan at the tuned thickness, divide the
+  // arc it gave by the wanted count, then re-clamp with the thickness that came out.
+  //
+  // The floor matters as much as the count. A window has to stay big enough to read as a
+  // PICTURE - that is the other half of NEW-2 - so the thickness never goes below
+  // `minThick`, and where the geometry cannot afford the wanted count at that size, fewer
+  // windows is the right answer and the counter says so.
+  // It is a FIXED POINT, not two passes, and the difference is visible. Thinner windows fit
+  // further down before the viewport floor stops them, so the arc GROWS when the thickness
+  // shrinks - measured, the en/ru desktop fan went from 35/5.8 degrees to 35/10.7 the moment
+  // the windows got thinner. A single second pass therefore sizes the windows for an arc
+  // that is no longer the arc, and the three of them ended up filling 27 degrees of a 45.7
+  // degree fan and bunched at one end of it, which is "clustered" all over again. Three
+  // iterations converge to well under a pixel here.
+  let thick = thick0;
+  let fanUp = 0;
+  let fanDown = 0;
+  for (let pass = 0; pass < 3; pass++) {
+    const dh = thick / 2 / rMid;
+    fanUp = scan(-1, dh);
+    fanDown = scan(1, dh);
+    const arc = (fanUp + fanDown) * rMid;
+    thick = Math.max(k.minThick, Math.min(thick0, arc / k.wantVisible - k.cardGap));
+  }
+  const dHalf = thick / 2 / rMid;
+  // The last solve moved the thickness, so re-clamp the fan to the thickness actually used.
+  fanUp = scan(-1, dHalf);
+  fanDown = scan(1, dHalf);
+
+  const contentHalf = Math.max(24, rIn * dHalf - k.padSide - k.corner * 0.35);
 
   return {
     matrix,
@@ -421,9 +478,17 @@ export function fanOpacity(a: number, m: RingMetrics): number {
   // windows render half a pitch past the limit, which put them back under the navbar
   // (measured: top at y=7 against a navbar ending at y=64) after the clamp had just
   // been added to stop exactly that.
+  //
+  // NEW-2 - the fade is a BAND at the fan's edge, not a ramp across the whole fan. It used
+  // to run over a full pitch with a 1.4 exponent, which meant a window only reached full
+  // strength once it was a whole window-width inside the fan. In a fan that holds three,
+  // that is most of the fan: measured on production, the second window on the desktop ring
+  // sat at an effective opacity of 0.243 and the third at 0.251 - "their opacity nearly
+  // erases them", exactly. Half a pitch of fade, linear, leaves the middle of the fan at
+  // full strength and still takes a window to zero before it reaches the clamp.
   const room = Math.min(arcDown(m) - a, a + arcUp(m));
-  const t = room / (m.pitch * 0.9);
-  return (t < 0 ? 0 : t > 1 ? 1 : t) ** 1.4;
+  const t = room / (m.pitch * 0.5);
+  return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
 /**

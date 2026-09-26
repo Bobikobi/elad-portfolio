@@ -10,6 +10,7 @@ import {
   SUN_LAMP_DISTANCE,
   SUN_LAMP_INTENSITY,
   SUN_LAMP_OVERVIEW_SCALE,
+  sunLampScale,
 } from '@/lib/photometry';
 import { softSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
@@ -627,6 +628,16 @@ function Corona() {
 /** The burning sun: displaced plasma surface (HDR for Bloom/God Rays), fresnel
  *  corona, soft gold halo, living prominences and a slow pulse. Registers its mesh
  *  as the God Rays source. Its gold = the galaxy core's gold (one continuity). */
+/** `?lamp=0.15` overrides SUN_LAMP_OVERVIEW_SCALE for one page load, so the overview's
+ *  brightness can be chosen side by side instead of guessed. Read once, at import. */
+const LAMP_OVERRIDE = (() => {
+  if (typeof window === 'undefined') return null;
+  const v = new URLSearchParams(window.location.search).get('lamp');
+  if (v === null || v.trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+})();
+
 export default function Sun() {
   const lampRef = useRef<THREE.PointLight>(null);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -650,8 +661,14 @@ export default function Sun() {
     // lamp its own aperture was calibrated against. Eased so a focus change is not a pop.
     const l = lampRef.current;
     if (!l) return;
-    const target = SUN_LAMP_INTENSITY * (useScene.getState().focusedPlanet ? 1 : SUN_LAMP_OVERVIEW_SCALE);
+    // A departure scrub shows the overview while focus is still set, so the lamp follows the
+    // same `departure` the camera and exposure do.
+    const s = useScene.getState();
+    const overview = LAMP_OVERRIDE ?? SUN_LAMP_OVERVIEW_SCALE;
+    const dep = s.focusedPlanet ? Math.min(1, Math.max(0, s.departure)) : 1;
+    const target = SUN_LAMP_INTENSITY * (1 + (overview - 1) * dep);
     l.intensity += (target - l.intensity) * Math.min(1, dt * 3);
+    sunLampScale.value = l.intensity / SUN_LAMP_INTENSITY;
   });
 
   useFrame((state, dt) => {
