@@ -131,7 +131,7 @@ function GalaxyHome() {
     } else {
       scene.setAct('galaxy');
       scene.setScrollProgress(0);
-      scene.setScrollDriven(true); // fresh dive: the 500vh driver is mounted (T7c reconciliation active)
+      scene.setScrollDriven(true); // fresh dive: the 800vh driver is mounted (T7c reconciliation active)
       window.scrollTo(0, 0);
     }
     return () => { useScene.getState().setScrollDriven(false); };
@@ -229,7 +229,7 @@ function GalaxyHome() {
   // starts at the end of it (see the layout effect above), so the runway back up to the
   // galaxy exists for them too.
   return (
-    <section ref={driverRef} className="relative" style={{ height: '500vh' }}>
+    <section ref={driverRef} className="relative" style={{ height: '800vh' }}>
       <SeoContent />
 
       {/* Welcome - fixed, fades as the dive begins */}

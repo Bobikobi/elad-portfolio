@@ -1,5 +1,11 @@
 # CROSSING verify
 
+> ## v3, 2026-09-20 - dive INTO the disc, exact reverse, no black (PR #41, stacked on #40)
+>
+> Owner feedback on v2: "entering under the galaxy, not diving into it", "the way back is not a reverse", then "there is a stretch where everything is black", "scroll too fast", and finally one black frame at arrival.
+> Changes: the path ends inside the disc (y +0.08) with a 7000-star neighbourhood; the camera is a pure function of scroll after the first 0.05 (no damping); driver 800vh; curtain envelope 0.0125 / 0.0375; the curtain is a deep-blue star-streak tunnel (Astra's concept) instead of black; no canvas resize on idle (it presented one blank frame, 1-2 per real-time run, 0 in 4 runs after).
+> Measured at real scroll pace (ramps 315 / 630 frames, preview `5szpz9za6`, one run per direction): frames under mean 20 = 0 / 0, colour split 17.0 / 18.2, jump 18.2 / 18.3. C1 down 8.04% vs 8.0 (peak at the rest frame, scene-time drift). Not yet run twice; C4a not re-measured for this branch. The fixed-step harness cannot see one-frame canvas blanks: `scripts/harness/edge-flash.mjs` with `SCROLL=1` can. Owner verdict on the preview: "continuous", small empty halo in the tunnel centre, the star field reads as lights without objects.
+
 > ## v2, 2026-09-19 - the ember, and the return trip that was stuck
 >
 > **v1 (the record below) shipped to production with a dead stretch and a stuck return.** Its
