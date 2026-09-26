@@ -206,14 +206,18 @@ const sunFrag = /* glsl */ `
     // Domain-warped by a slow fbm so the threads curl, and swept through time fast enough
     // that a quarter of the disc visibly changes within ~2 s (measured: 4.5% before).
     vec3 fp = vPos * 3.2;
-    vec3 fq = vec3(fbm(fp + vec3(0.0, uTime * 0.20, 0.0)),
-                   fbm(fp + vec3(5.2, 1.3, uTime * 0.17)),
-                   fbm(fp + vec3(2.1, uTime * 0.15, 8.3)));
-    vec3 tp = fp * 2.0 + fq * 3.0 + vec3(0.0, 0.0, uTime * 0.5);
+    // Cost: 7 noise taps (a 2-channel, 2-octave warp + 3 octaves of turbulence). The first
+    // cut used 16 and measured 61 -> 52 fps on the reference iGPU.
+    vec2 fq = vec2(grain(fp + vec3(0.0, uTime * 0.20, 0.0)),
+                   grain(fp + vec3(5.2, 1.3, uTime * 0.17)));
+    vec3 tp = fp * 2.0 + vec3(fq * 3.0, uTime * 0.5);
     float turb = 0.0, ta = 0.5;
-    for (int i = 0; i < 4; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
-    float fire = pow(clamp(1.0 - turb * 1.6, 0.0, 1.0), 3.0);
-    n = n * 0.55 + 0.10 + fire * 0.75 - (1.0 - fq.x) * 0.10;
+    for (int i = 0; i < 3; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
+    float fire = pow(clamp(1.0 - turb * 1.7, 0.0, 1.0), 3.0);
+    // The gaps between threads sit low on the ramp so the threads read against them - with
+    // the gaps near the mid stop, the core boost carried everything to the ACES ceiling and
+    // the centre measured as one white patch (tile contrast 6.5).
+    n = 0.10 + n * 0.40 + fire * 0.85 - (1.0 - fq.x) * 0.08;
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
     //
@@ -647,7 +651,7 @@ const _coronaCentre = new THREE.Vector3();
 const _coronaDir = new THREE.Vector3();
 const CORONA_OUTER = 1.45;
 const CORONA_GAIN = 0.5;
-const SPICULE_GAIN = 1.4;
+const SPICULE_GAIN = 2.6;
 const _sunScale = new THREE.Vector3();
 const coronaVert = /* glsl */ `
   varying vec2 vUv;
@@ -681,8 +685,8 @@ const coronaFrag = /* glsl */ `
     float tall = 0.020 + 0.150 * tn * tn;
     float h = clamp(e / tall, 0.0, 1.0);
     // The threshold rises with height, so each tongue narrows to a tip instead of a bead.
-    float spic = smoothstep(0.52 + 0.30 * h, 0.90, sp) * (1.0 - h);
-    vec3 fringe = vec3(1.0, 0.45, 0.15) * spic * uSpic;
+    float spic = smoothstep(0.48 + 0.30 * h, 0.80, sp) * (1.0 - h * h);
+    vec3 fringe = vec3(1.0, 0.40, 0.10) * spic * uSpic;
     gl_FragColor = vec4(col * amp * wisp * fade * uGain + fringe, 1.0);
   }
 `;
