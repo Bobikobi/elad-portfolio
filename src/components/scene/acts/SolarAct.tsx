@@ -13,6 +13,7 @@ import { HUD_AVAILABLE } from '../DebugHud';
 import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
 import { makeRng, SEED } from '@/lib/rng';
 import { loadBitmapTexture } from '@/lib/bitmapTexture';
+import { projects } from '@/lib/constants';
 import {
   AMBIENT_FILL_INTENSITY,
   EARTH_ALBEDO_MULTIPLIER,
@@ -70,12 +71,19 @@ if (HUD_AVAILABLE && typeof window !== 'undefined') {
 type HiTier = 'base' | 'mid' | 'hi';
 const DEV = process.env.NODE_ENV !== 'production';
 const HI_FADE = 0.5; // s
+/** Absent or non-numeric = no override. `?bands=0` is a real value (bands off), so it must
+ *  not collapse to "absent" the way `Number(x) || null` would. */
+function bandsParam(v: string | null): number | null {
+  if (v === null || v.trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 /** `?bands=0.4` overrides the per-planet NEW-1 band amplitude for one page load, so the
  *  value can be swept and measured rather than guessed - the same lever, and the same
  *  reason, as `?orbitexp=` in CameraRig. Read once, at import. */
 const BANDS_OVERRIDE =
   typeof window !== 'undefined'
-    ? Number(new URLSearchParams(window.location.search).get('bands')) || null
+    ? bandsParam(new URLSearchParams(window.location.search).get('bands'))
     : null;
 
 let _white1: THREE.DataTexture | null = null;
@@ -252,6 +260,10 @@ function hash32(s: string): number {
  * `identities` is empty for Jupiter, whose moons stand for nothing - those fall back to the
  * hash of their own index, so they are distinguishable without pretending to mean anything.
  */
+/** Saturn is the projects world, so its moons are the projects - in the order the site lists them.
+ *  Module-level so the array is stable and the moons' `useMemo` does not rebuild every render. */
+const MOON_IDENTITIES = projects.map((p) => p.id);
+
 function Moons({
   count,
   planetSize,
@@ -291,10 +303,13 @@ function Moons({
         tilt: (rnd() - 0.5) * 0.5,
         tint: new THREE.Color().setHSL(hue, 0.18, light),
         rough,
-        // A different piece of the same map, turned a different way. One texture, eight
-        // surfaces - the cheapest way to give them faces.
-        mapRot: (((h >> 24) & 0xff) / 255) * Math.PI * 2,
-        mapOff: [((h >> 3) & 0xff) / 255, ((h >> 11) & 0xff) / 255] as [number, number],
+        // A different face of the same map: the sphere is turned, not the texture, so all
+        // eight share one texture (a cloned texture would not follow the original's upload).
+        face: [
+          (((h >> 3) & 0xff) / 255 - 0.5) * Math.PI,
+          (((h >> 24) & 0xff) / 255) * Math.PI * 2,
+          0,
+        ] as [number, number, number],
       };
     });
   }, [count, planetSize, identities]);
@@ -309,9 +324,9 @@ function Moons({
   return (
     <group ref={group}>
       {moons.map((o, i) => (
-        <mesh key={i}>
+        <mesh key={i} rotation={o.face}>
           <sphereGeometry args={[o.size, 16, 16]} />
-          <meshStandardMaterial color="#b8b2a8" roughness={0.9} />
+          <meshStandardMaterial map={moonTex} color={o.tint} roughness={o.rough} />
         </mesh>
       ))}
     </group>
@@ -1021,7 +1036,13 @@ function Planet({ spec }: { spec: PlanetSpec }) {
             <meshBasicMaterial map={ringTex} transparent opacity={1} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
         )}
-        {spec.moons && <Moons count={spec.moons} planetSize={spec.size} />}
+        {spec.moons && (
+          <Moons
+            count={spec.moons}
+            planetSize={spec.size}
+            identities={spec.key === 'saturn' ? MOON_IDENTITIES : undefined}
+          />
+        )}
       </group>
       {/* R5.7 - the real Moon, on its own inclined orbit outside Earth's spin group. */}
       {spec.earth && <EarthMoon planetSize={spec.size} />}

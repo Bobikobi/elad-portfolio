@@ -408,6 +408,17 @@ export default function ProjectsStage({
       list.removeEventListener('click', onListClick);
       list.style.cursor = '';
     });
+    // The other half of "tapping elsewhere closes it": a tap that lands outside the ring
+    // never reaches `onListClick`. The panel is exempt - its visit line is the next tap.
+    // `pointerdown`, not `click`: iOS does not send a click from a non-interactive area.
+    const onDocDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' || tapped.current < 0) return;
+      const t = e.target as Node | null;
+      if (t && (list.contains(t) || panel.contains(t))) return;
+      disarm();
+    };
+    document.addEventListener('pointerdown', onDocDown, { passive: true });
+    unbind.push(() => document.removeEventListener('pointerdown', onDocDown));
 
     // The ring's own scrollbar (B8c): a rail concentric with the windows, outside them, so
     // "there are more of these" is said in the same geometry as the thing it describes.
@@ -673,7 +684,10 @@ export default function ProjectsStage({
         const a = windowArc(i, n, scroll, m);
         const th = m.th0 + (m.sweep * a) / m.rMid;
         const opacity = i === centred ? Math.max(fanOpacity(a, m), 1) : fanOpacity(a, m);
-        if (opacity >= READABLE) readable++;
+        // What the eye gets is the window's opacity times its preview's (set below), so
+        // that product is what is counted.
+        const photoOpacity = 0.94 * Math.min(1, opacity + 0.15);
+        if (opacity * photoOpacity >= READABLE) readable++;
         const g = hits[i];
         if (opacity <= 0.004) {
           if (g.style.display !== 'none') g.style.display = 'none';
@@ -780,7 +794,7 @@ export default function ProjectsStage({
         // lost when the per-frame block was replaced by the cached one, and the stylesheet
         // rule underneath it - a 0.32 base from when the image was a texture behind text -
         // took over: the previews went to a ghost of themselves. Inline, so it wins.
-        photos[i]?.style.setProperty('opacity', (0.94 * Math.min(1, opacity + 0.15)).toFixed(3));
+        photos[i]?.style.setProperty('opacity', photoOpacity.toFixed(3));
       }
 
       // "3 / 12". The ring shows a few of twelve and the rail says only that there is more;
