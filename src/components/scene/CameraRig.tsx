@@ -32,7 +32,13 @@ const DISC_PROBE =
  */
 const ORBIT_APERTURE_OVERRIDE =
   typeof window !== 'undefined'
-    ? Number(new URLSearchParams(window.location.search).get('orbitexp')) || null
+    ? (() => {
+        // Explicit parse: `?orbitexp=0` is a real sweep value and must not read as absent.
+        const v = new URLSearchParams(window.location.search).get('orbitexp');
+        if (v === null || v.trim() === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      })()
     : null;
 
 // --- The ORBIT vantage is SOLVED, not dialled in --------------------------------------

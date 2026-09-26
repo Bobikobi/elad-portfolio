@@ -433,7 +433,12 @@ export default function Sun() {
     // lamp its own aperture was calibrated against. Eased so a focus change is not a pop.
     const l = lampRef.current;
     if (!l) return;
-    const target = SUN_LAMP_INTENSITY * (useScene.getState().focusedPlanet ? 1 : LAMP_OVERRIDE ?? SUN_LAMP_OVERVIEW_SCALE);
+    // A departure scrub shows the overview while focus is still set, so the lamp follows the
+    // same `departure` the camera and exposure do.
+    const s = useScene.getState();
+    const overview = LAMP_OVERRIDE ?? SUN_LAMP_OVERVIEW_SCALE;
+    const dep = s.focusedPlanet ? Math.min(1, Math.max(0, s.departure)) : 1;
+    const target = SUN_LAMP_INTENSITY * (1 + (overview - 1) * dep);
     l.intensity += (target - l.intensity) * Math.min(1, dt * 3);
   });
 
