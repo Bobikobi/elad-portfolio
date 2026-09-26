@@ -200,6 +200,26 @@ const sunFrag = /* glsl */ `
     // minutes for it.
     float gr = grain(p*13.6 + vec3(uTime*0.00162, -uTime*0.0018, uTime*0.0012));
     n += (gr - 0.5) * 0.22;
+    // SUN-BURN: the whole face burns (Elad: "everything should burn"). Turbulence - the sum
+    // of |noise| - has thin ridges where the noise crosses zero; inverted and sharpened
+    // those ridges are bright threads over dark, the look of fire rather than of cloud.
+    // Domain-warped by a slow fbm so the threads curl, and swept through time fast enough
+    // that a quarter of the disc visibly changes within ~2 s (measured: 4.5% before).
+    vec3 fp = vPos * 3.2;
+    // Cost: 6 noise taps (a 2-channel, 2-octave warp + 2 octaves of turbulence). The first
+    // cut used 16 and measured 61 -> 52 fps on the reference iGPU.
+    vec2 fq = vec2(grain(fp + vec3(0.0, uTime * 0.20, 0.0)),
+                   grain(fp + vec3(5.2, 1.3, uTime * 0.17)));
+    vec3 tp = fp * 2.0 + vec3(fq * 3.0, uTime * 0.5);
+    float turb = 0.0, ta = 0.5;
+    for (int i = 0; i < 2; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
+    float fire = pow(clamp(1.0 - turb * 1.8, 0.0, 1.0), 3.0);
+    // The gaps between threads sit low on the ramp so the threads read against them - with
+    // the gaps near the mid stop, the core boost carried everything to the ACES ceiling and
+    // the centre measured as one white patch (tile contrast 6.5).
+    // The linear turb term textures the wide cells between threads (glow falling off away from
+    // each thread): without it those cells were flat and a fifth of the face measured <5 std.
+    n = 0.05 + n * 0.30 + fire * 0.95 - (1.0 - fq.x) * 0.10 + (0.55 - turb) * 0.45;
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
     //
@@ -330,7 +350,22 @@ const sunFrag = /* glsl */ `
     col *= (${glslFloat(SUN_EMISSIVE_EXPOSURE)} + uPulse) * mix(0.09, 1.0, limb);
     // SUN-4: the limb is cooler as well as darker - blue and then green fall away faster than
     // red, so the rim turns amber instead of just grey-orange. Red is untouched on purpose.
-    col *= mix(vec3(1.0, 0.62, 0.34), vec3(1.0), smoothstep(0.10, 0.65, limb));
+    // SUN-HOT: the rim goes deeper red-orange (Elad: "flat orange, not burning").
+    // Red is LIFTED at the rim, not just green/blue cut: most of what sits on the rim pixels is
+    // the core's bloom spilling outward, and cutting the surface's own green moved the hue by
+    // 1 degree across three tries. The rim has to outshine the spill to carry its own colour.
+    col *= mix(vec3(1.35, 0.20, 0.04), vec3(1.0), smoothstep(0.10, 0.90, limb));
+    // SUN-HOT: the core burns toward yellow-white. Brighter and less saturated in the inner
+    // half of the disc only, so the centre-to-rim gradient deepens instead of lifting the
+    // whole ball. Targets (measured on screen): centre R,G >= 245, B >= 170, hue at the rim
+    // <= 20 deg, centre >= 1.8x rim luminance, < 15% of the centre burnt to white.
+    float core = smoothstep(0.45, 1.0, limb);
+    // Per channel, green most and blue DOWN: ACES's input matrix feeds red and green into
+    // blue, so a uniform boost measured as a blue-white centre (240,234,227), and even +35%
+    // blue landed at 209. Blue has to fall in the input for the output to stay yellow.
+    col *= 1.0 + core * vec3(0.75, 1.05, -0.35) * (0.25 + 0.75 * fire);
+    // Measured ceiling: x3 on the core reached only 243 of 255 through ACES, turned it white
+    // (blue 232), and its bloom raised the halo 40% and the whole frame 16%. This is the knee.
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -618,7 +653,7 @@ const _coronaCentre = new THREE.Vector3();
 const _coronaDir = new THREE.Vector3();
 const CORONA_OUTER = 1.45;
 const CORONA_GAIN = 0.5;
-const SPICULE_GAIN = 1.4;
+const SPICULE_GAIN = 2.2;
 const _sunScale = new THREE.Vector3();
 const coronaVert = /* glsl */ `
   varying vec2 vUv;
@@ -645,12 +680,17 @@ const coronaFrag = /* glsl */ `
     // rather than outlined. Seamless around the circle (3D noise on the direction, time as
     // the third axis) and HDR, so the bloom catches the tips.
     vec2 dir = q / rho;
-    float sp = noise(vec3(dir * 22.0, uTime * 0.8));
-    float tall = 0.020 + 0.050 * noise(vec3(dir * 9.0 + 3.1, uTime * 0.5));
-    float h = clamp(e / tall, 0.0, 1.0);
-    // The threshold rises with height, so each tongue narrows to a tip instead of a bead.
-    float spic = smoothstep(0.52 + 0.30 * h, 0.90, sp) * (1.0 - h);
-    vec3 fringe = vec3(1.0, 0.45, 0.15) * spic * uSpic;
+    // SUN-BURN: a burning edge, not a ring and not spikes. The flame height is a coarse
+    // angular noise cubed - mostly low, a few tongues leaping to ~18% of R - and inside it a
+    // texture that streams OUTWARD (e grows with -time), swaying sideways with height, which
+    // is what makes it read as fire. Yellow at the root, red at the tips.
+    float tn = noise(vec3(dir * 4.0 + 3.1, uTime * 0.35));
+    float tall = 0.015 + 0.17 * tn * tn * tn + 0.03 * noise(vec3(dir * 13.0, uTime * 0.9));
+    float h = e / tall;
+    vec2 sway = vec2(-dir.y, dir.x) * e * 1.5 * sin(uTime * 1.3 + th * 7.0);
+    float flick = noise(vec3((dir + sway) * 34.0, e * 30.0 - uTime * 2.6));
+    float spic = (1.0 - smoothstep(0.0, 1.0, h)) * smoothstep(0.30 + 0.45 * h, 0.75, flick);
+    vec3 fringe = mix(vec3(1.0, 0.62, 0.20), vec3(1.0, 0.26, 0.05), clamp(h, 0.0, 1.0)) * spic * uSpic;
     gl_FragColor = vec4(col * amp * wisp * fade * uGain + fringe, 1.0);
   }
 `;
