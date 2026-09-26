@@ -2,6 +2,7 @@
 import { useScene } from '@/lib/sceneStore';
 import Galaxy from '../galaxy/Galaxy';
 import GalaxyDetail from '../galaxy/GalaxyDetail';
+import DiveNeighbourhood from '../galaxy/DiveNeighbourhood';
 import GalaxyNebulae from '../galaxy/GalaxyNebulae';
 import Dust from '../galaxy/Dust';
 import DiveFade from '../galaxy/DiveFade';
@@ -27,6 +28,7 @@ export default function GalaxyAct() {
       {/* Lightweight (~40 sprites) - kept regardless of tier so they never flash
           out when PerformanceMonitor dips quality during the heavy first frames. */}
       <GalaxyDetail />
+      <DiveNeighbourhood />
       {/* A6: real Hubble HII pockets embedded in the arms (one-universe family). */}
       <GalaxyNebulae />
       <DiveFade />
