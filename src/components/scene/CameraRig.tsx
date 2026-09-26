@@ -833,7 +833,9 @@ export default function CameraRig() {
       } else {
         // DIVE — a staged S-curve that descends THROUGH the disc plane. Completes by
         // ~0.85; the veil/swap happens in the last stretch.
-        const e = easeInOutCubic(clamp01((p - 0.015) / 0.85));
+        const t01 = clamp01((p - 0.015) / 0.85);
+        // Gentler than a pure cubic: that one parked the camera for the last 0.15 of the dive.
+        const e = 0.4 * t01 + 0.6 * easeInOutCubic(t01);
         cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, e);
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);
