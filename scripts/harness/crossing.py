@@ -148,6 +148,7 @@ def judge(run):
     # streak field and the veils, coverage still 0) or the curtain (SwapMask).
     phases = {}
     dark_span = None
+    dark_sp = []
     if attach_state(run, stamps, rows):
         # The dead stretch, measured where the passage actually is: frames captured before the
         # ramp started are the page sitting still and are not part of it.
@@ -181,9 +182,7 @@ def judge(run):
         "phases": phases,
         "settled_mean": round(float(np.mean(means[-15:])), 1),
         "dark_span": dark_span,
-        "dark_sp_range": ([round(min(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK), 3),
-                           round(max(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK), 3)]
-                          if dark_span else None),
+        "dark_sp_range": [round(min(dark_sp), 3), round(max(dark_sp), 3)] if dark_sp else None,
         # C1 judges the PASSAGE. On the way back up the recording ends on the galaxy at rest, whose
         # brightness drifts from 76 to 80 with scene time (measured, the fade is at 0 there and C4a
         # holds the rest frame byte-identical to master), so frames where the fade is under ~1.5%
@@ -195,7 +194,7 @@ def judge(run):
         # A run whose state could not be attached cannot answer C5 at all, and says so rather
         # than passing by default.
         "C5": (("PASS" if dark_span <= C5_SPAN
-                and (not dark_span or min(r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK) >= c5_from)
+                and (not dark_sp or min(dark_sp) >= c5_from)
                 else "FAIL") if dark_span is not None else "UNKNOWN"),
     }
     json.dump({"meta": meta, "rows": rows}, open(os.path.join(run, "frames.json"), "w"))
