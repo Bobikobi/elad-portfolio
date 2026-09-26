@@ -343,7 +343,9 @@ const sunFrag = /* glsl */ `
     // Per channel, green most and blue DOWN: ACES's input matrix feeds red and green into
     // blue, so a uniform boost measured as a blue-white centre (240,234,227), and even +35%
     // blue landed at 209. Blue has to fall in the input for the output to stay yellow.
-    col *= 1.0 + core * vec3(2.2, 2.6, -0.2);
+    col *= 1.0 + core * vec3(0.75, 1.05, -0.35);
+    // Measured ceiling: x3 on the core reached only 243 of 255 through ACES, turned it white
+    // (blue 232), and its bloom raised the halo 40% and the whole frame 16%. This is the knee.
     gl_FragColor = vec4(col, 1.0);
   }
 `;
