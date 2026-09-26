@@ -200,6 +200,20 @@ const sunFrag = /* glsl */ `
     // minutes for it.
     float gr = grain(p*13.6 + vec3(uTime*0.00162, -uTime*0.0018, uTime*0.0012));
     n += (gr - 0.5) * 0.22;
+    // SUN-BURN: the whole face burns (Elad: "everything should burn"). Turbulence - the sum
+    // of |noise| - has thin ridges where the noise crosses zero; inverted and sharpened
+    // those ridges are bright threads over dark, the look of fire rather than of cloud.
+    // Domain-warped by a slow fbm so the threads curl, and swept through time fast enough
+    // that a quarter of the disc visibly changes within ~2 s (measured: 4.5% before).
+    vec3 fp = vPos * 3.2;
+    vec3 fq = vec3(fbm(fp + vec3(0.0, uTime * 0.20, 0.0)),
+                   fbm(fp + vec3(5.2, 1.3, uTime * 0.17)),
+                   fbm(fp + vec3(2.1, uTime * 0.15, 8.3)));
+    vec3 tp = fp * 2.0 + fq * 3.0 + vec3(0.0, 0.0, uTime * 0.5);
+    float turb = 0.0, ta = 0.5;
+    for (int i = 0; i < 4; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
+    float fire = pow(clamp(1.0 - turb * 1.6, 0.0, 1.0), 3.0);
+    n = n * 0.55 + 0.10 + fire * 0.75 - (1.0 - fq.x) * 0.10;
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
     //
@@ -661,7 +675,10 @@ const coronaFrag = /* glsl */ `
     // the third axis) and HDR, so the bloom catches the tips.
     vec2 dir = q / rho;
     float sp = noise(vec3(dir * 22.0, uTime * 0.8));
-    float tall = 0.020 + 0.050 * noise(vec3(dir * 9.0 + 3.1, uTime * 0.5));
+    // SUN-BURN: ragged, not a ring. Heights vary 2-17% of R on a coarse angular noise that
+    // is squared, so most tongues are short and a few leap high.
+    float tn = noise(vec3(dir * 5.0 + 3.1, uTime * 0.45));
+    float tall = 0.020 + 0.150 * tn * tn;
     float h = clamp(e / tall, 0.0, 1.0);
     // The threshold rises with height, so each tongue narrows to a tip instead of a bead.
     float spic = smoothstep(0.52 + 0.30 * h, 0.90, sp) * (1.0 - h);
