@@ -217,7 +217,9 @@ const sunFrag = /* glsl */ `
     // The gaps between threads sit low on the ramp so the threads read against them - with
     // the gaps near the mid stop, the core boost carried everything to the ACES ceiling and
     // the centre measured as one white patch (tile contrast 6.5).
-    n = 0.05 + n * 0.30 + fire * 0.95 - (1.0 - fq.x) * 0.10;
+    // The linear turb term textures the wide cells between threads (glow falling off away from
+    // each thread): without it those cells were flat and a fifth of the face measured <5 std.
+    n = 0.05 + n * 0.30 + fire * 0.95 - (1.0 - fq.x) * 0.10 + (0.55 - turb) * 0.45;
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
     //
