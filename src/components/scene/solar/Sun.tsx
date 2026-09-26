@@ -337,9 +337,10 @@ const sunFrag = /* glsl */ `
     // whole ball. Targets (measured on screen): centre R,G >= 245, B >= 170, hue at the rim
     // <= 20 deg, centre >= 1.8x rim luminance, < 15% of the centre burnt to white.
     float core = smoothstep(0.45, 1.0, limb);
-    // Per channel, green most: ACES pulls every channel to white once the core is bright,
-    // so a uniform boost measured as a blue-white centre (240,234,227), not a yellow one.
-    col *= 1.0 + core * vec3(0.45, 0.85, 0.35);
+    // Per channel, green most and blue DOWN: ACES's input matrix feeds red and green into
+    // blue, so a uniform boost measured as a blue-white centre (240,234,227), and even +35%
+    // blue landed at 209. Blue has to fall in the input for the output to stay yellow.
+    col *= 1.0 + core * vec3(0.40, 0.75, -0.35);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
