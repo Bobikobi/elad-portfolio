@@ -331,14 +331,15 @@ const sunFrag = /* glsl */ `
     // SUN-4: the limb is cooler as well as darker - blue and then green fall away faster than
     // red, so the rim turns amber instead of just grey-orange. Red is untouched on purpose.
     // SUN-HOT: the rim goes deeper red-orange (Elad: "flat orange, not burning").
-    col *= mix(vec3(1.0, 0.36, 0.11), vec3(1.0), smoothstep(0.10, 0.90, limb));
+    col *= mix(vec3(1.0, 0.28, 0.07), vec3(1.0), smoothstep(0.10, 0.90, limb));
     // SUN-HOT: the core burns toward yellow-white. Brighter and less saturated in the inner
     // half of the disc only, so the centre-to-rim gradient deepens instead of lifting the
     // whole ball. Targets (measured on screen): centre R,G >= 245, B >= 170, hue at the rim
     // <= 20 deg, centre >= 1.8x rim luminance, < 15% of the centre burnt to white.
     float core = smoothstep(0.45, 1.0, limb);
-    col *= 1.0 + 1.3 * core;
-    col = mix(col, vec3(max(col.r, col.g)) * vec3(1.0, 0.90, 0.55), 0.25 * core);
+    // Per channel, green most: ACES pulls every channel to white once the core is bright,
+    // so a uniform boost measured as a blue-white centre (240,234,227), not a yellow one.
+    col *= 1.0 + core * vec3(0.45, 0.85, 0.35);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
