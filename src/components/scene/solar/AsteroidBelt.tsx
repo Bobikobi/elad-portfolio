@@ -2,6 +2,7 @@
 import { useMemo, useRef, useLayoutEffect, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { sunLampScale } from '@/lib/photometry';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { makeRng, SEED } from '@/lib/rng';
 import { useScene } from '@/lib/sceneStore';
@@ -15,6 +16,7 @@ import {
 } from '@/lib/chromeMask';
 
 const _dbs = new THREE.Vector2();
+const _sunP = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -75,7 +77,12 @@ const NEAR_FULL = 3.4; // fully solid beyond this
 // whole belt from above at any camera distance, while leaving the overview's rare
 // ~11px chunks alone.
 const BIG_PX_FADE = 10; // start dissolving at this projected diameter (drawing px)
-const BIG_PX_GONE = 18; // fully gone by this one
+const BIG_PX_GONE = 18;
+// Dust and band go in the OPAQUE queue, ahead of everything (still additive, still never
+// depth-written), so every opaque surface drawn after them - rocks, planets, the sun -
+// simply overwrites the dust in front of it. Dust never lands on a rock face.
+const DUST_ORDER = -1;
+const SUN_DISC_R = 1.5; // Sun.tsx SUN_R, world units (belt group is unscaled) // fully gone by this one
 
 // Rocky palette — cool basalt greys through warm carbonaceous browns, and DARK. The old
 // palette sat around 42% sRGB; at the belt's distance the sun delivers an irradiance of
@@ -83,6 +90,19 @@ const BIG_PX_GONE = 18; // fully gone by this one
 // mapper and then trips the bloom threshold. That is the entire reason the belt read as
 // gold: it was blowing out, not reflecting. At ~20% sRGB the same rock lands near 0.25
 // radiance — a rock lit by a star, which is what it is.
+// ASTEROID-BACKLIT: seen against the sun, a rock is lit only on its grazing rim, and there the
+// GGX specular (Fresnel -> 1 when the light opposes the view) put ~89/255 on a rock whose
+// diffuse is ~10 - the bright speckles. Measured 2026-09-20: N.L, N.V and V.H gates did not
+// remove it; a gate on the phase angle did. The specular fades out as the light direction
+// turns against the view direction: 0 at dot(L,V) <= -0.6 (phase 127 deg and beyond), full at
+// -0.2. Rocks lit from the front or the side keep their highlight.
+const ROCK_GATE_GLSL = /* glsl */ `
+uniform float uSpec;
+uniform float uStock;
+float rockSpecGate( vec3 l, vec3 v ) {
+  return uStock > 0.5 ? 1.0 : smoothstep( -0.6, -0.2, dot( l, v ) );
+}
+`;
 const ROCK_COLORS = ['#37312c', '#413a32', '#2c2723', '#4a3f34', '#252220', '#544738'];
 // Dust catches the same light but is seen in bulk, so it is tinted a touch warmer.
 const DUST_COLORS = ['#7d6a55', '#8e7a61', '#6b5c4c', '#9a8365'];
@@ -289,7 +309,36 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         worstKeepInsideChrome: +worstKeep.toFixed(4),
       };
     };
-    return () => { delete w.__beltProbe; };
+    // Rocks seen against the sun: the sun is behind the rock as the camera sees it, so the
+    // face the camera sees is the one the lamp cannot reach. Sorted by projected size.
+    w.__beltBacklit = (minPx = 4) => {
+      const g = group();
+      if (!g) return null;
+      g.updateWorldMatrix(true, false);
+      camera.updateMatrixWorld();
+      const size = gl.getDrawingBufferSize(new THREE.Vector2());
+      const projScale = camera.projectionMatrix.elements[5] * size.y * 0.5;
+      const sun = new THREE.Vector3().setFromMatrixPosition(g.matrixWorld);
+      const out: { x: number; y: number; px: number; cosPhase: number; dist: number; i: number }[] = [];
+      const p = new THREE.Vector3();
+      const a = new THREE.Vector3();
+      const b = new THREE.Vector3();
+      belt.rocks.forEach((r, i) => {
+        p.set(Math.cos(r.angle) * r.radius, r.y, Math.sin(r.angle) * r.radius).applyMatrix4(g.matrixWorld);
+        const dist = p.distanceTo(camera.position);
+        const px = (2 * r.size * Math.max(...r.lump) * projScale) / dist;
+        if (px < minPx) return;
+        a.copy(sun).sub(p).normalize();
+        b.copy(camera.position).sub(p).normalize();
+        const cosPhase = a.dot(b);
+        const s = p.clone().project(camera);
+        if (s.z > 1 || Math.abs(s.x) > 0.98 || Math.abs(s.y) > 0.98) return;
+        out.push({ x: (s.x * 0.5 + 0.5) * size.x, y: (1 - (s.y * 0.5 + 0.5)) * size.y, px, cosPhase, dist, i });
+      });
+      out.sort((m, n) => n.px - m.px);
+      return { w: size.x, h: size.y, sun: (() => { const s = sun.clone().project(camera); return { x: (s.x * 0.5 + 0.5) * size.x, y: (1 - (s.y * 0.5 + 0.5)) * size.y }; })(), rocks: out };
+    };
+    return () => { delete w.__beltProbe; delete w.__beltBacklit; };
   }, [belt, camera, gl]);
 
   // Near-camera dissolve + chrome mask, injected into the standard material so the rocks
@@ -302,33 +351,59 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       shader.uniforms.uChrome = chromeRects;
       shader.uniforms.uChromeN = chromeCount;
       shader.uniforms.uProjScale = { value: 600 };
+      // Measurement seam (ASTEROID-BACKLIT): both default to 1 = stock behaviour.
+      shader.uniforms.uDither = { value: 1 };
+      shader.uniforms.uSpec = { value: 1 };
+      shader.uniforms.uStock = { value: 0 };
+      shader.uniforms.uSun = { value: new THREE.Vector3(0, 0, 0) };
+      // The rocks keep the full lamp while the overview dims it for the planets.
+      shader.uniforms.uLampScale = sunLampScale;
       rockShader.current = shader;
       // Projected diameter of this instance, in drawing px, carried to the fragment stage.
       // `instanceMatrix` column 0 is the instance's x axis, so its length is the x scale —
       // the rock's radius times its lump factor.
       shader.vertexShader = shader.vertexShader.replace(
         'void main() {',
-        'uniform float uProjScale;\nvarying float vRockPx;\nvoid main() {'
+        'uniform float uProjScale;\nvarying float vRockPx;\nvarying float vRockHash;\nvoid main() {'
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <project_vertex>',
         `#include <project_vertex>
-         vRockPx = 2.0 * length( instanceMatrix[0].xyz ) * uProjScale / max( -mvPosition.z, 0.001 );`
+         vRockPx = 2.0 * length( instanceMatrix[0].xyz ) * uProjScale / max( -mvPosition.z, 0.001 );
+         vRockHash = fract( sin( dot( instanceMatrix[3].xyz, vec3( 12.9898, 78.233, 37.719 ) ) ) * 43758.5453 );`
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         'void main() {',
-        `${chromeMaskGLSL}\nvarying float vRockPx;\nvoid main() {`
+        `${chromeMaskGLSL}\nuniform float uDither;\nuniform vec3 uSun;\nvarying float vRockPx;\nvarying float vRockHash;\nvoid main() {`
       );
+      {
+        const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
+        const SPEC = 'reflectedLight.directSpecular += irradiance * BRDF_GGX_Multiscatter(';
+        if (!CHUNK.includes(SPEC)) throw new Error('ASTEROID-BACKLIT: three\'s specular line has moved');
+        const IRR = 'vec3 irradiance = dotNL * directLight.color;';
+        if (!CHUNK.includes(IRR)) throw new Error('belt lamp compensation: three\'s irradiance line has moved');
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <lights_physical_pars_fragment>',
+          'uniform float uLampScale;\n' + ROCK_GATE_GLSL + CHUNK.replace(IRR, 'vec3 irradiance = dotNL * directLight.color / max( uLampScale, 0.05 );').replace(SPEC, 'reflectedLight.directSpecular += uSpec * rockSpecGate( directLight.direction, geometryViewDir ) * irradiance * BRDF_GGX_Multiscatter(')
+        );
+      }
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <clipping_planes_fragment>',
         `#include <clipping_planes_fragment>
          {
            float _camD = length( vViewPosition );
+           // The apparent-size dissolve is a per-pixel hash: over the dark sky its holes are
+           // invisible, over the sun disc each hole shows a bright granule and the rock face
+           // reads as speckled. In front of the disc the rock stays solid (a dark silhouette).
+           // The near-camera fade still applies there, so over the disc it draws one number
+           // per ROCK instead of per pixel: a rock is whole or gone, never holed.
+           float _onSun = ( uSun.z > 0.0 && uStock < 0.5 ) ? 1.0 - smoothstep( uSun.z * 0.95, uSun.z * 1.2, distance( gl_FragCoord.xy, uSun.xy ) ) : 0.0;
            float _keep = smoothstep( ${NEAR_GONE.toFixed(2)}, ${NEAR_FULL.toFixed(2)}, _camD )
-                       * ( 1.0 - smoothstep( ${BIG_PX_FADE.toFixed(1)}, ${BIG_PX_GONE.toFixed(1)}, vRockPx ) )
+                       * mix( 1.0 - smoothstep( ${BIG_PX_FADE.toFixed(1)}, ${BIG_PX_GONE.toFixed(1)}, vRockPx ), 1.0, _onSun )
                        * chromeKeep( gl_FragCoord.xy );
+           if ( uDither < 0.5 ) _keep = ( _keep > 0.0 ) ? 1.0 : 0.0;
            if ( _keep < 0.999 ) {
-             float _h = fract( sin( dot( gl_FragCoord.xy, vec2(12.9898, 78.233) ) ) * 43758.5453 );
+             float _h = _onSun > 0.5 ? vRockHash : fract( sin( dot( gl_FragCoord.xy, vec2(12.9898, 78.233) ) ) * 43758.5453 );
              if ( _h > _keep ) discard;
            }
          }`
@@ -345,6 +420,8 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
   // error; the mounted material is the thing that actually owns the uniform.
   const dustMat = useRef<THREE.ShaderMaterial>(null);
   const bandMat = useRef<THREE.ShaderMaterial>(null);
+  const dustPts = useRef<THREE.Points>(null);
+  const bandMesh = useRef<THREE.Mesh>(null);
   useFrame((state, dt) => {
     // Same treatment as the dust, and the belt needed it more: at 0.025 rad/s it was the
     // fastest-drifting speck field in a world close-up.
@@ -360,7 +437,31 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       dustMat.current.uniforms.uProjScale.value = projScale;
     }
     if (bandMat.current) bandMat.current.uniforms.uTime.value = t;
-    if (rockShader.current) rockShader.current.uniforms.uProjScale.value = projScale;
+    if (rockShader.current) {
+      rockShader.current.uniforms.uProjScale.value = projScale;
+      // Sun disc on screen (drawing px, gl_FragCoord origin bottom-left) for the rock dissolve.
+      const g = groupRef.current;
+      if (g) {
+        _sunP.setFromMatrixPosition(g.matrixWorld);
+        const dist = _sunP.distanceTo(state.camera.position);
+        _sunP.project(state.camera);
+        const sz = state.gl.getDrawingBufferSize(_dbs);
+        const u = rockShader.current.uniforms.uSun.value as THREE.Vector3;
+        if (_sunP.z > 1) u.set(0, 0, 0);
+        else u.set((_sunP.x * 0.5 + 0.5) * sz.x, (_sunP.y * 0.5 + 0.5) * sz.y, (SUN_DISC_R * projScale) / dist);
+      }
+    }
+    // ASTEROID-BACKLIT measurement seam (HUD builds only): switch one layer at a time.
+    if (HUD_AVAILABLE) {
+      const dbg = (window as unknown as { __beltDebug?: { dust?: boolean; band?: boolean; dither?: boolean; spec?: boolean; stock?: boolean } }).__beltDebug;
+      if (rockShader.current) {
+        rockShader.current.uniforms.uDither.value = dbg?.dither === false ? 0 : 1;
+        rockShader.current.uniforms.uSpec.value = dbg?.spec === false ? 0 : 1;
+        rockShader.current.uniforms.uStock.value = dbg?.stock ? 1 : 0;
+      }
+      if (dustPts.current) dustPts.current.visible = dbg?.dust !== false;
+      if (bandMesh.current) bandMesh.current.visible = dbg?.band !== false;
+    }
   });
 
   return (
@@ -384,13 +485,13 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
           is one annulus with a gaussian radial profile and the same five-stream angular
           clumping as the bodies (it shares the group, so the clumps stay registered with
           the rocks that made them). Additive, never depth-written, and clamped low. */}
-      <mesh geometry={bandGeo} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} raycast={() => null}>
+      <mesh ref={bandMesh} renderOrder={DUST_ORDER} geometry={bandGeo} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} raycast={() => null}>
         <shaderMaterial
           ref={bandMat}
           uniforms={bandUniforms}
           vertexShader={bandVert}
           fragmentShader={bandFrag}
-          transparent
+          transparent={false}
           depthWrite={false}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
@@ -400,13 +501,13 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       {/* Dust: the nine-in-ten of the belt that is too small to be an object. Additive and
           depth-TESTED (never depth-written) so a planet still occludes it, but a dense
           stretch of it glows the way a real dust band catches sunlight. */}
-      <points geometry={dustGeo} frustumCulled={false}>
+      <points ref={dustPts} renderOrder={DUST_ORDER} geometry={dustGeo} frustumCulled={false}>
         <shaderMaterial
           ref={dustMat}
           uniforms={dustUniforms}
           vertexShader={dustVert}
           fragmentShader={dustFrag}
-          transparent
+          transparent={false}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
         />

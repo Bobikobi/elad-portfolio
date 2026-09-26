@@ -13,6 +13,7 @@ import { HUD_AVAILABLE } from '../DebugHud';
 import { ECLIPSE_FLOOR, eclipseFor } from '@/lib/eclipse';
 import { makeRng, SEED } from '@/lib/rng';
 import { loadBitmapTexture } from '@/lib/bitmapTexture';
+import { projects } from '@/lib/constants';
 import {
   AMBIENT_FILL_INTENSITY,
   EARTH_ALBEDO_MULTIPLIER,
@@ -70,6 +71,20 @@ if (HUD_AVAILABLE && typeof window !== 'undefined') {
 type HiTier = 'base' | 'mid' | 'hi';
 const DEV = process.env.NODE_ENV !== 'production';
 const HI_FADE = 0.5; // s
+/** Absent or non-numeric = no override. `?bands=0` is a real value (bands off), so it must
+ *  not collapse to "absent" the way `Number(x) || null` would. */
+function bandsParam(v: string | null): number | null {
+  if (v === null || v.trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+/** `?bands=0.4` overrides the per-planet NEW-1 band amplitude for one page load, so the
+ *  value can be swept and measured rather than guessed - the same lever, and the same
+ *  reason, as `?orbitexp=` in CameraRig. Read once, at import. */
+const BANDS_OVERRIDE =
+  typeof window !== 'undefined'
+    ? bandsParam(new URLSearchParams(window.location.search).get('bands'))
+    : null;
 
 let _white1: THREE.DataTexture | null = null;
 function white1(): THREE.DataTexture {
@@ -196,26 +211,108 @@ interface PlanetSpec {
   shear?: number;
   haze?: number;
   earth?: boolean;
+  /** NEW-1: fine latitudinal band structure the ALBEDO MAP does not carry, as a relative
+   *  modulation of the sampled albedo. It exists because the defect is in the asset, and
+   *  it was measured rather than assumed: normalised to 1024x512 and scored as mean
+   *  |L - blur(L)|, the maps read saturn 0.83, jupiter 2.57, earth 3.32 - Saturn's is a set
+   *  of smooth gradients with almost no structure in it, which is why the rendered disc
+   *  came out as a cream ball. Expanding its contrast cannot fix that: its p5-p95 spread is
+   *  already 79.9 against Jupiter's 83.1, so the wide bands are present and it is only the
+   *  fine detail that is missing, and multiplying a smooth gradient just makes a steeper
+   *  smooth gradient. This adds the missing octaves instead, on the same warped UV the
+   *  flow uses so the structure travels with the bands rather than sitting still on them.
+   *
+   *  SEPARATE FROM THE APERTURE, and separately revertible. The aperture change (1.0 -> 0.3
+   *  in CameraRig) is the owner's, chosen by eye from a measured sweep, and on its own it
+   *  takes the /projects disc from det25 1.89 to 3.03 against /about's 6.53. This term is on
+   *  top of that and takes it to 3.95, with clipping still at 0% and chroma unchanged. The
+   *  owner has NOT seen it - his 0.3 was chosen against the shader without it - so if the
+   *  extra structure is unwanted, `bands: 0` here removes it and touches nothing else. */
+  bands?: number;
   /** A3: atmospheric limb-scattering hue + idle strength (~0.4 subtle). Falls back to
    *  `rim` when `atmo` is absent; airless bodies use a low strength. */
   atmo?: string;
   atmoStrength?: number;
 }
 
-function Moons({ count, planetSize }: { count: number; planetSize: number }) {
+/** Deterministic 32-bit hash (FNV-1a). A moon's look is derived from its project's id, so
+ *  the same project always gets the same moon - across reloads, builds and machines. */
+function hash32(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * NEW-3: the moons had no identity. They were eight instances of one grey sphere -
+ * `color="#b8b2a8"`, no map - so "every moon is a project" was a line of copy with nothing
+ * behind it, and a visitor could not tell one from another.
+ *
+ * Each moon now carries the real lunar map and a surface derived from the project it stands
+ * for: a tint, a rotation and an offset into the map (so the same texture reads as a
+ * different world on each), and its own roughness. All of it comes from a hash of the
+ * project's `id`, which means it is stable and repeatable rather than random per load, and
+ * it is genuinely TIED to the project rather than merely varied.
+ *
+ * `identities` is empty for Jupiter, whose moons stand for nothing - those fall back to the
+ * hash of their own index, so they are distinguishable without pretending to mean anything.
+ */
+/** Saturn is the projects world, so its moons are the projects - in the order the site lists them.
+ *  Module-level so the array is stable and the moons' `useMemo` does not rebuild every render. */
+const MOON_IDENTITIES = projects.map((p) => p.id);
+
+function Moons({
+  count,
+  planetSize,
+  identities = [],
+}: {
+  count: number;
+  planetSize: number;
+  identities?: string[];
+}) {
   const group = useRef<THREE.Group>(null);
+  const moonTex = useMemo(() => {
+    const tx = new THREE.TextureLoader().load('/textures/moon.jpg');
+    tx.colorSpace = THREE.SRGBColorSpace;
+    tx.wrapS = THREE.RepeatWrapping;
+    tx.wrapT = THREE.RepeatWrapping;
+    tx.anisotropy = 4;
+    return tx;
+  }, []);
+  useEffect(() => () => moonTex.dispose(), [moonTex]);
   const moons = useMemo(() => {
     const rnd = makeRng(SEED.moons);
-    return Array.from({ length: count }, (_, i) => ({
-      // Hug the planet so at the close ORBIT vantage the moons stay a tight system
-      // around it (not scattered across the frame / over the content column).
-      r: planetSize * (1.4 + i * 0.12),
-      size: planetSize * (0.09 + rnd() * 0.06),
-      speed: 0.5 - i * 0.03,
-      phase: rnd() * 6.28,
-      tilt: (rnd() - 0.5) * 0.5,
-    }));
-  }, [count, planetSize]);
+    return Array.from({ length: count }, (_, i) => {
+      const h = hash32(identities[i] ?? `moon-${i}`);
+      // Three independent bytes of the hash: hue, lightness and roughness. The hue band is
+      // narrow on purpose - these are rock and ice, not billiard balls - so the moons read
+      // as different WORLDS rather than as a colour key.
+      const hue = ((h & 0xff) / 255) * 0.14 + 0.06; // warm grey through tan
+      const light = 0.52 + (((h >> 8) & 0xff) / 255) * 0.22;
+      const rough = 0.72 + (((h >> 16) & 0xff) / 255) * 0.26;
+      return {
+        // Hug the planet so at the close ORBIT vantage the moons stay a tight system
+        // around it (not scattered across the frame / over the content column).
+        r: planetSize * (1.4 + i * 0.12),
+        size: planetSize * (0.09 + rnd() * 0.06),
+        speed: 0.5 - i * 0.03,
+        phase: rnd() * 6.28,
+        tilt: (rnd() - 0.5) * 0.5,
+        tint: new THREE.Color().setHSL(hue, 0.18, light),
+        rough,
+        // A different face of the same map: the sphere is turned, not the texture, so all
+        // eight share one texture (a cloned texture would not follow the original's upload).
+        face: [
+          (((h >> 3) & 0xff) / 255 - 0.5) * Math.PI,
+          (((h >> 24) & 0xff) / 255) * Math.PI * 2,
+          0,
+        ] as [number, number, number],
+      };
+    });
+  }, [count, planetSize, identities]);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     group.current?.children.forEach((m, i) => {
@@ -227,9 +324,9 @@ function Moons({ count, planetSize }: { count: number; planetSize: number }) {
   return (
     <group ref={group}>
       {moons.map((o, i) => (
-        <mesh key={i}>
+        <mesh key={i} rotation={o.face}>
           <sphereGeometry args={[o.size, 16, 16]} />
-          <meshStandardMaterial color="#b8b2a8" roughness={0.9} />
+          <meshStandardMaterial map={moonTex} color={o.tint} roughness={o.rough} />
         </mesh>
       ))}
     </group>
@@ -256,7 +353,7 @@ const PLANETS: PlanetSpec[] = [
   { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, incl: 2.2, node: 4.35, tilt: 0.41, bodyColor: '#cfe0ff', earth: true, atmo: '#a8d0ff', atmoStrength: 0.5 },
   { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, incl: 2.6, node: 0.95, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
   { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, incl: 1.6, node: 3.30, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
-  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, atmo: '#f0dcae', atmoStrength: 0.45 },
+  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, bands: 0.6, atmo: '#f0dcae', atmoStrength: 0.45 },
   // B10: the two outermost orbits are pulled in. On its own this is a small effect — the
   // in-frame share of a full revolution at the resting overview goes 34.4%→35.6% for
   // Uranus and 31.8%→33.4% for Neptune — because what actually pushes an outer body out
@@ -386,8 +483,38 @@ const earthNightFrag = /* glsl */ `
     // roughly agree with it — the lights come up exactly as the surface light dies out, and
     // the two can no longer drift apart when the wrap is retuned.
     float night = smoothstep(${(TERM_WRAP * 0.5).toFixed(3)}, ${(-TERM_WRAP).toFixed(3)}, lit); // 1 on the dark hemisphere
-    vec3 lights = texture2D(uMap, vUv).rgb;
-    gl_FragColor = vec4(lights * 1.2, night);           // additive; alpha gates to night
+    // A2b: the lights are SAMPLED SOFT, and harder the more the surface is turned away.
+    //
+    // The map is 2048x1024 and 0.84% of its texels are bright — isolated one-to-two texel
+    // dots with 45% of their signal in the difference from their own neighbours. On a disc
+    // ~640px across that is about one texel per pixel, and the globe turns 1.6px per frame,
+    // so a light lands on a different pixel every frame with nothing in between. It cannot
+    // be seen to move; only to blink. Measured on the night side: single pixels swinging
+    // 2 -> 40 -> 12 -> 110 between consecutive frames while the TOTAL light in the region
+    // held steady to 0.7% — the energy was hopping between neighbours, which is aliasing,
+    // not lights switching on and off.
+    //
+    // A mip bias is the cheap correct answer: it asks for a level whose texels are bigger
+    // than a pixel, so each light arrives already band-limited and its motion is carried by
+    // the filter instead of by luck. The bias RISES toward the limb because that is where
+    // the defect is worst and where it was reported from — the surface is foreshortened
+    // there, one pixel covers many texels along one axis, and the anisotropic sampler runs
+    // out of taps long before it has covered them.
+    // The strength was measured, not chosen. At mix(2.0, 0.6) - the first attempt - the
+    // instability of a tracked light fell only 13%, which is not a fix, it is a rounding
+    // error with a comment on it. At mix(3.0, 1.5) it falls 34%, and that is as far as this
+    // layer can go: with the night lights deleted outright the same measurement reads 49.5%
+    // against this setting's 52.8%, so what is left over is the surface map underneath, not
+    // the lights. Past this the lights start to dissolve - at a flat bias of 6.0 the night
+    // side has no cities on it at all.
+    vec3 V = normalize(cameraPosition - vWPos);
+    float ndv = clamp(dot(normalize(vWN), V), 0.0, 1.0);   // 1 face-on, 0 at the limb
+    float bias = mix(3.0, 1.5, smoothstep(0.0, 0.55, ndv));
+    // 1.2 -> 1.06. A coarser mip spreads each light over more pixels, and spread over an
+    // additive layer means the night side gets BRIGHTER, not dimmer - measured at +12.8%,
+    // outside the 10% the brightness criterion allows. The trim is that 12.8% given back.
+    vec3 lights = texture2D(uMap, vUv, bias).rgb;
+    gl_FragColor = vec4(lights * 1.06, night);          // additive; alpha gates to night
     // B3: the lights were multiplied by 2.0 and laid additively over an already-bright
     // disc. Tone mapping is applied for the whole frame in the composer now
     // (ExposureToneMap), so the chunk below is inert while a composer owns the render —
@@ -415,13 +542,19 @@ const earthCloudFrag = /* glsl */ `
 function EarthLayers({ radius }: { radius: number }) {
   const clouds = useRef<THREE.Mesh>(null);
   const gl = useThree((s) => s.gl);
+  // A2b: whatever the card will give, not a hardcoded 8. Both of these are equirectangular
+  // maps on a sphere, so the sampling footprint at the limb is extremely elongated and 8
+  // taps are spent long before it is covered — that shortfall is the other half of the
+  // twinkle the mip bias above is dealing with. Capped at 16 because that is where every
+  // desktop GPU stops anyway, and asking for more just reads back as 16.
+  const maxAniso = useMemo(() => Math.min(16, gl.capabilities.getMaxAnisotropy()), [gl]);
   const cloudLoad = useMemo(
-    () => loadBitmapTexture('/textures/earth_clouds.webp', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: 8 }),
-    [gl]
+    () => loadBitmapTexture('/textures/earth_clouds.webp', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: maxAniso }),
+    [gl, maxAniso]
   );
   const nightLoad = useMemo(
-    () => loadBitmapTexture('/textures/earth_night.webp', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: 8 }),
-    [gl]
+    () => loadBitmapTexture('/textures/earth_night.webp', gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: maxAniso }),
+    [gl, maxAniso]
   );
   const cloudTex = cloudLoad.texture;
   const nightTex = nightLoad.texture;
@@ -578,6 +711,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       shader.uniforms.uTime = { value: 0 };
       shader.uniforms.uFlow = { value: spec.flow ?? 0 };   // A2 gas-giant band turbulence
       shader.uniforms.uShear = { value: spec.shear ?? 0 }; // A2 latitudinal band shear
+      // NEW-1 band structure. `?bands=` overrides it for one page load so the value can be
+      // swept and measured, exactly like the aperture in CameraRig.
+      shader.uniforms.uBands = { value: BANDS_OVERRIDE ?? spec.bands ?? 0 };
       shader.uniforms.uHaze = { value: spec.haze ?? 0 };   // A2 Mars dust haze
       // B5 inter-planet eclipse: the occluder's world position + radius, and how much of
       // this frame's shadow to apply. The cone is recomputed PER FRAGMENT so the penumbra
@@ -659,7 +795,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
          #include <opaque_fragment>`
       );
       shader.fragmentShader =
-        `uniform sampler2D uHiMap; uniform float uHiMix, uTime, uFlow, uShear, uHaze;
+        `uniform sampler2D uHiMap; uniform float uHiMix, uTime, uFlow, uShear, uHaze, uBands;
          float _h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
          float _n(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
            return mix(mix(_h(i),_h(i+vec2(1,0)),u.x), mix(_h(i+vec2(0,1)),_h(i+vec2(1,1)),u.x), u.y); }
@@ -684,6 +820,16 @@ function Planet({ spec }: { spec: PlanetSpec }) {
            diffuseColor *= sampledDiffuseColor;
            // A1: crossfade the hi-res map in (same warped UV + material tint).
            diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( uHiMap, flowUv ).rgb * diffuse, uHiMix );
+           if ( uBands > 0.0 ) {
+             // NEW-1: the fine banding Saturn's map does not have. Two latitudinal octaves,
+             // multiplicative so it rides the albedo instead of washing over it, and taken
+             // on the SAME warped UV as the sample above so the structure moves with the
+             // bands. Latitude is the high-frequency axis and longitude the low one, which
+             // is what makes it read as banding rather than as noise on a sphere.
+             float fine  = _n( vec2( flowUv.x *  3.0,        flowUv.y * 130.0 ) ) - 0.5;
+             float broad = _n( vec2( flowUv.x *  1.5 + 5.0,  flowUv.y *  46.0 ) ) - 0.5;
+             diffuseColor.rgb *= 1.0 + ( fine + broad * 0.75 ) * uBands;
+           }
            if ( uHaze > 0.0 ) {
              // Mars: a faint warm dust-haze drifting slowly across the disc.
              float hz = _n( vec2( vMapUv.x * 3.0 + uTime * 0.01, vMapUv.y * 5.0 - uTime * 0.006 ) );
@@ -694,7 +840,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       hiShader.current = shader;
     };
     return m;
-  }, [texture, spec.key, spec.bodyColor, spec.flow, spec.shear, spec.haze]);
+  }, [texture, spec.key, spec.bodyColor, spec.flow, spec.shear, spec.haze, spec.bands]);
   useEffect(() => () => material.dispose(), [material]);
   // Procedural ring strip (colour + alpha vs radius), drawn to a 1-D canvas and mapped
   // radially. Deterministic and CSP-safe — avoids the saturn_ring.png alpha-layout that
@@ -890,7 +1036,13 @@ function Planet({ spec }: { spec: PlanetSpec }) {
             <meshBasicMaterial map={ringTex} transparent opacity={1} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
         )}
-        {spec.moons && <Moons count={spec.moons} planetSize={spec.size} />}
+        {spec.moons && (
+          <Moons
+            count={spec.moons}
+            planetSize={spec.size}
+            identities={spec.key === 'saturn' ? MOON_IDENTITIES : undefined}
+          />
+        )}
       </group>
       {/* R5.7 - the real Moon, on its own inclined orbit outside Earth's spin group. */}
       {spec.earth && <EarthMoon planetSize={spec.size} />}

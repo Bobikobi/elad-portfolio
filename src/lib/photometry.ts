@@ -37,8 +37,15 @@ export const NEPTUNE_ALBEDO_MULTIPLIER = 4.38;
 // jupiter 140 / clip 0%, saturn 93 / 0%, mars 95 / 0.9%, earth 211 / 19.5% — Earth is the
 // outlier because its cloud and night-lights shells stack on top of an already close-lit
 // body. These values land every world in the 90-135 band with clipping at zero.
+// Saturn re-measured (?orbitexp sweep, /projects, 1440x900, real GPU, preview of PR #43, disc from
+// ?ringprobe, 95% of R; 0.68 measured twice: 141.8 / 142.0): 0.68 -> mean 142 p99 248, 0.45 -> 131 / 243,
+// 0.3 -> 118 / 236, 1.0 -> 151 / 251; clipped >=250 is 0% throughout. 0.68 sat above the 90-135 band the
+// other worlds were held to; 0.45 is the smallest cut that lands inside it and keeps shoulder headroom.
+// Mars re-measured over one full turn (24 longitudes, ?orbitexp sweep, preview of PR #43): clipped share
+// of the disc, worst longitude 297.9 deg, 0.92 -> 11.10% (mean lum 115-164), 0.75 -> 3.55%, 0.6 -> 0.001%
+// (mean lum 96-148, average 121, inside the 90-135 band). 0.6 is the first value with 23 of 24 longitudes clean.
 // The string index signature permits an unmapped focus; CameraRig owns its neutral fallback.
-export const ORBIT_APERTURE: Record<string, number> = { earth: 0.45, mars: 0.92, jupiter: 0.50, saturn: 0.68, belt: 0.66 };
+export const ORBIT_APERTURE: Record<string, number> = { earth: 0.45, mars: 0.6, jupiter: 0.50, saturn: 0.45, belt: 0.66 };
 
 /** Renderer aperture before a world is selected and after departure from one. */
 export const NEUTRAL_APERTURE = 1;
@@ -56,7 +63,14 @@ export const SUN_LAMP_DISTANCE = 90;
  *  shoulder moved lit faces only ~9 levels for a 0.6 aperture, so the light itself is scaled. */
 // Local sweep, overview lit-face mean (Uranus / Saturn / Mars / Earth / Neptune): 1.0 -> 212/239/222/136/101,
 // 0.5 -> 189/227/181/98/91, 0.25 -> 133/203/127/76/68. Neptune stays over P3-2's 60 floor.
-export const SUN_LAMP_OVERVIEW_SCALE = 0.25;
+// Elad judged 0.25 still a bit bright and 0.18 / 0.12 too dark side by side (?lamp=, 2026-09-26);
+// 0.21 chosen by eye. Neptune was not re-measured at 0.21 and may sit just under the 60 floor.
+export const SUN_LAMP_OVERVIEW_SCALE = 0.21;
+/** The lamp's live share of SUN_LAMP_INTENSITY, written by Sun every frame. A uniform-shaped
+ *  object so a shader can hold it directly. The belt divides it back out: the overview scale
+ *  was chosen for the planets, and at 0.21 the rocks went close to black (lit-side mean luma
+ *  27 -> 8 on the same frozen frame) and the belt read as missing. */
+export const sunLampScale = { value: 1 };
 // P3 change 2, and a DELIBERATE DEPARTURE FROM PHYSICS under RULING 3 (2026-08-17):
 // the owner ruled that appearance beats physical accuracy where the two collide.
 //

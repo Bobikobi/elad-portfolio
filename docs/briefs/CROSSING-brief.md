@@ -1,5 +1,47 @@
 # CROSSING brief - the passage from the galaxy into the solar system
 
+> ## v2, 2026-09-19 - the fade became an ember
+>
+> **v1 shipped and was wrong.** It is in production (master `93c49c9`, PR #39). It removed the
+> white wash exactly as this brief asked, passed every criterion below, and the owner's eye
+> then failed it in one sentence: *"flies into it and it goes off in the middle; scrolling back
+> does not work and sticks somewhere in the middle."*
+>
+> Measured after the fact, the frame sits under mean 20 of 255 across **0.444 of the whole
+> scroll**, in both directions, and nothing inside that stretch changes. The scroll works
+> (recorded with a real wheel from five parking points, both builds, always reaching the top);
+> it is the picture that stops answering. The cause is in this brief's own logic: C3 allowed a
+> red-green split of only 10, the galaxy's gold core fills the view from ~0.6 to the swap at
+> 0.93, so obeying C3 meant blacking the core out.
+>
+> **What this stage got wrong, and the rule that follows.** Every criterion here measured a
+> single frame - how bright, how sudden, how coloured - and none measured **how long** a state
+> lasts, or the **return direction** at all. Both are now criteria, C5 and a second run of
+> everything with `DIR=up`. Any future passage gets them from the start.
+>
+> ### v2 criteria
+>
+> | # | criterion | bar | why this number |
+> |---|---|---|---|
+> | C1 | the wash is gone | max mean <= 80, max %>200 <= 8 | unchanged: the galaxy's own resting 76.0 / 7.30% rounded up. On an up run the recording ends on the galaxy at rest, which drifts to 80-82 with scene time, so up runs judge passage frames (scroll >= 0.10) against the run's own rest + 1.0 |
+> | C2 | nothing jumps | max frame step <= 25, no near-black frame beside a bright one | unchanged |
+> | C3 | no invented colour | max abs(mean R - mean G) <= **20** | **relaxed from 10.** The colour is the galaxy's own core, not an invention, and 10 is what forced v1 to black it out. 20 is where a warm frame starts to read as a tint over the picture rather than as a lit object; the ember measures 18.1 down / 19.0 up, and the bar is not a target to touch |
+> | C4a | the endpoints are untouched | mean abs pixel difference <= 0.1 of 255 | unchanged: galaxy at rest and all six solar views |
+> | C5 | **no dead stretch** | frames under mean 20 span <= **0.15** of scroll AND start no earlier than **0.84** | **new.** The draft bar of 0.10 is not reachable: the swap curtain alone holds the frame under 20 across 0.111 of the scroll, which follows from COVER_PLATEAU + COVER_FALLOFF and IS the crossover. 0.15 is that geometry plus room; 0.84 is where coverage first leaves zero, so anything dark before it is the dive going dark on its own - v1's defect, which began at 0.556. **Up runs: start >= 0.80** (the curtain's wall-clock reveal runs below the plateau) **and judged at the return-trip pace, a 360-frame ramp**; a 3-second ramp measures 0.16-0.17 and is stated as a limit in the verify |
+> | C6 | **the return works** | `return-trip.mjs` reaches the top in act `galaxy` from parking points 0.5 / 0.85 / 0.92 / 0.97 | **new.** v1 was reported as sticking on the way back and nobody had recorded it |
+> | C7 | **a scroll teleport is survivable** | max frame step <= 25 with the scroll jumped to mid-dive in one frame | **new**, from the Codex review of PR #39: v1 cut the frame by 52.2 levels on a scrollbar drag |
+> | C4b | it still reads as arrival | the owner's eye | not measurable, and this is the criterion v1 actually failed |
+>
+> ### The change
+>
+> The plane stops being a blackout and becomes a dimmer: 0.06 -> 0.55 of scroll, to a maximum
+> opacity of **0.71**, so about a third of the frame reaches the visitor for the whole approach and
+> the galaxy's core burns down to an ember instead of being switched off. Darkness belongs to
+> the swap curtain, which already owns 0.11 of the scroll. Swept on a preview with a `?fade`
+> knob; the frontier is in `DiveFade.tsx`, which records what each setting measured.
+>
+> Everything below is v1 and is kept as written, including the numbers it got wrong.
+
 Written 2026-09-19, before any pixel moves, per standing rule 1.
 **Criteria APPROVED by the owner 2026-09-19** ("approved, per your recommendation"), with
 one number re-derived after step 0 - see "Step 0 - result", which is the authority on the

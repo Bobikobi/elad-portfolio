@@ -129,6 +129,56 @@ export function flameSprite(): THREE.CanvasTexture {
   return _flame;
 }
 
+let _arc: THREE.CanvasTexture | null = null;
+/**
+ * A prominence LOOP: an arch of plasma with both roots on the base edge of the sprite.
+ *
+ * The flame sprite above is a one-rooted tapered lick, and on the limb it reads as a detached
+ * blob - two of them sat beside the sun and looked like orbiting lamps. A prominence is a magnetic
+ * loop, so this draws the loop: three fine strands at slightly different radii (a filament, not a
+ * tube), brightest and thickest low down where the plasma pools at the footpoints, thinning over
+ * the crest. The sprite's bottom edge is the chord between the two roots; put that edge on the
+ * limb and the disc's depth test tucks the roots under the silhouette.
+ */
+export function arcSprite(): THREE.CanvasTexture {
+  if (_arc) return _arc;
+  const W = 256;
+  const H = 128;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(W, H);
+  const strands = [
+    { r: 0.93, w: 0.048, k: 1.0 },
+    { r: 0.85, w: 0.036, k: 0.6 },
+    { r: 0.76, w: 0.030, k: 0.35 },
+  ];
+  for (let y = 0; y < H; y++) {
+    const uy = 1 - y / (H - 1); // 0 = chord, 1 = crest
+    for (let x = 0; x < W; x++) {
+      const ux = (x / (W - 1)) * 2 - 1;
+      const d = Math.hypot(ux, uy);
+      // The crest is a shade thinner than the feet; the shading is by height, not by strand.
+      const thin = 1 - 0.7 * smoothstep(0.15, 1.0, uy);
+      let a = 0;
+      for (const st of strands) a += st.k * Math.exp(-Math.pow((d - st.r) / (st.w * thin), 2));
+      // Footpoints pool brighter, and a haze under the arch keeps the loop from looking wired.
+      a *= 1 + 0.9 * Math.exp(-uy / 0.14);
+      a += 0.10 * smoothstep(0.98, 0.5, d) * (1 - uy) * 0.5;
+      const i = (y * W + x) * 4;
+      img.data[i] = 255;
+      img.data[i + 1] = 255;
+      img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(Math.max(0, Math.min(1, a)) * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  _arc = new THREE.CanvasTexture(c);
+  _arc.colorSpace = THREE.SRGBColorSpace;
+  return _arc;
+}
+
 let _streak: THREE.CanvasTexture | null = null;
 /**
  * The anamorphic streak — the horizontal flare a real lens throws across a bright source.
