@@ -167,6 +167,7 @@ const HIGH_RATIO = 0.95;   // above this share = room to scale back up
  */
 export function ResolutionScaler() {
   const setDpr = useThree((s) => s.setDpr);
+  const invalidate = useThree((s) => s.invalidate);
   const quality = useScene((s) => s.quality);
   const pacing = useScene((s) => s.pacing);
   const displayHz = useScene((s) => s.displayHz);
@@ -191,6 +192,7 @@ export function ResolutionScaler() {
     if (Math.abs(dpr - applied.current) < 0.01) return;
     applied.current = dpr;
     setDpr(dpr);
+    invalidate();
   };
 
   /**
@@ -233,7 +235,9 @@ export function ResolutionScaler() {
     // Idle pages are cheap by definition and get their pixels back.
     const idle = isIdle(now);
     if (idle) {
-      if (scale.current !== MAX_SCALE) { scale.current = MAX_SCALE; apply(MAX_SCALE); }
+      // The buffer keeps the ratio it had when the page went idle. Handing the pixels back on
+      // idle resized the canvas on the 30fps demand loop and presented one blank frame each
+      // time (measured, 4 of 5 real-wheel runs, always <40ms after the resize).
       publish(fps, true);
       return;
     }
