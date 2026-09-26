@@ -18,6 +18,9 @@ const clampUnit = (x: number) => (x < -1 ? -1 : x > 1 ? 1 : x);
 
 // --- T1 swap machine constants -------------------------------------------------
 const DEV = process.env.NODE_ENV !== 'production';
+/** See the note at the `livePlanetRect` write below. Read once, at import. */
+const DISC_PROBE =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discprobe');
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
 
@@ -398,6 +401,14 @@ function publishLimb(
   livePlanetRect.vw = vw;
   livePlanetRect.vh = vh;
   livePlanetRect.stamp = performance.now();
+  // `?discprobe=1` publishes that same disc to the DOM, so an exposure measurement can be
+  // taken over the disc the camera actually framed. The alternative - finding the planet by
+  // thresholding a screenshot - selects the bright half of the body and then reports how
+  // bright it is, which is how "over-exposed" and "clipped" get confused. Off by default;
+  // the cost when off is one boolean per frame.
+  if (DISC_PROBE) {
+    document.documentElement.dataset.planetDisc = `${cx.toFixed(1)},${cy.toFixed(1)},${(r / 8).toFixed(1)}`;
+  }
 }
 const _orbOff = new THREE.Vector3();
 const _orbAxis = new THREE.Vector3();

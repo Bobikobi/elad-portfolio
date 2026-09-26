@@ -1,12 +1,10 @@
 'use client';
 import { useRef, type ReactNode } from 'react';
-import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
 import type { Locale } from '@/lib/translations';
 import { translations } from '@/lib/translations';
-import { homePath } from '@/lib/sections';
 import { useWorldExit } from '@/hooks/useWorldExit';
 import DepartureMeter from './DepartureMeter';
+import WorldBackLink from './WorldBackLink';
 
 /**
  * Dark-glass content world shown over the persistent cosmos when a planet is
@@ -28,7 +26,6 @@ export default function PlanetWorld({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { meter, returnHome } = useWorldExit(locale, panelRef);
-  const back = translations['contact.back'][locale];
   const departureLabel = translations['world.departure'][locale];
 
   return (
@@ -45,17 +42,8 @@ export default function PlanetWorld({
           <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl">
             {title}
           </h1>
-          {/* A real link home (crawlable), driven through returnHome so the departure
-              meter is cleared and the overview - not a re-dive - is what we land in. */}
-          <Link
-            href={homePath(locale)}
-            data-world-back=""
-            onClick={(e) => { e.preventDefault(); returnHome(); }}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-[var(--color-star-white)]/70 transition-colors hover:border-[var(--color-core-gold)]/60 hover:text-[var(--color-core-gold)]"
-          >
-            <ArrowRight size={13} />
-            {back}
-          </Link>
+          {/* The shared back control - see WorldBackLink for why there is exactly one. */}
+          <WorldBackLink locale={locale} onBack={returnHome} />
         </div>
         <div className="overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
       </div>
