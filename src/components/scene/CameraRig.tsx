@@ -24,6 +24,23 @@ const DISC_PROBE =
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
 
+/**
+ * `?orbitexp=0.7` overrides the focused world's aperture for one page load, so the values in
+ * ORBIT_APERTURE can be SWEPT and measured instead of guessed. The response is severely
+ * compressed at the top of the curve, so a value must never be inferred by eye. It does
+ * nothing on the overview and nothing without the parameter. Read once, at import.
+ */
+const ORBIT_APERTURE_OVERRIDE =
+  typeof window !== 'undefined'
+    ? (() => {
+        // Explicit parse: `?orbitexp=0` is a real sweep value and must not read as absent.
+        const v = new URLSearchParams(window.location.search).get('orbitexp');
+        if (v === null || v.trim() === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      })()
+    : null;
+
 // --- The ORBIT vantage is SOLVED, not dialled in --------------------------------------
 // The old construction was "sit A radians off the lit direction, then add a fixed vertical
 // lift". Both halves are reasonable and together they leave everything to chance, because
@@ -1109,7 +1126,7 @@ export default function CameraRig() {
     // as the departure meter scrubs back toward the overview, ease exposure back to 1.
     const fp = useScene.getState().focusedPlanet;
     const dep = fp ? clamp01(useScene.getState().departure) : 0;
-    const orbitExpo = fp ? ORBIT_APERTURE[fp] ?? NEUTRAL_APERTURE : NEUTRAL_APERTURE;
+    const orbitExpo = fp ? ORBIT_APERTURE_OVERRIDE ?? ORBIT_APERTURE[fp] ?? NEUTRAL_APERTURE : NEUTRAL_APERTURE;
     const expoTarget = act === 'solar' && fp ? orbitExpo + (NEUTRAL_APERTURE - orbitExpo) * dep : NEUTRAL_APERTURE;
     damp(state.gl, 'toneMappingExposure', expoTarget, 0.4, dt);
 
