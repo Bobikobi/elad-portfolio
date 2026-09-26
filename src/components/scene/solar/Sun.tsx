@@ -10,6 +10,7 @@ import {
   SUN_LAMP_DISTANCE,
   SUN_LAMP_INTENSITY,
   SUN_LAMP_OVERVIEW_SCALE,
+  sunLampScale,
 } from '@/lib/photometry';
 import { softSprite, flameSprite, streakSprite, CORE_GOLD } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
@@ -440,6 +441,7 @@ export default function Sun() {
     const dep = s.focusedPlanet ? Math.min(1, Math.max(0, s.departure)) : 1;
     const target = SUN_LAMP_INTENSITY * (1 + (overview - 1) * dep);
     l.intensity += (target - l.intensity) * Math.min(1, dt * 3);
+    sunLampScale.value = l.intensity / SUN_LAMP_INTENSITY;
   });
 
   useFrame((state, dt) => {

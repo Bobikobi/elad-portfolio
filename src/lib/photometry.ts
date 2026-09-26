@@ -66,6 +66,11 @@ export const SUN_LAMP_DISTANCE = 90;
 // Elad judged 0.25 still a bit bright and 0.18 / 0.12 too dark side by side (?lamp=, 2026-09-26);
 // 0.21 chosen by eye. Neptune was not re-measured at 0.21 and may sit just under the 60 floor.
 export const SUN_LAMP_OVERVIEW_SCALE = 0.21;
+/** The lamp's live share of SUN_LAMP_INTENSITY, written by Sun every frame. A uniform-shaped
+ *  object so a shader can hold it directly. The belt divides it back out: the overview scale
+ *  was chosen for the planets, and at 0.21 the rocks went close to black (lit-side mean luma
+ *  27 -> 8 on the same frozen frame) and the belt read as missing. */
+export const sunLampScale = { value: 1 };
 // P3 change 2, and a DELIBERATE DEPARTURE FROM PHYSICS under RULING 3 (2026-08-17):
 // the owner ruled that appearance beats physical accuracy where the two collide.
 //

@@ -2,6 +2,7 @@
 import { useMemo, useRef, useLayoutEffect, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { sunLampScale } from '@/lib/photometry';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { makeRng, SEED } from '@/lib/rng';
 import { useScene } from '@/lib/sceneStore';
@@ -355,6 +356,8 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
       shader.uniforms.uSpec = { value: 1 };
       shader.uniforms.uStock = { value: 0 };
       shader.uniforms.uSun = { value: new THREE.Vector3(0, 0, 0) };
+      // The rocks keep the full lamp while the overview dims it for the planets.
+      shader.uniforms.uLampScale = sunLampScale;
       rockShader.current = shader;
       // Projected diameter of this instance, in drawing px, carried to the fragment stage.
       // `instanceMatrix` column 0 is the instance's x axis, so its length is the x scale —
@@ -376,9 +379,11 @@ export default function AsteroidBelt({ count = 12000 }: { count?: number }) {
         const CHUNK = THREE.ShaderChunk.lights_physical_pars_fragment;
         const SPEC = 'reflectedLight.directSpecular += irradiance * BRDF_GGX_Multiscatter(';
         if (!CHUNK.includes(SPEC)) throw new Error('ASTEROID-BACKLIT: three\'s specular line has moved');
+        const IRR = 'vec3 irradiance = dotNL * directLight.color;';
+        if (!CHUNK.includes(IRR)) throw new Error('belt lamp compensation: three\'s irradiance line has moved');
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <lights_physical_pars_fragment>',
-          ROCK_GATE_GLSL + CHUNK.replace(SPEC, 'reflectedLight.directSpecular += uSpec * rockSpecGate( directLight.direction, geometryViewDir ) * irradiance * BRDF_GGX_Multiscatter(')
+          'uniform float uLampScale;\n' + ROCK_GATE_GLSL + CHUNK.replace(IRR, 'vec3 irradiance = dotNL * directLight.color / max( uLampScale, 0.05 );').replace(SPEC, 'reflectedLight.directSpecular += uSpec * rockSpecGate( directLight.direction, geometryViewDir ) * irradiance * BRDF_GGX_Multiscatter(')
         );
       }
       shader.fragmentShader = shader.fragmentShader.replace(
