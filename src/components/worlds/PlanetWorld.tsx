@@ -29,23 +29,24 @@ export default function PlanetWorld({
   const departureLabel = translations['world.departure'][locale];
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-30 flex items-end justify-start px-4 pt-20 pb-6 md:items-start md:px-8">
+    <div className="pointer-events-none fixed inset-0 z-30 flex items-end justify-start md:items-stretch">
+      {/* No box: the text floats on a scrim that darkens from the reading edge (bottom on a
+          phone) and dissolves into the scene, the same language as the Projects world. */}
       <div
         ref={panelRef}
         data-chrome=""
-        className="pointer-events-auto flex max-h-[58dvh] w-full flex-col overflow-hidden rounded-2xl border md:max-h-[calc(100dvh-6.5rem)] md:w-[34rem]"
-        style={{ background: 'rgba(5,7,20,0.82)', borderColor: 'rgba(238,241,255,0.14)', boxShadow: '0 24px 70px rgba(8,10,34,0.5)' }}
+        className="world-scrim pointer-events-auto flex max-h-[62dvh] w-full flex-col px-6 pt-14 md:max-h-none md:w-[38rem] md:px-12 md:pt-24"
       >
-        {/* signature gold top line */}
-        <div className="h-px shrink-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,201,120,0.7), transparent)' }} />
-        <div className="flex shrink-0 items-center justify-between gap-4 px-6 pt-5">
-          <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl">
+        <div className="flex shrink-0 items-center justify-between gap-4">
+          <h1 className="text-3xl text-[var(--color-star-white)] md:text-4xl">
             {title}
           </h1>
           {/* The shared back control - see WorldBackLink for why there is exactly one. */}
           <WorldBackLink locale={locale} onBack={returnHome} />
         </div>
-        <div className="overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
+        {/* signature gold hairline, short and anchored to the reading edge */}
+        <div className="mt-4 h-px w-16 shrink-0" style={{ background: 'linear-gradient(90deg, rgba(255,201,120,0.8), rgba(255,201,120,0))' }} />
+        <div className="world-scroll min-h-0 overflow-y-auto overscroll-contain pt-6 pb-28 md:pe-10">{children}</div>
       </div>
       <DepartureMeter value={meter} label={departureLabel} />
     </div>
