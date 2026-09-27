@@ -597,3 +597,9 @@ html[lang='ru'] .world-body {
     background: linear-gradient(to left, rgba(5, 7, 20, 0.86) 0%, rgba(5, 7, 20, 0.7) 60%, rgba(5, 7, 20, 0) 100%);
   }
 }
+/* The column ends above the fixed corner buttons; text scrolling out of it fades rather
+   than being cut on a hard line. */
+.world-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
+}
