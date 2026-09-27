@@ -432,27 +432,15 @@ html[lang='ru'] .world-body {
    to survive on all four curved edges, which is the whole reason the shape is a path and
    not a clip-path on a div — a clip-path would cut the border off with everything else. */
 .ring-window {
-  fill: rgba(5, 7, 20, 0.78);
-  stroke: rgba(238, 241, 255, 0.14);
+  /* No frame (projects-windows round): the window is its picture. Fill and stroke are
+     written per frame - the fill is the focus dimming over the photo, the stroke a gold
+     hairline on the one window in focus. The per-window drop shadow went with the frame:
+     around a borderless picture it read as a card edge. */
+  fill: none;
+  stroke: none;
   stroke-width: 1;
-  /* The shadow belongs to the WINDOW, not to the layer (B8c). B8b put one pass on the
-     whole `.ring-layer` on the theory that one filter beats twelve — which held only
-     while the layer was paths. Once the previews joined it, every limb drift made the
-     browser re-rasterize a filtered layer containing bitmaps: measured on the preview at
-     390x844, 42.2fps with 42.3% of frames over 33ms, against 60fps and 0% with the
-     filter off. Per path it is 59.8fps on mobile and 60 on desktop, so the shadow stays
-     and the images are simply not inside it. */
-  filter: drop-shadow(0 12px 26px rgba(8, 10, 34, 0.55));
-  transition: fill 0.3s ease, stroke 0.3s ease;
+  transition: fill 0.3s ease;
 }
-.ring-window.is-hot {
-  fill: rgba(9, 12, 30, 0.85);
-  stroke: rgba(255, 201, 120, 0.5);
-}
-/* The gold signature, stroked along the INNER arc only, so it reads as light caught on
-   the edge that faces the planet. */
-.ring-accent { transition: stroke-width 0.3s ease; }
-.ring-accent.is-hot { stroke-width: 2.6; }
 
 /* The fan's scroll container. Invisible: it exists so the wheel, touch, keyboard and the
    departure gesture's inContent test all keep working on a layout that is otherwise pure
@@ -487,7 +475,6 @@ html[lang='ru'] .world-body {
    to be readable, and a site screenshot is busy at any size. It lifts on hover, which is
    also the moment the text matters least. */
 .ring-photo { opacity: 0.32; transition: opacity 0.3s ease; }
-.ring-photo.is-hot { opacity: 0.55; }
 
 /* Scroll rail (B8c): the ring's own scrollbar, concentric with it. The pulse runs a few
    times on arrival and stops — it is there to say "these move", not to keep moving. */

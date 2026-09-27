@@ -112,8 +112,10 @@ export const RING_TUNING: { landscape: RingTuning; portrait: RingTuning } = {
     gap: 40,
     depth: 240,
     thick: 300,
-    // Two on a phone: the ring is tight around a small limb and a third would be a sliver.
-    wantVisible: 2,
+    // ONE on a phone (projects-windows round): two side by side ran both past the screen
+    // edges (measured -24px and -19px at 390x844). One window in focus, whole and inside
+    // the screen, and a swipe brings the next; the list snaps so one always sits centred.
+    wantVisible: 1,
     minThick: 150,
     cardGap: 16,
     fanDeg: 30,
@@ -238,7 +240,7 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   // Left alone, the tuned thickness puts the outer corners past both screen edges, which
   // is the one thing that would break the hairline: a border cut by the viewport.
   const thick0 = portrait
-    ? Math.min(k.thick, 2 * rMid * Math.asin(Math.min(0.9, (vw / 2 - 10) / r1)))
+    ? Math.min(k.thick, 2 * rMid * Math.asin(Math.min(0.9, (vw / 2 - 20) / r1)))
     : k.thick;
 
   const rIn = r0 + k.padInner;
