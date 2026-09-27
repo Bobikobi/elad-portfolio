@@ -102,6 +102,8 @@ const _f = new THREE.Vector3();
 const _e1 = new THREE.Vector3();
 const _e2 = new THREE.Vector3();
 const _planeN = new THREE.Vector3();
+const _c = new THREE.Vector3();
+const _r = new THREE.Vector3();
 
 /**
  * Build the ORBIT vantage direction (planet → camera).
@@ -146,7 +148,7 @@ function orbitVantage(
   // the SIDE — which flips when the sun crosses the ring plane — left 52°. Both have to be
   // continuous, so both are chosen the same way.
   //
-  // Height decides the first frame; after that the candidate nearest last frame's is taken
+  // The most level plane on screen decides the first frame; after that the nearest candidate is taken
   // and the camera walks its orbit. (Damping would have turned the teleport into a fast
   // unexplained swing, not removed it — a discontinuity has to go from the solve.)
   // Out-of-reach sides are CLAMPED rather than dropped — dropping one makes it vanish from
@@ -177,10 +179,18 @@ function orbitVantage(
     const exact = Math.abs(rhs) <= 1;
     const dphi = Math.acos(clampUnit(rhs));
     for (const phi of [psi + dphi, psi - dphi]) {
-      const score =
-        prevPhi === null
-          ? _f.y * ca + sa * (_e1.y * Math.cos(phi) * sideSign + _e2.y * Math.sin(phi))
-          : -Math.abs(Math.atan2(Math.sin(phi - prevPhi), Math.cos(phi - prevPhi)));
+      let score: number;
+      if (prevPhi === null) {
+        // First choice: the candidate whose plane reads most LEVEL on screen - the plane
+        // normal's share along the camera's right axis is the roll a viewer sees.
+        _c.copy(_f).multiplyScalar(ca)
+          .addScaledVector(_e1, sa * Math.cos(phi) * sideSign)
+          .addScaledVector(_e2, sa * Math.sin(phi));
+        _r.set(_c.z, 0, -_c.x).normalize();
+        score = -Math.abs(_r.dot(planeN));
+      } else {
+        score = -Math.abs(Math.atan2(Math.sin(phi - prevPhi), Math.cos(phi - prevPhi)));
+      }
       if ((exact && !bestExact) || (exact === bestExact && score > bestScore)) {
         bestScore = score; best = phi; bestExact = exact;
       }
@@ -1241,7 +1251,7 @@ export default function CameraRig() {
             else _planeN.set(0, 1, 0);
           }
           if (vantageFor.current !== focused) { vantageFor.current = focused as string; vantagePhi.current = null; }
-          vantagePhi.current = orbitVantage(
+          const phi = orbitVantage(
             _camDir,
             _sunDir,
             _planeN,
@@ -1250,6 +1260,9 @@ export default function CameraRig() {
             sideSign,
             vantagePhi.current
           );
+          // Commit the branch only once the planet has a real position: a body not yet
+          // placed sits at the origin, and a choice made there is arbitrary.
+          vantagePhi.current = _sunDir.lengthSq() > 0.5 ? phi : null;
           _orbitPos.copy(pp).addScaledVector(_camDir, d);
           _orbitPos.x += Math.sin(t * 0.2) * 0.03 * d; // living micro-drift
           _orbitPos.y += Math.cos(t * 0.15) * 0.02 * d;
