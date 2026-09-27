@@ -13,6 +13,7 @@ import Effects from './Effects';
 import SwapMask from './SwapMask';
 import DragControls from './DragControls';
 import TourDots from './TourDots';
+import Constellations, { ConstellationLabel } from './Constellations';
 import PlanetLabelsOverlay, { PlanetLabelDriver } from './PlanetLabels';
 import QualityGovernor from './QualityGovernor';
 import { FramePacer, ResolutionScaler } from './PerfPacer';
@@ -136,6 +137,7 @@ export default function SceneRoot() {
             exactly its old strength; the swap happens behind DiveFade's black. */}
         <Nebula intensity={act === 'solar' ? 0.5 : 1} anchor={act === 'solar' ? 1 : 0} />
         {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
+        {act === 'solar' && <Constellations />}
         {/* In-world swap curtain - persists across the act swap, covers the seam. */}
         <SwapMask />
         <Effects />
@@ -156,6 +158,7 @@ export default function SceneRoot() {
         nested inside it - focusable content under aria-hidden.) */}
     <PlanetLabelsOverlay />
     <TourDots />
+    <ConstellationLabel />
     </>
   );
 }
