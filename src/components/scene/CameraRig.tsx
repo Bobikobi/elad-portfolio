@@ -1,5 +1,5 @@
 'use client';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { damp, damp3 } from 'maath/easing';
 import * as THREE from 'three';
@@ -11,6 +11,7 @@ import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect, livePlanetPlane } 
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 import { NEUTRAL_APERTURE, ORBIT_APERTURE } from '@/lib/photometry';
 import { HUD_AVAILABLE } from './DebugHud';
+import { useMotionDisabled } from '@/hooks/useMotionDisabled';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** Clamp into [-1, 1] — the valid domain of acos, which clamp01 is NOT. */
@@ -569,6 +570,211 @@ function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch:
  * hidden behind the white flash, so the two scene-graphs read as one world.
  */
 /**
+ * FLIGHT (Elad, 2026-09-27: "entering a planet is not a zoom", "the move between planets must
+ * feel cinematic - pull back, then approach, along a natural path"). Every change of focus in
+ * the solar act - overview -> world, world -> world, world -> overview - is one timed shot
+ * instead of a damped position with a look direction that SNAPPED to the new target on the
+ * first frame (the old cause of the "strange" entry).
+ *
+ * - Into a world the camera is flown AROUND THE TARGET: the direction from the target to the
+ *   camera swings from where the camera starts to where the shot ends, while the distance to
+ *   the target only ever shrinks. So the target grows on every frame, the world being left
+ *   falls away behind, and the last fifth is a pure dolly along the final sightline - the zoom.
+ *   Out to the overview it is a straight crane back and up (see flightPoint).
+ * - The swing bows up out of the ecliptic, by the least lift that keeps the whole path at least
+ *   FLIGHT_CLEAR radii from every other body (the sun included). The bodies barely move during
+ *   a shot, so the lift is chosen once, at the start, by sampling the path.
+ * - The view direction slerps from the start orientation toward destQuat on a trapezoid
+ *   profile, and is rate-limited per frame, so no frame turns the camera by more than
+ *   FLIGHT_TURN_STEP whatever the geometry or a hitch (only a client under 30fps throughout
+ *   keeps the per-second rate instead). The duration is the shortest one whose planned
+ *   rotation fits that rate (planFlight), within FLIGHT_MIN..FLIGHT_MAX.
+ * - Flight time advances by at most a few of this client's own frames per frame: the route
+ *   change mounts a world and stalls one frame for ~160ms, and a flight that advanced by the
+ *   wall clock jumped 13 degrees across it. A slow client's frames are all long and keep
+ *   their full step, so framing still never depends on the frame rate.
+ * - The destination is recomputed every frame by the branch that owns it and the path lands
+ *   exactly on it at s = 1, so handing back to the ordinary damp is seamless.
+ */
+const FLIGHT_TURN_RATE = 84 * DEG2RAD; // rad/s = FLIGHT_TURN_STEP at 60fps
+const FLIGHT_TURN_STEP = 1.4 * DEG2RAD; // rad per frame at 60fps - criterion: <= 1.5 deg
+const FLIGHT_MIN = 1.6;
+const FLIGHT_MAX = 2.45;
+const FLIGHT_CLEAR = 2.0; // radii
+const FLIGHT_LIFTS = [0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0];
+const SUN_RADIUS = 1.5;
+const flight = {
+  on: false,
+  el: 0,
+  dur: 2,
+  turn: 0.5, // fraction of the flight the view direction takes to reach its destination
+  lift: 0,
+  lastFocus: undefined as string | null | undefined,
+  leaving: null as string | null,
+  going: null as string | null,
+  fromPos: new THREE.Vector3(),
+  fromQ: new THREE.Quaternion(),
+  fromFov: 45,
+  lastAim: new THREE.Vector3(),
+};
+const _fDir0 = new THREE.Vector3();
+const _fDir3 = new THREE.Vector3();
+const _fDir = new THREE.Vector3();
+const _fP = new THREE.Vector3();
+const _fQ = new THREE.Quaternion();
+const _fDest = new THREE.Quaternion();
+const _fSwing = new THREE.Quaternion();
+const _fPart = new THREE.Quaternion();
+const _fId = new THREE.Quaternion();
+const _pPrev = new THREE.Quaternion();
+const _pQ = new THREE.Quaternion();
+const _fM = new THREE.Matrix4();
+const _tmpQ = new THREE.Quaternion();
+const _origin = new THREE.Vector3();
+let debugFrames = 0; // render frames, for the flight rig (?hud=1 builds only)
+const smoother = (x: number) => x * x * x * (x * (x * 6 - 15) + 10);
+/** Trapezoid velocity: 20% ease in, constant middle, 20% ease out. Peak slope 1.25. */
+const trapezoid = (x: number) => {
+  const a = 0.2, k = 1 / (2 * a * (1 - a));
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  if (x < a) return x * x * k;
+  if (x > 1 - a) return 1 - (1 - x) * (1 - x) * k;
+  return (x - a / 2) / (1 - a);
+};
+
+/** Orientation a camera at `pos` needs to look at `look` (three's camera lookAt, as a quaternion). */
+function lookQuat(out: THREE.Quaternion, pos: THREE.Vector3, look: THREE.Vector3) {
+  return out.setFromRotationMatrix(_fM.lookAt(pos, look, UP));
+}
+
+/** Begin a flight from the camera's current pose, leaving world `leaving` for world `going`. */
+function startFlight(cam: THREE.PerspectiveCamera, leaving: string | null, going: string | null) {
+  flight.on = true;
+  flight.el = 0;
+  flight.fromPos.copy(cam.position);
+  flight.fromQ.copy(cam.quaternion);
+  flight.fromFov = cam.fov;
+  flight.leaving = leaving;
+  flight.going = going;
+  flight.dur = 0; // sized on the first frame, once the destination pose is known
+}
+
+/** The flight path at progress `s`, around target `aim`, ending at `end`. Writes `out`. */
+function flightPoint(out: THREE.Vector3, aim: THREE.Vector3, end: THREE.Vector3, s: number, lift: number) {
+  if (!flight.going) {
+    // Out to the overview: a straight crane back and up. Circling the look point here would
+    // add the whole swing to the turn (~200 degrees instead of ~110) and stretch the shot.
+    const e = smoother(s);
+    const span = flight.fromPos.distanceTo(end);
+    return out.copy(flight.fromPos).lerp(end, e).addScaledVector(UP, lift * span * Math.sin(Math.PI * e));
+  }
+  _fDir0.copy(flight.fromPos).sub(aim);
+  const r0 = _fDir0.length();
+  _fDir0.divideScalar(Math.max(r0, 1e-6));
+  _fDir3.copy(end).sub(aim);
+  const r3 = _fDir3.length();
+  _fDir3.divideScalar(Math.max(r3, 1e-6));
+  const eD = smoother(Math.min(1, s / 0.8));
+  _fSwing.setFromUnitVectors(_fDir0, _fDir3);
+  _fPart.copy(_fId).slerp(_fSwing, eD);
+  _fDir.copy(_fDir0).applyQuaternion(_fPart).addScaledVector(UP, lift * Math.sin(Math.PI * eD)).normalize();
+  return out.copy(aim).addScaledVector(_fDir, r0 + (r3 - r0) * smoother(s));
+}
+
+/** Least lift whose path keeps FLIGHT_CLEAR radii from every body but the two ends of the shot. */
+function chooseLift(aim: THREE.Vector3, end: THREE.Vector3) {
+  for (const lift of FLIGHT_LIFTS) {
+    let ok = true;
+    for (let i = 1; i < 24 && ok; i++) {
+      flightPoint(_fP, aim, end, i / 24, lift);
+      if (_fP.distanceTo(_origin) < SUN_RADIUS * FLIGHT_CLEAR) ok = false;
+      for (const [k, bp] of planetPositions) {
+        if (k === flight.leaving || k === flight.going) continue;
+        if (_fP.distanceTo(bp) < (planetRadii.get(k) ?? 0.3) * FLIGHT_CLEAR) { ok = false; break; }
+      }
+    }
+    if (ok) return lift;
+  }
+  return FLIGHT_LIFTS[FLIGHT_LIFTS.length - 1];
+}
+
+/**
+ * Where the view is heading at progress `s`: the shot's final orientation (from the end pose),
+ * handing over to "look at the target from here" as the camera arrives. Keeping the live look
+ * all the way makes a camera that passes the target sweep round it (Saturn -> overview passes
+ * the sun: ~200 degrees of turn for a 110-degree change). A planet hands over sooner, so it
+ * comes into frame and grows; the overview is a wide shot and holds the final heading longer.
+ */
+function destQuat(out: THREE.Quaternion, camPos: THREE.Vector3, end: THREE.Vector3, look: THREE.Vector3, s: number) {
+  lookQuat(out, end, look);
+  const w = flight.going ? smoother(Math.min(1, s / 0.7)) : smoother(s);
+  return out.slerp(lookQuat(_fQ, camPos, look), w);
+}
+
+/**
+ * Shortest duration (and turn share) whose planned view rotation never needs more than
+ * FLIGHT_TURN_RATE, found by sampling the planned orientation along the path - the path
+ * itself swings the view, so the start-to-end angle alone underestimates the turn.
+ */
+function planFlight(end: THREE.Vector3, look: THREE.Vector3, aim: THREE.Vector3) {
+  const N = 40;
+  const span = flight.fromPos.distanceTo(end);
+  const minDur = Math.max(FLIGHT_MIN, Math.min(FLIGHT_MAX, 1.2 + span * 0.06));
+  for (let dur = minDur; dur <= FLIGHT_MAX + 1e-6; dur += 0.05) {
+    for (let turn = 0.35; turn <= 1.0001; turn += 0.05) {
+      let peak = 0;
+      _pPrev.copy(flight.fromQ);
+      for (let i = 1; i <= N && peak <= FLIGHT_TURN_RATE * 0.9; i++) {
+        const s = i / N;
+        flightPoint(_fP, aim, end, s, flight.lift);
+        _pQ.copy(flight.fromQ).slerp(destQuat(_fDest, _fP, end, look, s), trapezoid(s / turn));
+        peak = Math.max(peak, _pPrev.angleTo(_pQ) / (dur / N));
+        _pPrev.copy(_pQ);
+      }
+      if (peak <= FLIGHT_TURN_RATE * 0.9) { flight.dur = dur; flight.turn = turn; return; }
+    }
+  }
+  flight.dur = FLIGHT_MAX;
+  flight.turn = 1;
+}
+
+/**
+ * Place the camera for this frame. `aim` is the body the shot is about (the planet, or the look
+ * point for poses with no body). Outside a flight this is exactly the old damp + lookAt.
+ */
+function applyPose(
+  cam: THREE.PerspectiveCamera, pos: THREE.Vector3, look: THREE.Vector3, aim: THREE.Vector3,
+  fov: number, tau: number, dt: number, nominal: number
+) {
+  flight.lastAim.copy(aim);
+  if (!flight.on) {
+    damp3(cam.position, pos, tau, dt);
+    damp(cam, 'fov', fov, tau, dt);
+    cam.lookAt(look.x, look.y, look.z);
+    return;
+  }
+  if (flight.dur === 0) {
+    flight.lift = chooseLift(aim, pos);
+    planFlight(pos, look, aim);
+  }
+  const step = Math.min(dt, Math.max(2.5 * nominal, 1 / 40));
+  flight.el += step;
+  const s = Math.min(1, flight.el / flight.dur);
+  flightPoint(cam.position, aim, pos, s, flight.lift);
+  cam.fov = flight.fromFov + (fov - flight.fromFov) * smoother(s);
+
+  // View direction: start -> destination heading, then limited per frame so neither a moving
+  // target, a large turn nor a long frame can whip the camera.
+  const target = _tmpQ.copy(flight.fromQ).slerp(destQuat(_fDest, cam.position, pos, look, s), trapezoid(s / flight.turn));
+  // A client that is slow throughout (under 30fps) keeps the per-second rate; any other client
+  // gets a hard per-frame cap, so a hitch or a heavy world never turns faster than one step.
+  const maxStep = Math.min(FLIGHT_TURN_RATE * step, FLIGHT_TURN_STEP * (nominal > 1 / 30 ? nominal * 60 : 1));
+  cam.quaternion.rotateTowards(target, maxStep);
+  if (s >= 1 && cam.quaternion.angleTo(_fDest) < 0.002) flight.on = false;
+}
+
+/**
  * World text waits for the camera (Elad, 2026-09-27): the world's copy stays hidden while
  * the camera flies and fades in once it lands. "Landed" = the damped position is within
  * 6% of the shot's own depth (camera→look distance) of its target, so the test scales with
@@ -577,11 +783,14 @@ function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch:
  */
 function markSettled(cam: THREE.Camera, departure: number) {
   const s = useScene.getState();
-  if (s.worldSettled || departure > 0.02) return;
+  if (s.worldSettled || departure > 0.02 || flight.on) return;
   if (cam.position.distanceTo(_tgt) < 0.06 * _tgt.distanceTo(_look)) s.setWorldSettled(true);
 }
 
 export default function CameraRig() {
+  const motionOffNow = useMotionDisabled();
+  const motionOff = useRef(motionOffNow);
+  useEffect(() => { motionOff.current = motionOffNow; }, [motionOffNow]);
   const prevAct = useRef<string>('galaxy');
   const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
   const swapLatch = useRef(false);  // blocks re-swaps until well clear of the covered window
@@ -868,6 +1077,8 @@ export default function CameraRig() {
 
     if (act === 'galaxy') {
       prevAct.current = 'galaxy';
+      flight.on = false;
+      flight.lastFocus = undefined;
       mobileArriveT.current = 0; // T7b: replay the establishing shot on the next solar entry
       const p = scrollProgress;
       if (p < 0.015) {
@@ -937,12 +1148,20 @@ export default function CameraRig() {
       // On first entering the solar act, snap to a start pose then fly IN. From the
       // dive we snap FAR for a zoom-in reveal; a deep-link straight to a world starts
       // closer so the flight to its planet is short and graceful.
-      if (prevAct.current !== 'solar') {
+      const firstEntry = prevAct.current !== 'solar';
+      if (firstEntry) {
         prevAct.current = 'solar';
         // Reveal starts already at a legible scale (never "tiny") then flies IN to the
         // poster pose. A deep-link straight to a world starts closer still.
-        if (focused) cam.position.set(0, 5, 16);
+        if (focused) { cam.position.set(0, 5, 16); cam.lookAt(0, 0, 0); }
         else cam.position.set(0, 8, 21);
+      }
+      // A change of focus is a FLIGHT (see `flight`). The first entry from the dive is not: it
+      // has its own scroll-driven arrival. Reduced motion keeps the plain damped move.
+      if (focused !== flight.lastFocus) {
+        const leaving = firstEntry ? null : flight.lastFocus ?? null;
+        if (!motionOff.current && (!firstEntry || focused)) startFlight(cam, leaving, focused);
+        flight.lastFocus = focused;
       }
       const pp = focused && focused !== 'belt' ? planetPositions.get(focused) : null;
       {
@@ -981,9 +1200,7 @@ export default function CameraRig() {
           // back out to the overview so the exit gesture is visible while it is happening.
           _tgt.copy(_beltPos).lerp(_ovPos, departure);
           _look.copy(_beltLook).lerp(_ovLook, departure);
-          damp3(cam.position, _tgt, 0.5, dt);
-          damp(cam, 'fov', ride.fov + (ovFov - ride.fov) * departure, 0.5, dt);
-          cam.lookAt(_look.x, _look.y, _look.z);
+          applyPose(cam, _tgt, _look, _look, ride.fov + (ovFov - ride.fov) * departure, 0.5, dt, dtNominal.current);
           markSettled(cam, departure);
         } else if (pp) {
           // --- ORBIT: the "Jupiter frame". The focused planet is the DOMINANT hero —
@@ -1071,9 +1288,7 @@ export default function CameraRig() {
           _tgt.copy(_orbitPos).lerp(_ovPos, departure);
           _look.copy(_orbitLook).lerp(_ovLook, departure);
           const fov = f.fovDeg + (ovFov - f.fovDeg) * departure;
-          damp3(cam.position, _tgt, 0.5, dt);
-          damp(cam, 'fov', fov, 0.5, dt);
-          cam.lookAt(_look.x, _look.y, _look.z);
+          applyPose(cam, _tgt, _look, pp, fov, 0.5, dt, dtNominal.current);
           markSettled(cam, departure);
           // Hand the DOM the limb it is actually looking at, from the pose we just landed
           // on — the projects ring reads it in its own rAF and rebuilds its arcs from it.
@@ -1138,6 +1353,7 @@ export default function CameraRig() {
             const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
             _entry.set(0, 8, 21);
             _tgt.copy(_entry).lerp(_est, arrive);
+            flight.on = false;
             damp3(cam.position, _tgt, 0.3, dt);
             damp(cam, 'fov', 52 + (EST_FOV - 52) * arrive, 0.3, dt);
             cam.lookAt(_el.x, _el.y, _el.z);
@@ -1147,9 +1363,7 @@ export default function CameraRig() {
             const blend = easeInOutCubic(clamp01((held - EST_HOLD) / EST_EASE)); // 0 wide → 1 framed
             _tgt.copy(_est).lerp(_tourPos, blend);
             _look.copy(_el).lerp(_tourLook, blend);
-            damp3(cam.position, _tgt, 0.45, dt);
-            damp(cam, 'fov', EST_FOV + (stopFov - EST_FOV) * blend, 0.45, dt);
-            cam.lookAt(_look.x, _look.y, _look.z);
+            applyPose(cam, _tgt, _look, _look, EST_FOV + (stopFov - EST_FOV) * blend, 0.45, dt, dtNominal.current);
           }
         } else if (store.scrollDriven && arrivedViaDive.current && scrollProgress >= SWAP_V) {
           // T7a: scroll-driven arrival dolly. The far entry pose eases to the overview
@@ -1160,13 +1374,12 @@ export default function CameraRig() {
           const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
           _entry.set(0, 8, 21);
           _tgt.copy(_entry).lerp(_ovPos, arrive);
+          flight.on = false;
           damp3(cam.position, _tgt, 0.3, dt);
           damp(cam, 'fov', 52 + (ovFov - 52) * arrive, 0.3, dt);
           cam.lookAt(_ovLook.x, _ovLook.y, _ovLook.z);
         } else {
-          damp3(cam.position, _ovPos, 0.7, dt);
-          damp(cam, 'fov', ovFov, 0.7, dt);
-          cam.lookAt(_ovLook.x, _ovLook.y, _ovLook.z);
+          applyPose(cam, _ovPos, _ovLook, _ovLook, ovFov, 0.7, dt, dtNominal.current);
         }
       }
     }
@@ -1179,6 +1392,12 @@ export default function CameraRig() {
     damp(state.gl, 'toneMappingExposure', expoTarget, 0.4, dt);
 
     cam.updateProjectionMatrix();
+    if (HUD_AVAILABLE) {
+      debugFrames++;
+      (window as unknown as { __flight?: unknown }).__flight = {
+        fr: debugFrames, on: flight.on, el: flight.el, dur: flight.dur, turn: flight.turn, act, bodies: planetPositions, radii: planetRadii,
+      };
+    }
   });
 
   return null;
