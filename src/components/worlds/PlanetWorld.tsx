@@ -1,5 +1,7 @@
 'use client';
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useScene } from '@/lib/sceneStore';
+import { useMotionDisabled } from '@/hooks/useMotionDisabled';
 import type { Locale } from '@/lib/translations';
 import { translations } from '@/lib/translations';
 import { useWorldExit } from '@/hooks/useWorldExit';
@@ -27,6 +29,20 @@ export default function PlanetWorld({
   const panelRef = useRef<HTMLDivElement>(null);
   const { meter, returnHome } = useWorldExit(locale, panelRef);
   const departureLabel = translations['world.departure'][locale];
+  // The text waits for the camera to land (CameraRig latches `worldSettled`). Two ways
+  // around the wait: reduced motion shows it at once, and a 3s cap covers a scene that
+  // never lands (no WebGL, poster fallback, a slow first frame).
+  const settled = useScene((s) => s.worldSettled);
+  const motionOff = useMotionDisabled();
+  const [capped, setCapped] = useState(false);
+  // World→world navigation mounts us while the flag still says the OLD world landed;
+  // clear it before the first paint so the new copy never flashes in mid-flight.
+  useLayoutEffect(() => useScene.getState().setWorldSettled(false), []);
+  useEffect(() => {
+    const id = window.setTimeout(() => setCapped(true), 3000);
+    return () => window.clearTimeout(id);
+  }, []);
+  const arrived = settled || motionOff || capped;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-30 flex items-end justify-start md:items-stretch">
@@ -35,6 +51,7 @@ export default function PlanetWorld({
       <div
         ref={panelRef}
         data-chrome=""
+        data-arrived={arrived ? 'true' : 'false'}
         className="world-scrim pointer-events-auto flex max-h-[62dvh] w-full flex-col px-6 pt-14 pb-24 md:max-h-none md:w-[38rem] md:px-12 md:pt-24"
       >
         <div className="flex shrink-0 items-center justify-between gap-4">

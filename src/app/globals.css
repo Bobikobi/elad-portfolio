@@ -603,3 +603,10 @@ html[lang='ru'] .world-body {
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
 }
+
+/* World text waits for the camera to land, then fades in (PlanetWorld sets data-arrived).
+   Only with scripting on: without JS the copy must stay readable. */
+@media (scripting: enabled) {
+  .world-scrim[data-arrived='false'] { opacity: 0; }
+  .world-scrim[data-arrived='true'] { opacity: 1; transition: opacity 0.35s ease-out; }
+}

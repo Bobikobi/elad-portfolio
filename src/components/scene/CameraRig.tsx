@@ -558,6 +558,19 @@ function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch:
  * SOLAR_OVERVIEW frames the whole system. The camera teleport at the act swap is
  * hidden behind the white flash, so the two scene-graphs read as one world.
  */
+/**
+ * World text waits for the camera (Elad, 2026-09-27): the world's copy stays hidden while
+ * the camera flies and fades in once it lands. "Landed" = the damped position is within
+ * 2% of the shot's own depth (camera→look distance) of its target, so the test scales with
+ * every world's framing. Latched: the planet keeps orbiting and the pose keeps drifting,
+ * which must not hide the text again mid-read. The store clears it on a new focus.
+ */
+function markSettled(cam: THREE.Camera, departure: number) {
+  const s = useScene.getState();
+  if (s.worldSettled || departure > 0.02) return;
+  if (cam.position.distanceTo(_tgt) < 0.02 * _tgt.distanceTo(_look)) s.setWorldSettled(true);
+}
+
 export default function CameraRig() {
   const prevAct = useRef<string>('galaxy');
   const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
@@ -938,6 +951,7 @@ export default function CameraRig() {
           damp3(cam.position, _tgt, 0.5, dt);
           damp(cam, 'fov', ride.fov + (ovFov - ride.fov) * departure, 0.5, dt);
           cam.lookAt(_look.x, _look.y, _look.z);
+          markSettled(cam, departure);
         } else if (pp) {
           // --- ORBIT: the "Jupiter frame". The focused planet is the DOMINANT hero —
           // framed huge and pinned to the inline-END side (left in RTL / right in LTR),
@@ -1027,6 +1041,7 @@ export default function CameraRig() {
           damp3(cam.position, _tgt, 0.5, dt);
           damp(cam, 'fov', fov, 0.5, dt);
           cam.lookAt(_look.x, _look.y, _look.z);
+          markSettled(cam, departure);
           // Hand the DOM the limb it is actually looking at, from the pose we just landed
           // on — the projects ring reads it in its own rAF and rebuilds its arcs from it.
           publishLimb(cam, pp, r, state.size.width, state.size.height);
