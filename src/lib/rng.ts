@@ -52,4 +52,6 @@ export const SEED = {
   asteroidBelt: 0x5eed_0004,
   zodiacalDust: 0x5eed_0005,
   moons: 0x5eed_0006,
+  diveNeighbourhood: 0x5eed_000e,
+  swapTunnel: 0x5eed_000f,
 } as const;

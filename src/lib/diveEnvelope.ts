@@ -8,9 +8,9 @@
 /** Dive progress (0..1) at which the galaxy act crosses over to the solar act. */
 export const SWAP_V = 0.9;
 /** Coverage == 1 while |gate − SWAP_V| < this: a fully hidden window for the swap. */
-export const COVER_PLATEAU = 0.02;
+export const COVER_PLATEAU = 0.0125;
 /** Coverage eases to 0 over this much beyond the plateau, symmetrically. */
-export const COVER_FALLOFF = 0.06;
+export const COVER_FALLOFF = 0.0375;
 
 /** The curtain's coverage (0..1) for a given damped gate position. */
 export function coverageFor(gate: number): number {

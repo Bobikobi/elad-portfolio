@@ -65,29 +65,17 @@ const HOVER_STICKY = 1.5;    // grown hit radius while a body is already hovered
 const HOVER_SLACK_PX = 24;   // dead-band ring beyond the sticky disc
 const HOVER_MISS_MS = 250;   // a miss must persist this long before the hover drops
 
-// --- B10: the rim markers -------------------------------------------------------------
-// A decorative body's tooltip is raised by hovering the BODY, and the hover test skipped
-// any body that was off-frame — so a tooltip you could not see the planet for was simply
-// unreachable. Measured over a full revolution at the resting overview, Uranus is inside
-// the frame 35.6% of the time and Neptune 33.4%: for two thirds of every orbit those two
-// worlds had no way in at all. Pulling the orbits in barely moves those numbers, because
-// the cause is not the orbit — the overview camera sits INSIDE the system, ten units from
-// the sun, so the near half of every outer orbit passes below the frustum entirely.
-//
-// The section pills already solved the same problem for the same reason: "never crop a
-// section away — clamp the pill to the frame". This is that rule, applied to the other
-// class of body. When a decorative world is off-frame it leaves a small marker on the rim
-// where it lies, and that marker is both the hover target and the visible cue that
-// something is out there. Nothing changes while the body IS in frame.
-const RIM_R = 13;            // hit radius of a rim marker, px
-const RIM_INSET_X = 34;      // how far in from the left/right edges the marker sits
-const RIM_TOP = 96;          // clear of the navbar
-const RIM_BOTTOM = 116;      // clear of the tour dots / drag hint
+// B10 once parked a visible marker on the frame rim for an off-frame Uranus/Neptune so its
+// tooltip stayed reachable. Removed (Elad, 2026-09-27): an unlabeled dot pinned in a corner
+// read as a bug. The pointer reaches a body while any of its disc is in frame; the keyboard
+// keeps a visually hidden button per body (below), which shows the card wherever it is.
 const TIP_TAU = 0.055;       // tooltip position smoothing time constant, in SECONDS
 const DEG2RAD = Math.PI / 180;
 
 /** Live pointer, updated from real events only — never polled, never a layout read. */
-const ptr = { x: -1, y: -1, seen: false, onScene: false, onTip: false, onRim: false };
+const ptr = { x: -1, y: -1, seen: false, onScene: false, onTip: false };
+/** The decorative body whose hidden button has keyboard focus ('' = none). */
+const kbd = { key: '' };
 
 /** Hide a node without touching layout or leaving a focusable ghost behind. */
 function hide(el: HTMLElement) {
@@ -129,11 +117,6 @@ export function PlanetLabelDriver() {
       ptr.seen = true;
       ptr.onScene = t?.tagName === 'CANVAS';
       ptr.onTip = !!t?.closest?.('[data-body-tooltip]');
-      // B10: the pointer resting on a rim marker counts as holding that body, exactly as
-      // resting on the tooltip does — otherwise the hysteresis would drop the hover 250ms
-      // after the marker raised it, which is the strobe this whole mechanism exists to
-      // prevent, only now on the one target you can actually aim at.
-      ptr.onRim = !!t?.closest?.('[data-body-rim]');
     };
     // `pointerover` matters as much as `pointermove` here: the scene moves under a STILL
     // cursor, so the element being hit-tested changes with no mouse motion at all. The
@@ -145,7 +128,7 @@ export function PlanetLabelDriver() {
     window.addEventListener('pointerover', track, { passive: true });
     // Only a pointer that has genuinely left the document is "gone" — not one that merely
     // crossed from one element to another.
-    const gone = () => { ptr.onScene = false; ptr.onTip = false; ptr.onRim = false; };
+    const gone = () => { ptr.onScene = false; ptr.onTip = false; };
     document.documentElement.addEventListener('pointerleave', gone, { passive: true });
     window.addEventListener('blur', gone);
     return () => {
@@ -178,7 +161,7 @@ export function PlanetLabelDriver() {
       const behind = _ndc.z > 1;
       if (behind) { x = vw - x; y = vh - y; } // behind the camera → mirror to the far edge
       const off = behind || Math.abs(_ndc.x) > 0.97 || Math.abs(_ndc.y) > 0.97;
-      return { x, y, off };
+      return { x, y, off, behind };
     };
 
     // Verification handle: where the CURRENT frame's body positions say each pill belongs.
@@ -244,25 +227,17 @@ export function PlanetLabelDriver() {
       const d = cam.position.distanceTo(pos);
       return d <= 0 ? 0 : ((2 * Math.atan((planetRadii.get(key) ?? 0.3) / d)) / fovY) * vh * 0.5;
     };
-    /**
-     * Where a decorative body can be reached on screen, and how big its target is. In
-     * frame that is the body itself; out of frame it is the rim marker standing in for it
-     * (B10). One function so the hover test, the hysteresis and the marker placement can
-     * never disagree about where the thing is.
-     */
+    /** Where a decorative body can be hovered on screen - while any of its disc is in frame. */
     const reachable = (key: string, pos: THREE.Vector3) => {
       const p = project(pos, 0);
-      if (!p.off) return { x: p.x, y: p.y, r: radiusPx(key, pos), rim: false };
-      return {
-        x: Math.min(vw - RIM_INSET_X, Math.max(RIM_INSET_X, p.x)),
-        y: Math.min(vh - RIM_BOTTOM, Math.max(RIM_TOP, p.y)),
-        r: RIM_R,
-        rim: true,
-      };
+      if (p.behind) return null;
+      const r = radiusPx(key, pos);
+      if (p.x + r < 0 || p.x - r > vw || p.y + r < 0 || p.y - r > vh) return null;
+      return { x: p.x, y: p.y, r };
     };
 
     if (!overviewOn || !ptr.seen || st.tourMode) {
-      if (st.hoveredBody && !st.tourMode) { st.setHoveredBody(null); hoverMiss.current = 0; }
+      if (st.hoveredBody && !st.tourMode && st.hoveredBody !== kbd.key) { st.setHoveredBody(null); hoverMiss.current = 0; }
     } else {
       // Nearest body to the pointer, measured from the EDGE of its target.
       let bestKey: string | null = null;
@@ -272,6 +247,7 @@ export function PlanetLabelDriver() {
         const pos = planetPositions.get(key);
         if (!pos) continue;
         const a = reachable(key, pos);
+        if (!a) continue;
         const gap = Math.hypot(a.x - ptr.x, a.y - ptr.y) - a.r;
         if (gap < bestGap) { bestGap = gap; bestKey = key; bestHit = gap <= 0; }
       }
@@ -283,7 +259,7 @@ export function PlanetLabelDriver() {
         const r = a ? a.r : 0;
         const dist = a ? Math.hypot(a.x - ptr.x, a.y - ptr.y) : Infinity;
         // Held by the sticky disc + slack ring, or by the pointer being on the card itself.
-        const held = ptr.onTip || ptr.onRim || (ptr.onScene && dist <= r * HOVER_STICKY + HOVER_SLACK_PX);
+        const held = kbd.key === cur || ptr.onTip || (ptr.onScene && dist <= r * HOVER_STICKY + HOVER_SLACK_PX);
         if (held) {
           hoverMiss.current = 0;
           // A clean hit on a DIFFERENT body still wins immediately — moving from one body
@@ -306,24 +282,10 @@ export function PlanetLabelDriver() {
         (window as unknown as { __hover?: unknown }).__hover = {
           hovered: st.hoveredBody,
           bestKey, bestGap: +bestGap.toFixed(1), bestHit,
-          onScene: ptr.onScene, onTip: ptr.onTip, onRim: ptr.onRim,
+          onScene: ptr.onScene, onTip: ptr.onTip,
           ptr: [Math.round(ptr.x), Math.round(ptr.y)],
         };
       }
-    }
-
-    // --- B10: rim markers for the decorative bodies that are off-frame -----------------
-    // Shown ONLY while a body is out of view, at the point on the rim where it lies; the
-    // hover test above already treats that point as the body's target.
-    for (const key of DECORATIVE_BODIES) {
-      const el = nodes.get(`rim:${key}`);
-      if (!el) continue;
-      const pos = planetPositions.get(key);
-      if (!overviewOn || !pos || st.tourMode) { hide(el); continue; }
-      const a = reachable(key, pos);
-      if (!a.rim) { hide(el); continue; }
-      const on = st.hoveredBody === key;
-      place(el, a.x, a.y, (on ? 1 : 0.55) * covFade, covFade > 0.5);
     }
 
     // --- decorative tooltip -----------------------------------------------------------
@@ -331,14 +293,13 @@ export function PlanetLabelDriver() {
     if (tipEl) {
       const key = useScene.getState().hoveredBody;
       const pos = key ? planetPositions.get(key) : null;
-      if (!overviewOn || !key || !pos) { hide(tipEl); tip.current.key = ''; }
+      // A body that orbits out of frame takes its card with it.
+      // Keyboard focus keeps it: the card then sits at the frame edge nearest the body.
+      const a = overviewOn && key && pos ? reachable(key, pos) ?? (key === kbd.key ? project(pos, 0) : null) : null;
+      if (!a || !key || !pos) { hide(tipEl); tip.current.key = ''; }
       else {
-        // Anchored to whatever is actually reachable: the body when it is in frame, its rim
-        // marker when it is not (B10). Anchoring to the raw projection would put the card
-        // for an off-frame body somewhere across the screen from the thing you just hovered.
-        const a = reachable(key, pos);
         const x = a.x;
-        const y = a.rim ? a.y : project(pos, (planetRadii.get(key) ?? 0.3) + 0.28).y;
+        const y = project(pos, (planetRadii.get(key) ?? 0.3) + 0.28).y;
         // Keep the card fully on screen — it is far wider than a pill.
         const halfW = tipEl.offsetWidth / 2 || 130;
         const halfH = tipEl.offsetHeight / 2 || 46;
@@ -410,29 +371,26 @@ export default function PlanetLabelsOverlay() {
       ))}
       <Pill nodeKey="belt" label={t('nav.tech')} onOpen={() => open('belt')} />
 
-      {/* B10 - rim markers. A decorative world that has orbited out of frame leaves this
-          behind on the rim: the cue that it is out there, and the target that raises its
-          tooltip. Hidden entirely while the body is in frame, so the resting overview is
-          unchanged whenever the planets happen to be on the near side. */}
+      {/* Keyboard route to the decorative facts: visually hidden, one per body. */}
       {DECORATIVE_BODIES.map((key) => (
         <button
           key={key}
-          ref={register(`rim:${key}`)}
           type="button"
-          data-body-rim={key}
+          className="sr-only"
           aria-label={BODY_FACTS[key].name[locale]}
-          onPointerEnter={() => useScene.getState().setHoveredBody(key)}
-          onFocus={() => useScene.getState().setHoveredBody(key)}
+          onFocus={() => { kbd.key = key; useScene.getState().setHoveredBody(key); }}
+          onBlur={() => {
+            if (kbd.key === key) kbd.key = '';
+            const s = useScene.getState();
+            if (s.hoveredBody === key) s.setHoveredBody(null);
+          }}
           onClick={() => {
             const s = useScene.getState();
             s.setHoveredBody(s.hoveredBody === key ? null : key);
           }}
-          className="absolute left-0 top-0 grid h-[26px] w-[26px] place-items-center rounded-full border border-[var(--color-core-gold)]/45 bg-[rgba(5,7,20,0.7)] transition-colors duration-200 hover:border-[var(--color-core-gold)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)]"
-          style={{ opacity: 0, visibility: 'hidden', willChange: 'transform' }}
-        >
-          <span aria-hidden className="block h-[6px] w-[6px] rounded-full bg-[var(--color-core-gold)]" />
-        </button>
+        />
       ))}
+
 
       {/* Decorative-body tooltip - one node, re-used for whichever body is hovered. */}
       <div

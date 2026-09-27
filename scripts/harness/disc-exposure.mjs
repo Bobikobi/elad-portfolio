@@ -94,7 +94,13 @@ const ctx = await browser.createBrowserContext();
 const page = await ctx.newPage();
 await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
 
-const url = `${BASE}/projects?ringprobe=1&hud=1`;
+// EXTRA=orbitexp=0.5 sweeps the aperture. VERCEL_BYPASS_FILE lets it run against a protected
+// preview; the secret is read from disk and never printed.
+const EXTRA = process.env.EXTRA ? `&${process.env.EXTRA}` : '';
+if (process.env.VERCEL_BYPASS_FILE) {
+  await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': fs.readFileSync(process.env.VERCEL_BYPASS_FILE, 'utf8').trim() });
+}
+const url = `${BASE}/projects?ringprobe=1&hud=1${EXTRA}`;
 await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 await sleep(SETTLE);
 
@@ -128,7 +134,7 @@ if (!gl.ring) {
   const disc = { cx: gl.ring.cx, cy: gl.ring.cy, R: gl.ring.R };
   console.log('disc (camera) :', JSON.stringify(disc));
 
-  const shot = path.join(OUT, 'projects-desktop.png');
+  const shot = path.join(OUT, `projects-desktop${process.env.TAG ? '-' + process.env.TAG : ''}.png`);
   const buf = await page.screenshot();
   fs.writeFileSync(shot, buf);
   const img = decodePng(buf);

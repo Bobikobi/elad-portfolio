@@ -29,7 +29,12 @@ function SeoContent() {
   const p = (s: string) => localePath(s, locale);
   return (
     <div className="sr-only">
-      <h1>{t('hero.name')}</h1>
+      {/* A <p>, not an <h1>. The visible hero below is an h1 AND is server-rendered — it
+          is in the raw HTML of production, checked with curl — so a crawler that runs no
+          JavaScript already finds a real heading. This block's job is the copy and the
+          links, not a second heading; as an h1 it only gave every locale of the home page
+          two h1s carrying identical text. Invisible either way, so nothing moves. */}
+      <p>{t('hero.name')}</p>
       <p>{t('hero.subtitle')}</p>
       <Link href={p('about')}>{t('nav.about')}</Link>
       <Link href={p('services')}>{t('nav.services')}</Link>
@@ -131,7 +136,7 @@ function GalaxyHome() {
     } else {
       scene.setAct('galaxy');
       scene.setScrollProgress(0);
-      scene.setScrollDriven(true); // fresh dive: the 500vh driver is mounted (T7c reconciliation active)
+      scene.setScrollDriven(true); // fresh dive: the 800vh driver is mounted (T7c reconciliation active)
       window.scrollTo(0, 0);
     }
     return () => { useScene.getState().setScrollDriven(false); };
@@ -179,7 +184,7 @@ function GalaxyHome() {
 
   // R5.1 — crossover auto-commit. The swap curtain is a wide, symmetric envelope around
   // the crossover point, so a visitor who simply STOPS scrolling inside it is left staring
-  // at a gold wash with no indication that anything more is expected of them: the one true
+  // at a black curtain with no indication that anything more is expected of them: the one true
   // stuck position on the page. When scroll comes to rest while the curtain is meaningfully
   // up, finish the crossing for them — a short smooth scroll to just past the curtain, in
   // whichever direction they were already travelling. Never fires while they are still
@@ -192,7 +197,7 @@ function GalaxyHome() {
     const COMMIT_COV = 0.45; // only while the curtain actually obscures the frame
     // Clear of the ENTIRE covered band: the plateau half-width AND the falloff, plus a
     // margin. Landing on `SWAP_V + COVER_FALLOFF` alone stops one plateau short and parks
-    // the visitor at a permanent coverage of 0.25 — the same gold wash this is meant to
+    // the visitor at a permanent coverage of 0.25 — the same shut curtain this is meant to
     // clear, only now at a fixed depth instead of wherever they happened to stop.
     const PAST = COVER_PLATEAU + COVER_FALLOFF + 0.01;
     let raf = 0;
@@ -229,7 +234,7 @@ function GalaxyHome() {
   // starts at the end of it (see the layout effect above), so the runway back up to the
   // galaxy exists for them too.
   return (
-    <section ref={driverRef} className="relative" style={{ height: '500vh' }}>
+    <section ref={driverRef} className="relative" style={{ height: '800vh' }}>
       <SeoContent />
 
       {/* Welcome - fixed, fades as the dive begins */}
@@ -242,6 +247,13 @@ function GalaxyHome() {
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 1.2, ease: [0.25, 0.4, 0, 1] }}
         >
+          {/* This stays an <h1>, and the duplicate is removed at the other end, in
+              `SeoContent`. Demoting THIS one looked equivalent — the size is set by the
+              class — and measurement said otherwise: `globals.css` gives `h1` the display
+              font and the heading glow, and gives `p` `text-shadow: none`, so the tag
+              swap quietly changed the typeface and switched the hero's bloom off. The name
+              rendered 71px wider and 7px shorter at 1440x900. The tag is doing real work
+              here; only the invisible copy of it is redundant. */}
           <h1
             className="type-hero text-[clamp(3rem,8vw,6.5rem)] leading-[1.05] tracking-[0.06em] text-[var(--color-star-white)]"
           >

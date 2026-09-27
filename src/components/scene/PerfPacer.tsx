@@ -12,9 +12,10 @@ import { useScene } from '@/lib/sceneStore';
  *
  * Two owners, one activity signal:
  *
- *  - {@link FramePacer} owns the frameloop. Idle pages drop to 30fps.
+ *  - {@link FramePacer} owns the frameloop. It no longer throttles idle pages - see the
+ *    note on the tick below for what that cost and why it went.
  *  - {@link ResolutionScaler} owns the pixel ratio. It scales the render buffer down to
- *    hold the target rate and returns to full when there is headroom or the page is idle.
+ *    hold the target rate and returns to full when there is headroom.
  *
  * Both used to be partly drei's job (`AdaptiveDpr`) or the governor's (its paced loop).
  * Two components setting `dpr`, or two setting `frameloop`, is how a scene ends up
@@ -25,7 +26,6 @@ import { useScene } from '@/lib/sceneStore';
 // Input, not store writes: CameraRig writes `coverage` every frame, so subscribing to the
 // store would mean the scene was never idle. Transition state is read imperatively below.
 const IDLE_AFTER_MS = 2500;
-const IDLE_FPS = 30;
 const EVEN_FPS = 60;
 
 let lastInput = 0;
@@ -49,11 +49,9 @@ function useActivityListeners() {
 /**
  * Idle = no input recently AND nothing is animating itself.
  *
- * Exported because the quality governor MUST NOT judge a throttled frame. It measures
- * fps from the frame delta, and an idle page deliberately delivering 30fps looks exactly
- * like a machine failing to hold 60 — which demoted the tier on a perfectly capable
- * machine within seconds of the page settling. The idle throttle and the tier decision
- * have to agree on when the clock is running.
+ * Reported to the HUD only. It used to gate the idle throttle and exempt idle frames from
+ * the resolution scaler and the quality governor; the throttle is gone, and so are both
+ * exemptions.
  */
 export function isIdle(now: number) {
   if (now - lastInput < IDLE_AFTER_MS) return false;
@@ -66,8 +64,9 @@ export function isIdle(now: number) {
 
 /**
  * The frameloop. R3F runs `always` by default: every vsync, forever, whether or not
- * anything changed. A page left open on the overview costs a full frame budget for
- * ambient drift alone, which is where the idle throttle pays.
+ * anything changed. That is now what this scene does everywhere: the idle throttle that
+ * used to buy back a page left open on the overview is gone, because it could not tell
+ * that page apart from a focused world where the animation IS the content.
  *
  * Also absorbs the paced-60 lock the governor used to drive, so the frameloop has exactly
  * one owner. On a 75/90Hz panel an uncapped scene produces a repeating long/short frame
@@ -98,13 +97,23 @@ export function FramePacer() {
       if (wantDemand) invalidate(); // never leave a frame un-asked-for in the swap tick
     };
 
+    // THE IDLE THROTTLE IS GONE (owner ruling). It used to drop an idle page to 30fps
+    // after 2.5s of no pointer motion, and `isIdle`'s gate - coverage and departure both
+    // at zero - is satisfied on a FOCUSED world page, not just on the overview it was
+    // written for. So the one screen that is nothing but ambient animation was the screen
+    // it throttled. Measured on /about: 60fps with the pointer moving, 30fps the moment it
+    // stopped, switching back and forth on a 2.5s trigger.
+    //
+    // It was also making the night-lights aliasing exactly twice as bad. At 30fps the globe
+    // turns 3.2px between frames instead of 1.6, and a city light is about 3.6px across -
+    // so at half rate a light barely overlaps its own previous position, which is the
+    // condition for strobing rather than moving.
+    //
     const tick = (ts: number) => {
       raf = requestAnimationFrame(tick);
-      const idle = isIdle(ts);
-      const wantDemand = idle || pacedWhenActive;
-      setLoop(wantDemand);
-      if (!wantDemand) return;
-      const period = 1000 / (idle ? IDLE_FPS : EVEN_FPS);
+      setLoop(pacedWhenActive);
+      if (!pacedWhenActive) return;
+      const period = 1000 / EVEN_FPS;
       if (ts - last >= period - 1) {
         last = ts;
         invalidate();
@@ -151,6 +160,7 @@ const HIGH_RATIO = 0.95;   // above this share = room to scale back up
  */
 export function ResolutionScaler() {
   const setDpr = useThree((s) => s.setDpr);
+  const invalidate = useThree((s) => s.invalidate);
   const quality = useScene((s) => s.quality);
   const pacing = useScene((s) => s.pacing);
   const displayHz = useScene((s) => s.displayHz);
@@ -175,6 +185,7 @@ export function ResolutionScaler() {
     if (Math.abs(dpr - applied.current) < 0.01) return;
     applied.current = dpr;
     setDpr(dpr);
+    invalidate();
   };
 
   /**
@@ -214,13 +225,10 @@ export function ResolutionScaler() {
     frames.current = 0;
     elapsed.current = 0;
 
-    // Idle pages are cheap by definition and get their pixels back.
+    // An idle page used to be exempt here because it was throttled to 30fps on purpose. With
+    // the throttle gone its frames are real, so a slow machine left alone on a world page must
+    // still be able to give pixels up. `idle` is only reported to the HUD now.
     const idle = isIdle(now);
-    if (idle) {
-      if (scale.current !== MAX_SCALE) { scale.current = MAX_SCALE; apply(MAX_SCALE); }
-      publish(fps, true);
-      return;
-    }
 
     const target = pacing === 'smooth' && displayHz ? displayHz : EVEN_FPS;
     if (fps < target * LOW_RATIO && scale.current > MIN_SCALE) {
@@ -230,7 +238,7 @@ export function ResolutionScaler() {
       scale.current = Math.min(MAX_SCALE, +(scale.current + STEP_UP).toFixed(2));
       apply(scale.current);
     }
-    publish(fps, false);
+    publish(fps, idle);
   });
 
   return null;

@@ -582,3 +582,31 @@ html[lang='ru'] .world-body {
 .a11y-link-highlight a { text-decoration: underline !important; text-underline-offset: 3px; outline: 2px solid #f59e0b !important; outline-offset: 2px; border-radius: 2px; }
 .a11y-stop-animations *, .a11y-stop-animations *::before, .a11y-stop-animations *::after { animation-duration: 0s !important; animation-delay: 0s !important; transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
 .a11y-grayscale { filter: grayscale(1); }
+
+/* Planet-world scrim: the reading column has no surface of its own. The scene darkens
+   under the text from the reading edge and dissolves back into space, so the words sit
+   IN the cosmos rather than on a card over it. Phone: from the bottom edge. */
+.world-scrim {
+  background: linear-gradient(to top, rgba(5, 7, 20, 0.92) 0%, rgba(5, 7, 20, 0.8) 70%, rgba(5, 7, 20, 0) 100%);
+}
+@media (min-width: 768px) {
+  .world-scrim {
+    background: linear-gradient(to right, rgba(5, 7, 20, 0.86) 0%, rgba(5, 7, 20, 0.7) 60%, rgba(5, 7, 20, 0) 100%);
+  }
+  html[dir='rtl'] .world-scrim {
+    background: linear-gradient(to left, rgba(5, 7, 20, 0.86) 0%, rgba(5, 7, 20, 0.7) 60%, rgba(5, 7, 20, 0) 100%);
+  }
+}
+/* The column ends above the fixed corner buttons; text scrolling out of it fades rather
+   than being cut on a hard line. */
+.world-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
+}
+
+/* World text waits for the camera to land, then fades in (PlanetWorld sets data-arrived).
+   Only with scripting on: without JS the copy must stay readable. */
+@media (scripting: enabled) {
+  .world-scrim[data-arrived='false'] { opacity: 0; }
+  .world-scrim[data-arrived='true'] { opacity: 1; transition: opacity 0.35s ease-out; }
+}
