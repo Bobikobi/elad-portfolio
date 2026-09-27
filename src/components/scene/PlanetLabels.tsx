@@ -65,14 +65,17 @@ const HOVER_STICKY = 1.5;    // grown hit radius while a body is already hovered
 const HOVER_SLACK_PX = 24;   // dead-band ring beyond the sticky disc
 const HOVER_MISS_MS = 250;   // a miss must persist this long before the hover drops
 
-// B10 once parked a marker on the frame rim for an off-frame Uranus/Neptune so its tooltip
-// stayed reachable. Removed (Elad, 2026-09-27): an unlabeled dot pinned in a corner read as a
-// bug. An off-frame decorative body is simply not hoverable until it orbits back in.
+// B10 once parked a visible marker on the frame rim for an off-frame Uranus/Neptune so its
+// tooltip stayed reachable. Removed (Elad, 2026-09-27): an unlabeled dot pinned in a corner
+// read as a bug. The pointer reaches a body while any of its disc is in frame; the keyboard
+// keeps a visually hidden button per body (below), which shows the card wherever it is.
 const TIP_TAU = 0.055;       // tooltip position smoothing time constant, in SECONDS
 const DEG2RAD = Math.PI / 180;
 
 /** Live pointer, updated from real events only — never polled, never a layout read. */
 const ptr = { x: -1, y: -1, seen: false, onScene: false, onTip: false };
+/** The decorative body whose hidden button has keyboard focus ('' = none). */
+const kbd = { key: '' };
 
 /** Hide a node without touching layout or leaving a focusable ghost behind. */
 function hide(el: HTMLElement) {
@@ -158,7 +161,7 @@ export function PlanetLabelDriver() {
       const behind = _ndc.z > 1;
       if (behind) { x = vw - x; y = vh - y; } // behind the camera → mirror to the far edge
       const off = behind || Math.abs(_ndc.x) > 0.97 || Math.abs(_ndc.y) > 0.97;
-      return { x, y, off };
+      return { x, y, off, behind };
     };
 
     // Verification handle: where the CURRENT frame's body positions say each pill belongs.
@@ -224,14 +227,17 @@ export function PlanetLabelDriver() {
       const d = cam.position.distanceTo(pos);
       return d <= 0 ? 0 : ((2 * Math.atan((planetRadii.get(key) ?? 0.3) / d)) / fovY) * vh * 0.5;
     };
-    /** Where a decorative body can be hovered on screen - only while it is in frame. */
+    /** Where a decorative body can be hovered on screen - while any of its disc is in frame. */
     const reachable = (key: string, pos: THREE.Vector3) => {
       const p = project(pos, 0);
-      return p.off ? null : { x: p.x, y: p.y, r: radiusPx(key, pos) };
+      if (p.behind) return null;
+      const r = radiusPx(key, pos);
+      if (p.x + r < 0 || p.x - r > vw || p.y + r < 0 || p.y - r > vh) return null;
+      return { x: p.x, y: p.y, r };
     };
 
     if (!overviewOn || !ptr.seen || st.tourMode) {
-      if (st.hoveredBody && !st.tourMode) { st.setHoveredBody(null); hoverMiss.current = 0; }
+      if (st.hoveredBody && !st.tourMode && st.hoveredBody !== kbd.key) { st.setHoveredBody(null); hoverMiss.current = 0; }
     } else {
       // Nearest body to the pointer, measured from the EDGE of its target.
       let bestKey: string | null = null;
@@ -253,7 +259,7 @@ export function PlanetLabelDriver() {
         const r = a ? a.r : 0;
         const dist = a ? Math.hypot(a.x - ptr.x, a.y - ptr.y) : Infinity;
         // Held by the sticky disc + slack ring, or by the pointer being on the card itself.
-        const held = ptr.onTip || (ptr.onScene && dist <= r * HOVER_STICKY + HOVER_SLACK_PX);
+        const held = kbd.key === cur || ptr.onTip || (ptr.onScene && dist <= r * HOVER_STICKY + HOVER_SLACK_PX);
         if (held) {
           hoverMiss.current = 0;
           // A clean hit on a DIFFERENT body still wins immediately — moving from one body
@@ -288,7 +294,8 @@ export function PlanetLabelDriver() {
       const key = useScene.getState().hoveredBody;
       const pos = key ? planetPositions.get(key) : null;
       // A body that orbits out of frame takes its card with it.
-      const a = overviewOn && key && pos ? reachable(key, pos) : null;
+      // Keyboard focus keeps it: the card then sits at the frame edge nearest the body.
+      const a = overviewOn && key && pos ? reachable(key, pos) ?? (key === kbd.key ? project(pos, 0) : null) : null;
       if (!a || !key || !pos) { hide(tipEl); tip.current.key = ''; }
       else {
         const x = a.x;
@@ -363,6 +370,26 @@ export default function PlanetLabelsOverlay() {
         <Pill key={key} nodeKey={key} label={t(PLANET_PAGES[key].labelKey)} onOpen={() => open(key)} />
       ))}
       <Pill nodeKey="belt" label={t('nav.tech')} onOpen={() => open('belt')} />
+
+      {/* Keyboard route to the decorative facts: visually hidden, one per body. */}
+      {DECORATIVE_BODIES.map((key) => (
+        <button
+          key={key}
+          type="button"
+          className="sr-only"
+          aria-label={BODY_FACTS[key].name[locale]}
+          onFocus={() => { kbd.key = key; useScene.getState().setHoveredBody(key); }}
+          onBlur={() => {
+            if (kbd.key === key) kbd.key = '';
+            const s = useScene.getState();
+            if (s.hoveredBody === key) s.setHoveredBody(null);
+          }}
+          onClick={() => {
+            const s = useScene.getState();
+            s.setHoveredBody(s.hoveredBody === key ? null : key);
+          }}
+        />
+      ))}
 
 
       {/* Decorative-body tooltip - one node, re-used for whichever body is hovered. */}
