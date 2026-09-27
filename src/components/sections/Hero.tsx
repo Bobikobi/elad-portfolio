@@ -29,7 +29,12 @@ function SeoContent() {
   const p = (s: string) => localePath(s, locale);
   return (
     <div className="sr-only">
-      <h1>{t('hero.name')}</h1>
+      {/* A <p>, not an <h1>. The visible hero below is an h1 AND is server-rendered — it
+          is in the raw HTML of production, checked with curl — so a crawler that runs no
+          JavaScript already finds a real heading. This block's job is the copy and the
+          links, not a second heading; as an h1 it only gave every locale of the home page
+          two h1s carrying identical text. Invisible either way, so nothing moves. */}
+      <p>{t('hero.name')}</p>
       <p>{t('hero.subtitle')}</p>
       <Link href={p('about')}>{t('nav.about')}</Link>
       <Link href={p('services')}>{t('nav.services')}</Link>
@@ -242,6 +247,13 @@ function GalaxyHome() {
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 1.2, ease: [0.25, 0.4, 0, 1] }}
         >
+          {/* This stays an <h1>, and the duplicate is removed at the other end, in
+              `SeoContent`. Demoting THIS one looked equivalent — the size is set by the
+              class — and measurement said otherwise: `globals.css` gives `h1` the display
+              font and the heading glow, and gives `p` `text-shadow: none`, so the tag
+              swap quietly changed the typeface and switched the hero's bloom off. The name
+              rendered 71px wider and 7px shorter at 1440x900. The tag is doing real work
+              here; only the invisible copy of it is redundant. */}
           <h1
             className="type-hero text-[clamp(3rem,8vw,6.5rem)] leading-[1.05] tracking-[0.06em] text-[var(--color-star-white)]"
           >

@@ -18,8 +18,28 @@ const clampUnit = (x: number) => (x < -1 ? -1 : x > 1 ? 1 : x);
 
 // --- T1 swap machine constants -------------------------------------------------
 const DEV = process.env.NODE_ENV !== 'production';
+/** See the note at the `livePlanetRect` write below. Read once, at import. */
+const DISC_PROBE =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discprobe');
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
+
+/**
+ * `?orbitexp=0.7` overrides the focused world's aperture for one page load, so the values in
+ * ORBIT_APERTURE can be SWEPT and measured instead of guessed. The response is severely
+ * compressed at the top of the curve, so a value must never be inferred by eye. It does
+ * nothing on the overview and nothing without the parameter. Read once, at import.
+ */
+const ORBIT_APERTURE_OVERRIDE =
+  typeof window !== 'undefined'
+    ? (() => {
+        // Explicit parse: `?orbitexp=0` is a real sweep value and must not read as absent.
+        const v = new URLSearchParams(window.location.search).get('orbitexp');
+        if (v === null || v.trim() === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      })()
+    : null;
 
 // --- The ORBIT vantage is SOLVED, not dialled in --------------------------------------
 // The old construction was "sit A radians off the lit direction, then add a fixed vertical
@@ -398,6 +418,14 @@ function publishLimb(
   livePlanetRect.vw = vw;
   livePlanetRect.vh = vh;
   livePlanetRect.stamp = performance.now();
+  // `?discprobe=1` publishes that same disc to the DOM, so an exposure measurement can be
+  // taken over the disc the camera actually framed. The alternative - finding the planet by
+  // thresholding a screenshot - selects the bright half of the body and then reports how
+  // bright it is, which is how "over-exposed" and "clipped" get confused. Off by default;
+  // the cost when off is one boolean per frame.
+  if (DISC_PROBE) {
+    document.documentElement.dataset.planetDisc = `${cx.toFixed(1)},${cy.toFixed(1)},${(r / 8).toFixed(1)}`;
+  }
 }
 const _orbOff = new THREE.Vector3();
 const _orbAxis = new THREE.Vector3();
@@ -530,6 +558,19 @@ function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch:
  * SOLAR_OVERVIEW frames the whole system. The camera teleport at the act swap is
  * hidden behind the white flash, so the two scene-graphs read as one world.
  */
+/**
+ * World text waits for the camera (Elad, 2026-09-27): the world's copy stays hidden while
+ * the camera flies and fades in once it lands. "Landed" = the damped position is within
+ * 6% of the shot's own depth (camera→look distance) of its target, so the test scales with
+ * every world's framing. Latched: the planet keeps orbiting and the pose keeps drifting,
+ * which must not hide the text again mid-read. The store clears it on a new focus.
+ */
+function markSettled(cam: THREE.Camera, departure: number) {
+  const s = useScene.getState();
+  if (s.worldSettled || departure > 0.02) return;
+  if (cam.position.distanceTo(_tgt) < 0.06 * _tgt.distanceTo(_look)) s.setWorldSettled(true);
+}
+
 export default function CameraRig() {
   const prevAct = useRef<string>('galaxy');
   const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
@@ -912,6 +953,7 @@ export default function CameraRig() {
           damp3(cam.position, _tgt, 0.5, dt);
           damp(cam, 'fov', ride.fov + (ovFov - ride.fov) * departure, 0.5, dt);
           cam.lookAt(_look.x, _look.y, _look.z);
+          markSettled(cam, departure);
         } else if (pp) {
           // --- ORBIT: the "Jupiter frame". The focused planet is the DOMINANT hero —
           // framed huge and pinned to the inline-END side (left in RTL / right in LTR),
@@ -1001,6 +1043,7 @@ export default function CameraRig() {
           damp3(cam.position, _tgt, 0.5, dt);
           damp(cam, 'fov', fov, 0.5, dt);
           cam.lookAt(_look.x, _look.y, _look.z);
+          markSettled(cam, departure);
           // Hand the DOM the limb it is actually looking at, from the pose we just landed
           // on — the projects ring reads it in its own rAF and rebuilds its arcs from it.
           publishLimb(cam, pp, r, state.size.width, state.size.height);
@@ -1100,7 +1143,7 @@ export default function CameraRig() {
     // as the departure meter scrubs back toward the overview, ease exposure back to 1.
     const fp = useScene.getState().focusedPlanet;
     const dep = fp ? clamp01(useScene.getState().departure) : 0;
-    const orbitExpo = fp ? ORBIT_APERTURE[fp] ?? NEUTRAL_APERTURE : NEUTRAL_APERTURE;
+    const orbitExpo = fp ? ORBIT_APERTURE_OVERRIDE ?? ORBIT_APERTURE[fp] ?? NEUTRAL_APERTURE : NEUTRAL_APERTURE;
     const expoTarget = act === 'solar' && fp ? orbitExpo + (NEUTRAL_APERTURE - orbitExpo) * dep : NEUTRAL_APERTURE;
     damp(state.gl, 'toneMappingExposure', expoTarget, 0.4, dt);
 

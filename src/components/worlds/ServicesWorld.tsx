@@ -21,9 +21,9 @@ export default function ServicesWorld({ locale }: { locale: Locale }) {
   return (
     <div className="text-start">
       <p className="world-body mb-5 text-[var(--color-star-white)]/70">{t('services.subtitle', locale)}</p>
-      <div className="space-y-3">
+      <div className="divide-y divide-white/10">
         {SERVICES.map((s) => (
-          <div key={s.key} className="rounded-2xl border border-white/8 p-4" style={{ background: 'rgba(238,241,255,0.02)' }}>
+          <div key={s.key} className="py-4 first:pt-0">
             <h2 className="world-title text-[var(--color-star-white)]">
               {t(`services.${s.key}.title`, locale)}
             </h2>

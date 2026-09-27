@@ -118,6 +118,8 @@ def judge(run):
         return {"tag": meta["tag"], "error": "fewer than 10 frames"}
 
     means = [r["mean"] for r in rows]
+    # Before the up-run filter below, which reads each frame's scroll position.
+    attached = attach_state(run, stamps, rows)
     c1_rows, c1_mean, c1_pct = rows, C1_MEAN, C1_BRIGHT_PCT
     c5_from = C5_FROM
     if meta.get("dir") == "up":
@@ -139,7 +141,6 @@ def judge(run):
         if max(means[lo:i] + means[i + 1:hi] or [0.0]) > C2_BRIGHT:
             holes.append({"frame": i, "t": round(stamps[i] - stamps[0], 3), "mean": round(m, 1)})
 
-    # C5 needs each frame's scroll position, which attach_state supplies below.
     peak = int(np.argmax(means))
     worst_jump = int(np.argmax(jumps)) + 1
 
@@ -149,7 +150,7 @@ def judge(run):
     phases = {}
     dark_span = None
     dark_sp = []
-    if attach_state(run, stamps, rows):
+    if attached:
         # The dead stretch, measured where the passage actually is: frames captured before the
         # ramp started are the page sitting still and are not part of it.
         dark_sp = [r["sp"] for r in rows if not r.get("pre") and r["mean"] < C5_DARK]
