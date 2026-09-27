@@ -5,18 +5,48 @@ import * as THREE from 'three';
 import { galaxyVertexShader, galaxyFragmentShader } from './shaders';
 import { makeRng, SEED } from '@/lib/rng';
 
+/** Same curve as GLSL smoothstep, on the CPU side. */
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
 interface GalaxyProps {
   count?: number;
 }
 
-// Design system: gold core → cosmic-blue mid → galaxy-indigo arm edges.
+// Design system: ivory core → cosmic-blue mid → galaxy-indigo arm edges.
+//
+// GALAXY-REST: four tightly-wound branches read as concentric rings, not arms (measured: the
+// four-fold angular component m4 = 0.18). Two broad arms with a quarter of the winding read as
+// arms, and the per-point angular spread below is what makes them broad and irregular instead
+// of four thin wires. The core is ivory rather than gold because it is the only warm thing left
+// in the frame and gold at this density smeared across 41% of the picture.
+// GALAXY-REST round 3: the owner, twice, "the galaxy is too small, spread it wider". The
+// projected disc was never the problem - a circle at radius 4 already spans 1550 px of a
+// 1440 px frame. What made it read as a small blob in the middle was the RIM FADE: it
+// started at 0.48 of the radius and was complete at 0.88, so half the disc's radius carried
+// no light and the visible galaxy ended around 0.68 of it. The fade starts later and runs to
+// the very rim now, the radius grows with it, and the radial law pushes points outward so
+// the larger disc is not paid for by thinning the arms.
 const PARAMS = {
-  radius: 6,
-  branches: 4,
-  spin: 1.1,
+  radius: 6.3,
+  rimStart: 0.62, // share of the radius where the cloud begins to dissolve
+  rimEnd: 1.0,
+  radialPower: 0.72, // < 1 pushes points outward; at 0.9 the outer arms went thin as the disc grew
+  branches: 2,
+  spin: 0.42,
   randomness: 0.22,
   randomnessPower: 2.8,
-  coreColor: '#FFC978', // --core-gold
+  armSpread: 0.42, // radians of angular scatter at the rim: broad arms, not wires
+  bulgeShare: 0.14, // points drawn into the compact core instead of the disc
+  bulgeRadius: 0.85,
+  laneOffset: 0.36, // where the dust lane runs across the arm, as a share of the arm's half-width
+  laneWidth: 0.22,
+  laneDepth: 0.9, // how much of a point's light the lane takes
+  discDim: 0.58, // arms read grey-blue instead of white, and stop merging into the core
+  bulgeGain: 2.1, // the core is the one thing allowed to saturate
+  coreColor: '#FFF4E2', // ivory
   midColor: '#4D8DFF', // --cosmic-blue
   edgeColor: '#6D5AE6', // --galaxy-indigo
 };
@@ -31,6 +61,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
     const colors = new Float32Array(count * 3);
     const scales = new Float32Array(count);
     const randomness = new Float32Array(count * 3);
+    const dims = new Float32Array(count);
 
     const core = new THREE.Color(PARAMS.coreColor);
     const mid = new THREE.Color(PARAMS.midColor);
@@ -40,16 +71,41 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      const radius = Math.pow(rnd(), 1.1) * PARAMS.radius;
+      const bulge = i % 100 < PARAMS.bulgeShare * 100;
+      // The disc keeps the old radial law; the bulge is a separate, much tighter population,
+      // which is what makes the core a point instead of the inner half of the disc.
+      const radius = bulge
+        ? Math.pow(rnd(), 2.6) * PARAMS.bulgeRadius
+        : 0.35 + Math.pow(rnd(), PARAMS.radialPower) * (PARAMS.radius - 0.35);
       const branchAngle = ((i % PARAMS.branches) / PARAMS.branches) * Math.PI * 2;
       const spinAngle = radius * PARAMS.spin;
+      // Angular scatter across the arm, widening outward, with a cube law so the arm has a
+      // dense spine and thin edges. Plus a slow radial wobble so no arm is a clean curve.
+      const t = radius / PARAMS.radius;
+      const u = Math.pow(rnd(), 3) * (rnd() < 0.5 ? 1 : -1);
+      const spread = bulge ? (rnd() - 0.5) * Math.PI * 2 : u * PARAMS.armSpread * (0.25 + t);
+      const wobble = bulge ? 0 : Math.sin(radius * 2.7 + branchAngle * 1.7) * 0.16;
+      const angle = branchAngle + spinAngle + spread + wobble;
+
+      // Dust lane: a band at a fixed angular offset inside each arm, taking most of the light
+      // from the points that fall in it. Additive blending cannot darken, so a lane can only be
+      // made by NOT drawing there.
+      // Position across the arm, in units of the arm's own half-width, so the lane keeps its
+      // proportions from the core to the rim instead of being a fixed angle.
+      const half = PARAMS.armSpread * (0.25 + t);
+      const across = spread / half;
+      // One lane per arm, on the trailing side only. A lane on BOTH sides of both arms is four
+      // dark features around the ring, which is exactly the four-fold signature G4 exists to
+      // remove: it took m4 from 0.087 back to 0.196. A real dust lane is one-sided anyway.
+      const inLane = !bulge && Math.abs(across - PARAMS.laneOffset) < PARAMS.laneWidth;
+      const laneKeep = inLane ? 1 - PARAMS.laneDepth : 1;
 
       const rand = () =>
         Math.pow(rnd(), PARAMS.randomnessPower) * (rnd() < 0.5 ? 1 : -1) * PARAMS.randomness * radius;
 
-      positions[i3] = Math.cos(branchAngle + spinAngle) * radius;
+      positions[i3] = Math.cos(angle) * radius;
       positions[i3 + 1] = 0;
-      positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * radius;
+      positions[i3 + 2] = Math.sin(angle) * radius;
 
       randomness[i3] = rand();
       // Real 3D thickness: a spherical bulge near the core, a thin disc in the arms.
@@ -65,6 +121,13 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       colors[i3 + 2] = tmp.b;
 
       scales[i] = 0.5 + rnd() * 0.8;
+      // Rim fade: the old cloud had a hard outer edge that the frame cut off, so the galaxy ran
+      // off three borders. The outer third of the radius fades out instead, and the fade now
+      // runs all the way to the rim rather than finishing at 0.88 - a cloud that still carries
+      // light at the frame's edge but is visibly FALLING there is what "dissolving into black"
+      // means; stopping early is how the galaxy ended up small and centred.
+      const rim = 1 - smoothstep(PARAMS.rimStart, PARAMS.rimEnd, t);
+      dims[i] = bulge ? PARAMS.bulgeGain : laneKeep * rim * PARAMS.discDim;
     }
 
     const geo = new THREE.BufferGeometry();
@@ -72,6 +135,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
     geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
     geo.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
     geo.setAttribute('aRandomness', new THREE.BufferAttribute(randomness, 3));
+    geo.setAttribute('aDim', new THREE.BufferAttribute(dims, 1));
     return geo;
   }, [count]);
 
