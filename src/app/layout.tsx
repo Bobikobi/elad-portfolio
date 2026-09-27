@@ -122,14 +122,14 @@ export const metadata: Metadata = {
     alternateLocale: ["he_IL", "ru_RU"],
     siteName: "Elad Saadon Portfolio",
     url: "https://www.eladsaadon.dev",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Elad Saadon - Full-Stack Developer and AI Systems Architect" }],
+    images: [{ url: "/og/og-en.jpg", width: 1200, height: 630, alt: "Elad Saadon - Full-Stack Developer and AI Systems Architect" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Elad Saadon | Full-Stack Developer and AI Systems Architect",
     description:
       "Elad Saadon is a full-stack developer and AI systems architect from Israel, specializing in Next.js, React, TypeScript, AI integration, and cloud automation.",
-    images: ["/og-image.png"],
+    images: ["/og/og-en.jpg"],
   },
   robots: {
     index: process.env.VERCEL_ENV === 'production',
@@ -192,7 +192,7 @@ const jsonLd = {
       url: "https://www.eladsaadon.dev",
       image: {
         "@type": "ImageObject",
-        url: "https://www.eladsaadon.dev/og-image.png",
+        url: "https://www.eladsaadon.dev/og/og-en.jpg",
         width: 1200,
         height: 630,
         caption: "Elad Saadon - Full-Stack Developer and AI Systems Architect",

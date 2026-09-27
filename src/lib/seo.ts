@@ -42,11 +42,11 @@ export const defaultMetadata: Metadata = {
     locale: siteConfig.locale,
     url: siteConfig.url,
     siteName: siteConfig.brand,
-    images: [{ url: '/og-image.png', width: 1200, height: 630 }],
+    images: [{ url: '/og/og-en.jpg', width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
-    images: ['/og-image.png'],
+    images: ['/og/og-en.jpg'],
   },
 };
 
@@ -54,9 +54,9 @@ type OgLocale = 'he' | 'en' | 'ru';
 const OG_LOCALE: Record<OgLocale, string> = { he: 'he_IL', en: 'en_US', ru: 'ru_RU' };
 /** Link-preview card per language (WhatsApp, Telegram, X...). */
 export const OG_IMAGE: Record<OgLocale, string> = {
-  he: '/og-image.png',
-  en: '/og-image.png',
-  ru: '/og-image.png',
+  he: '/og/og-he.jpg',
+  en: '/og/og-en.jpg',
+  ru: '/og/og-ru.jpg',
 };
 
 /**
