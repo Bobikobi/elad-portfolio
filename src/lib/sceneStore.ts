@@ -23,6 +23,8 @@ interface SceneState {
   /** Departure gesture progress 0..1 while in ORBIT — scrubs the camera back toward
    *  the overview; 1.0 commits the return flight. Owned by the world's ProjectsStage. */
   departure: number;
+  /** Camera has reached the focused world's pose; the world's text waits for it. */
+  worldSettled: boolean;
   /** Drag-to-rotate offset (T6) — a yaw/pitch the user drags, applied by CameraRig ON
    *  TOP of the WELCOME_IDLE / SOLAR_OVERVIEW pose (never OrbitControls; the rig stays
    *  the sole camera owner). Persists (no auto-recenter); pitch is clamped by the writer. */
@@ -64,6 +66,7 @@ interface SceneState {
   setCoverage: (v: number) => void;
   setFocusedPlanet: (id: string | null) => void;
   setDeparture: (v: number) => void;
+  setWorldSettled: (v: boolean) => void;
   setOrbit: (yaw: number, pitch: number) => void;
   setDragMoved: (v: boolean) => void;
   setTourMode: (v: boolean) => void;
@@ -83,6 +86,7 @@ export const useScene = create<SceneState>((set) => ({
   coverage: 0,
   focusedPlanet: null,
   departure: 0,
+  worldSettled: false,
   orbitYaw: 0,
   orbitPitch: 0,
   dragMoved: false,
@@ -102,8 +106,11 @@ export const useScene = create<SceneState>((set) => ({
   setAct: (act) => set({ act }),
   setScrollProgress: (scrollProgress) => set({ scrollProgress }),
   setCoverage: (coverage) => set({ coverage }),
-  setFocusedPlanet: (focusedPlanet) => set({ focusedPlanet }),
+  // A new focus means a new flight: the text waits again until the camera lands.
+  setFocusedPlanet: (focusedPlanet) =>
+    set((s) => (s.focusedPlanet === focusedPlanet ? {} : { focusedPlanet, worldSettled: false })),
   setDeparture: (departure) => set({ departure }),
+  setWorldSettled: (worldSettled) => set({ worldSettled }),
   setOrbit: (orbitYaw, orbitPitch) => set({ orbitYaw, orbitPitch }),
   setDragMoved: (dragMoved) => set({ dragMoved }),
   setTourMode: (tourMode) => set({ tourMode }),
