@@ -6,7 +6,9 @@
 Five numbers per frame, all from the frozen at-rest galaxy capture:
 
   G1 behind the name   - STRUCTURE inside the h1 rect grown by 12 px: each pixel against its own
-                         row's median, so the sky's smooth vertical gradient cancels and only things
+                         row's baseline (the lower of the box's median and the sky 80 px either side,
+                         so an arm covering the box cannot become its own baseline), so the sky's
+                         smooth vertical gradient cancels and only things
                          that read as objects - stars, bokeh, an arm - are counted. Reported as the
                          share of the box more than 12 levels over its row, and the p99 over the row.
                          Neither an absolute bar nor one over the sky floor works here: the gradient
@@ -163,6 +165,9 @@ def projected_circle(cam: dict, w: int, h: int, radius: float):
 # moves with the thing it measures reports nothing.
 RULER_R = 4.0
 
+# Width of the sky strips either side of the name box that G1's row baseline is also taken from.
+FLANK = 80
+
 
 def band_ratio(outer: np.ndarray, inner: np.ndarray) -> float:
     """Outer band's mean over the mean of the band just inside it. Below 1 = light is falling."""
@@ -181,7 +186,15 @@ def measure(run: str, tag: str) -> dict:
     x0, y0 = max(0, int(n['x']) - 12), max(0, int(n['y']) - 12)
     x1, y1 = min(w, int(n['x'] + n['w']) + 12), min(h, int(n['y'] + n['h']) + 12)
     box = lum[y0:y1, x0:x1]
-    box_rel = box - np.median(box, axis=1, keepdims=True)
+    # Each row's baseline is the LOWER of the box's own median and the sky beside the box on the
+    # same rows. The box's median alone lets an arm covering half the box become its own baseline
+    # and read as no structure; the flanks alone would charge the box for an arm beside it. The
+    # lower of the two can only make G1 stricter.
+    flank = np.concatenate([lum[y0:y1, max(0, x0 - FLANK):x0], lum[y0:y1, x1:x1 + FLANK]], axis=1)
+    base = np.median(box, axis=1, keepdims=True)
+    if flank.shape[1]:
+        base = np.minimum(base, np.median(flank, axis=1, keepdims=True))
+    box_rel = box - base
 
     tot = float(light.sum())
     lower = float(light[h // 2:].sum()) / tot if tot else 0.0

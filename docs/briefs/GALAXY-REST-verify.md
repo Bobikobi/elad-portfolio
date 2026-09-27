@@ -32,6 +32,8 @@ Worst of six phases (frames 1600 / 2600 / 3600 / 4600 / 5600 / 6600 - 27 to 110 
 | G5 outer band, right | <= 4.0 | 11.07 | **3.56** | PASS |
 | G5 outer band, bottom | <= 6.0 | 20.04 | **5.40** | PASS |
 
+G1 instrument corrected 2026-09-27 after review on PR #49: a row's baseline was the box's own median, so an arm covering half the box would read as its own baseline. It is now the lower of that and the sky 80 px either side of the box. Re-measured on the same captures, worst of six: candidate 0.57% / 7.1 (unchanged), master 2.905% / 47.3 (was 2.844% / 46.2). Verdict unchanged.
+
 Reported, not criteria: m4 0.0223 -> 0.448 (see the brief - on its own this one rewards a galaxy
 with no structure, and master's 0.022 is what featureless rings score); sky floor 31.5 -> 33.3;
 frame mean 77.6 -> 54.0; light below the midline 81.0% -> 83.2%; lane depth 0.669 -> 0.958;
