@@ -2,6 +2,7 @@
 // localeForPath from here, and pointing back at i18n would be a cycle (harmless while
 // the import is type-only, but only one edit away from not being).
 import type { Locale } from './translations';
+import { socialMeta } from './seo';
 
 /**
  * The cosmic sections — each is a real crawlable route AND a planet/target the
@@ -180,11 +181,13 @@ export const SECTION_META: Record<SectionId, Record<Locale, { title: string; des
 };
 
 const BASE = 'https://www.eladsaadon.dev';
+const OG_NAME: Record<Locale, string> = { he: 'אלעד סעדון', en: 'Elad Saadon', ru: 'Элад Саадон' };
 
 /** Full metadata (title, description, canonical + hreflang alternates) for a section. */
 export function sectionMetadata(id: SectionId, locale: Locale) {
   const m = SECTION_META[id][locale];
   return {
+    ...socialMeta(locale, `${m.title} | ${OG_NAME[locale]}`, m.description, `${BASE}${sectionPath(id, locale)}`),
     title: m.title,
     description: m.description,
     alternates: {

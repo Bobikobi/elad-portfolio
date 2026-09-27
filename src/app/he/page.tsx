@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { socialMeta } from '@/lib/seo';
 import Home from '../page';
 
 // F3 — Hebrew moved off the un-prefixed root to /he when English became the default.
@@ -17,14 +18,7 @@ export const metadata: Metadata = {
       'x-default': 'https://www.eladsaadon.dev',
     },
   },
-  openGraph: {
-    title: 'אלעד סעדון | מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית',
-    description:
-      'אלעד סעדון הוא מפתח פול-סטאק מישראל המתמחה בפיתוח מערכות, אינטגרציית בינה מלאכותית, אוטומציה בענן ופתרונות טכנולוגיים למגזר הציבורי.',
-    locale: 'he_IL',
-    alternateLocale: ['en_US', 'ru_RU'],
-    url: 'https://www.eladsaadon.dev/he',
-  },
+  ...socialMeta('he', 'אלעד סעדון | מפתח פול-סטאק וארכיטקט מערכות בינה מלאכותית', 'אלעד סעדון הוא מפתח פול-סטאק מישראל המתמחה בפיתוח מערכות, אינטגרציית בינה מלאכותית, אוטומציה בענן ופתרונות טכנולוגיים למגזר הציבורי.', 'https://www.eladsaadon.dev/he'),
 };
 
 export default Home;
