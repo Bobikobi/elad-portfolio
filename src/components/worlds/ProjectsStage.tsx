@@ -1,11 +1,12 @@
 'use client';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useScene } from '@/lib/sceneStore';
+import { useMotionDisabled } from '@/hooks/useMotionDisabled';
 import type { Locale } from '@/lib/translations';
 import { translations as tr } from '@/lib/translations';
 import {
   ringMetrics,
   sectorPath,
-  innerArcPath,
   pointAt,
   windowArc,
   scrollSpan,
@@ -28,6 +29,18 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Opacity at which a preview stops being a ghost and starts being a picture. The counter
  *  and the NEW-2 acceptance both read this, so they cannot disagree about what counts. */
 const READABLE = 0.5;
+/** The landing entry: each window rises out along its own radius and fades in, one after
+ *  another down the fan, once the camera has landed. */
+const ENTRY_MS = 560;
+const ENTRY_STAGGER_MS = 110;
+const ENTRY_RISE = 60;
+/** Focus: the window at the fan's middle is the one in focus; a neighbour one pitch away is
+ *  this much smaller, and dimmed by this much of black laid over its picture. */
+const FOCUS_SHRINK = 0.14;
+const FOCUS_DIM = 0.45;
+/** After the list stops moving, it settles so a window sits exactly at the fan's middle. */
+const SNAP_IDLE_MS = 160;
+const smooth = (x: number) => x * x * (3 - 2 * x);
 
 /**
  * The Projects "Jupiter frame". Each project is its own floating window and every window
@@ -69,6 +82,24 @@ export default function ProjectsStage({
   // Escape / scroll-away / back — the shared world exit (R5.1, R5.10). Scrolling inside
   // the ring stays native content scroll; anywhere else builds the departure meter.
   const { meter, returnHome } = useWorldExit(locale, listRef);
+  // The windows wait for the camera to land, as the other worlds' text does (PlanetWorld):
+  // reduced motion shows them at once, and a 3s cap covers a scene that never lands. Read
+  // by the frame loop through a ref so the arrival does not tear the ring layer down.
+  const settled = useScene((s) => s.worldSettled);
+  const motionOff = useMotionDisabled();
+  const [capped, setCapped] = useState(false);
+  useLayoutEffect(() => useScene.getState().setWorldSettled(false), []);
+  useEffect(() => {
+    const id = window.setTimeout(() => setCapped(true), 3000);
+    return () => window.clearTimeout(id);
+  }, []);
+  const arrived = settled || motionOff || capped;
+  // The loop reads the landing flag off the STORE, not off this render: coming from another
+  // world, the first render still carries that world's `settled` (it is cleared in the
+  // layout effect above), and the ring's first frame runs in the same commit - measured, the
+  // windows then showed from the first frame of a 2.5s flight.
+  const gateRef = useRef({ motionOff, capped });
+  useEffect(() => { gateRef.current = { motionOff, capped }; }, [motionOff, capped]);
 
   useEffect(() => {
     const mq = window.matchMedia('(orientation: portrait), (max-width: 767px)');
@@ -114,8 +145,7 @@ export default function ProjectsStage({
     const cards = Array.from(deck.querySelectorAll<HTMLElement>('[data-window]'));
     const n = cards.length;
 
-    // One <path> for the window, one for the gold inner-arc accent, one gradient each.
-    // Written by the layout pass, read by the focus handlers below.
+    // One <path> per window. Written by the layout pass, read by the focus handlers below.
     const pitchRef = { current: 1 };
     const hovered = { current: -1 };
     // A coarse pointer has no hover, so a tap has to do two jobs: say which window this is,
@@ -130,6 +160,8 @@ export default function ProjectsStage({
     /** The preview image's box in CANONICAL space, as the last rebuild placed it. The
      *  per-frame upright correction rotates about its centre. */
     const photoBox = { x: 0, y: 0, w: 0, h: 0 };
+    /** The sector's outline in canonical space, flat [x, y, x, y, ...]. */
+    const sectorPts: number[] = [];
     /** How far the panel has travelled along the disc from its resting place, in px. */
     const slide = { current: 0 };
     const centreOffsetRef = { current: 0 };
@@ -145,32 +177,18 @@ export default function ProjectsStage({
     const space = document.createElementNS(SVG_NS, 'g');
     svg.appendChild(space);
     const bodies: SVGPathElement[] = [];
-    const accents: SVGPathElement[] = [];
-    const grads: SVGLinearGradientElement[] = [];
     const photos: Array<SVGImageElement | null> = [];
     const hits: SVGGElement[] = [];
     const clips: Array<SVGPathElement | null> = [];
     const marks: Array<SVGTextElement | null> = [];
     const lights: Array<(on: boolean) => void> = [];
+    const aspects: number[] = [];
     /** Give up the armed window: it goes dark and the panel falls back to the centred one. */
     const disarm = () => {
       if (tapped.current >= 0) lights[tapped.current]?.(false);
       tapped.current = -1;
     };
     cards.forEach((card, i) => {
-      const grad = document.createElementNS(SVG_NS, 'linearGradient');
-      grad.setAttribute('id', `ring-accent-${i}`);
-      grad.setAttribute('gradientUnits', 'userSpaceOnUse');
-      for (const [offset, opacity] of [['0%', '0'], ['50%', '0.75'], ['100%', '0']] as const) {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', 'rgb(255,201,120)');
-        stop.setAttribute('stop-opacity', opacity);
-        grad.appendChild(stop);
-      }
-      defs.appendChild(grad);
-      grads.push(grad);
-
       // The preview, painted INTO the sector and clipped to it (B8c). Putting it in an
       // element inside the content box drew a second rounded rectangle within the ring
       // segment - a window inside a window. Clipped to the shape there is only ever one
@@ -193,6 +211,17 @@ export default function ProjectsStage({
       }
       photos.push(photo);
       clips.push(clipPath);
+      // The picture is fitted to its full WIDTH, so its aspect has to be known. Every
+      // preview is a desktop screenshot, so 16:10 is the stand-in until it has loaded.
+      aspects.push(1.6);
+      if (src) {
+        const probeImg = new Image();
+        probeImg.onload = () => {
+          if (probeImg.naturalHeight > 0) aspects[i] = probeImg.naturalWidth / probeImg.naturalHeight;
+          sig = '';
+        };
+        probeImg.src = src;
+      }
 
       // No screenshot to show: four of the twelve are tools and private work with no
       // site to photograph. A drawn monogram beats an empty pane, and it needs no asset.
@@ -234,29 +263,17 @@ export default function ProjectsStage({
       // The plane matrix scales the two axes differently, so a stroke would come out
       // thicker one way than the other. This keeps the hairline a hairline.
       body.setAttribute('vector-effect', 'non-scaling-stroke');
-      // B8d - the window IS the preview now, so the glass over it is a tint rather than a
-      // surface: at the panel weight (0.78) under a 0.32 photo the screenshot was a dark
-      // smudge. Set inline because this element is BUILT here, in script, and never exists
-      // in the markup for a stylesheet rule to reach.
-      if (src) body.style.fill = 'rgba(5, 7, 20, 0.30)';
+      // No frame: the window IS its picture. The body is only the focus dimming laid over
+      // the photo (its fill is written per frame) and, on the window in focus, a gold
+      // hairline. Monogram windows keep a dark glass so the letter has something to sit on.
       hitG.appendChild(body);
       bodies.push(body);
-
-      const accent = document.createElementNS(SVG_NS, 'path');
-      accent.setAttribute('class', 'ring-accent');
-      accent.setAttribute('fill', 'none');
-      accent.setAttribute('stroke', `url(#ring-accent-${i})`);
-      accent.setAttribute('stroke-width', '1.5');
-      accent.setAttribute('vector-effect', 'non-scaling-stroke');
-      hitG.appendChild(accent);
-      accents.push(accent);
       if (mark) hitG.appendChild(mark);
 
       // Hover and focus light the window's own path — the shape is not an ancestor of the
       // content, so the usual CSS hover has nothing to hang off.
       const hot = (on: boolean) => {
         body.classList.toggle('is-hot', on);
-        accent.classList.toggle('is-hot', on);
         photo?.classList.toggle('is-hot', on);
       };
       lights.push(hot);
@@ -305,7 +322,7 @@ export default function ProjectsStage({
       for (const el of document.elementsFromPoint(x, y)) {
         const own = hits.indexOf(el as SVGGElement);
         if (own >= 0) return own;
-        // The body, the accent and the monogram are children of the group; the photo sits
+        // The body and the monogram are children of the group; the photo sits
         // one level deeper, inside the wrapper that carries its clip.
         const parent = hits.indexOf(el.parentElement as unknown as SVGGElement);
         if (parent >= 0) return parent;
@@ -360,6 +377,7 @@ export default function ProjectsStage({
     let downY = 0;
     const onListDown = (e: PointerEvent) => {
       coarse = e.pointerType === 'touch' || e.pointerType === 'pen';
+      if (coarse) touching = true;
       downX = e.clientX;
       downY = e.clientY;
     };
@@ -419,6 +437,15 @@ export default function ProjectsStage({
     };
     document.addEventListener('pointerdown', onDocDown, { passive: true });
     unbind.push(() => document.removeEventListener('pointerdown', onDocDown));
+    // The finger is off: the snap may run once the list has come to rest. A touch scroll
+    // cancels the pointer, so both ends count.
+    const onUp = () => { touching = false; };
+    document.addEventListener('pointerup', onUp, { passive: true });
+    document.addEventListener('pointercancel', onUp, { passive: true });
+    unbind.push(() => {
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    });
 
     // The ring's own scrollbar (B8c): a rail concentric with the windows, outside them, so
     // "there are more of these" is said in the same geometry as the thing it describes.
@@ -462,24 +489,24 @@ export default function ProjectsStage({
       if (next === shapeSig) return;
       shapeSig = next;
       const d = sectorPath(m, m.r0, m.r1, -m.dHalf, m.dHalf);
-      const acc = innerArcPath(m, m.r0, -m.dHalf, m.dHalf);
-      // The photo's box: the sector's bounding box at angle 0, in canonical space.
+      // The photo's box: the sector's bounding box at angle 0, in canonical space. The
+      // outline samples are kept too: the photo is fitted to the sector as it lies in the
+      // PICTURE's own upright frame, which is per window and per frame.
       let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
-      for (let k = 0; k <= 8; k++) {
-        const a2 = -m.dHalf + (2 * m.dHalf * k) / 8;
+      sectorPts.length = 0;
+      for (let k = 0; k <= 16; k++) {
+        const a2 = -m.dHalf + (2 * m.dHalf * k) / 16;
         for (const r of [m.r0, m.r1]) {
           const [px, py] = pointAt(m, r, a2);
+          sectorPts.push(px, py);
           if (px < bx0) bx0 = px;
           if (py < by0) by0 = py;
           if (px > bx1) bx1 = px;
           if (py > by1) by1 = py;
         }
       }
-      const [gx0, gy0] = pointAt(m, m.r0, -m.dHalf);
-      const [gx1, gy1] = pointAt(m, m.r0, m.dHalf);
       for (let i = 0; i < n; i++) {
         bodies[i].setAttribute('d', d);
-        accents[i].setAttribute('d', acc);
         clips[i]?.setAttribute('d', d);
         const photo = photos[i];
         if (photo) {
@@ -505,11 +532,6 @@ export default function ProjectsStage({
           // correction, and what is missing from it is per-window and per-frame. It now
           // shares the photo's solved upright correction in the frame loop below.
         }
-        const g = grads[i];
-        g.setAttribute('x1', gx0.toFixed(1));
-        g.setAttribute('y1', gy0.toFixed(1));
-        g.setAttribute('x2', gx1.toFixed(1));
-        g.setAttribute('y2', gy1.toFixed(1));
       }
     };
 
@@ -527,6 +549,16 @@ export default function ProjectsStage({
     const SLIDE_TAU = 0.16;
     let shown = 0;
     let lastT = 0;
+    // Snapping: when the list last moved, where the last snap was sent, and whether a finger
+    // is still on the glass (a snap under a finger fights the finger).
+    let lastMoveAt = 0;
+    let snapTo = NaN;
+    let snapAt = 0;
+    let touching = false;
+    // The landing entry: when the camera landed (-1 until then), and which window was first
+    // in the fan at that moment - the order runs down the fan from it.
+    let arrivedAt = -1;
+    let firstVis = 0;
     let lastRaw = 0;
     let lastShown = 0;
     const update = (force = false) => {
@@ -547,7 +579,33 @@ export default function ProjectsStage({
       // ago. The 4px floor is there so the jitter of the tap itself does not disarm it.
       const scrolled = Math.abs(raw - lastRaw) > 4;
       if (tapped.current >= 0 && scrolled) disarm();
+      if (Math.abs(raw - lastRaw) > 0.5) lastMoveAt = now;
       lastRaw = raw;
+
+      // The window in focus sits at the fan's MIDDLE, which is not angle 0: the fan is
+      // clamped by what is on the screen, so it runs further one way than the other.
+      const mc = (arcDown(m) - arcUp(m)) / 2;
+      // Scroll position that puts window i at the middle is i * pitch - co.
+      const co = arcUp(m) - Math.min(m.pitch / 2, arcUp(m)) + mc;
+      centreOffsetRef.current = co;
+      // Once the list has been still for a moment, settle it so a window sits exactly in
+      // focus. Only after landing, never under a finger, and never re-sent while the last
+      // one is still travelling.
+      const landed =
+        useScene.getState().worldSettled || gateRef.current.motionOff || gateRef.current.capped;
+      if (landed && !touching && span0 > 1 && now - lastMoveAt > SNAP_IDLE_MS) {
+        const j = Math.round((raw + co) / m.pitch);
+        const want = clamp(j * m.pitch - co, 0, span0);
+        if (Math.abs(raw - want) > 1 && (want !== snapTo || now - snapAt > 800)) {
+          snapTo = want;
+          snapAt = now;
+          const rtlBox = getComputedStyle(list).direction === 'rtl';
+          const behavior = reduce ? 'auto' : 'smooth';
+          list.scrollTo(
+            m.portrait ? { left: (rtlBox ? -1 : 1) * want, behavior } : { top: want, behavior }
+          );
+        }
+      }
       if (force || reduce) shown = target;
       else {
         shown += (target - shown) * (1 - Math.exp(-dt / SCROLL_TAU));
@@ -573,9 +631,24 @@ export default function ProjectsStage({
       let centred = -1;
       let bestA = Infinity;
       for (let i = 0; i < n; i++) {
-        const a = windowArc(i, n, shown, m);
+        const a = windowArc(i, n, shown, m) - mc;
         if (Math.abs(a) < Math.abs(bestA)) { bestA = a; centred = i; }
       }
+      // The camera has landed: the windows come in one after another down the fan.
+      if (landed && arrivedAt < 0) {
+        arrivedAt = now;
+        firstVis = 0;
+        for (let i = 0; i < n; i++) {
+          if (fanOpacity(windowArc(i, n, shown, m), m) > 0.004) { firstVis = i; break; }
+        }
+      }
+      const entryOf = (i: number) => {
+        if (arrivedAt < 0) return 0;
+        if (reduce) return 1;
+        const delay = clamp(i - firstVis, 0, 4) * ENTRY_STAGGER_MS;
+        return smooth(clamp((now - arrivedAt - delay) / ENTRY_MS, 0, 1));
+      };
+      const entering = arrivedAt < 0 ? 'w' : now - arrivedAt < 4 * ENTRY_STAGGER_MS + ENTRY_MS + 50 ? now.toFixed(0) : 'd';
       // Pointed at, or nothing. Hover and focus are the same thing here (`onFocus` calls
       // `setHover`'s twin), and an armed tap is touch's stand-in for hover. There is no
       // fourth branch: with no pointer, no focus and no tap, the panel is empty.
@@ -614,13 +687,12 @@ export default function ProjectsStage({
       // path rebuilds a frame while the planet is settled and nobody is scrolling.
       // `active` and the panel's travel are in it because neither moves the limb, and
       // without them a hover would wait for the next drift to be drawn.
-      const next = `${vw}|${vh}|${m.cx.toFixed(1)}|${m.cy.toFixed(1)}|${m.R.toFixed(1)}|${shown.toFixed(1)}|${active}|${slide.current.toFixed(1)}`;
+      const next = `${vw}|${vh}|${m.cx.toFixed(1)}|${m.cy.toFixed(1)}|${m.R.toFixed(1)}|${shown.toFixed(1)}|${active}|${slide.current.toFixed(1)}|${entering}`;
       if (!force && next === sig) return;
       sig = next;
       const t0 = probe ? performance.now() : 0;
       pitchRef.current = m.pitch;
       axisRef.current = m.portrait ? 'x' : 'y';
-      centreOffsetRef.current = arcUp(m) - Math.min(m.pitch / 2, arcUp(m));
 
 
       const box = fanBox(m);
@@ -683,10 +755,11 @@ export default function ProjectsStage({
       for (let i = 0; i < n; i++) {
         const a = windowArc(i, n, scroll, m);
         const th = m.th0 + (m.sweep * a) / m.rMid;
-        const opacity = i === centred ? Math.max(fanOpacity(a, m), 1) : fanOpacity(a, m);
+        const ent = entryOf(i);
+        const opacity = (i === centred ? Math.max(fanOpacity(a, m), 1) : fanOpacity(a, m)) * ent;
         // What the eye gets is the window's opacity times its preview's (set below), so
         // that product is what is counted.
-        const photoOpacity = 0.94 * Math.min(1, opacity + 0.15);
+        const photoOpacity = Math.min(1, opacity + 0.15);
         if (opacity * photoOpacity >= READABLE) readable++;
         const g = hits[i];
         if (opacity <= 0.004) {
@@ -700,10 +773,27 @@ export default function ProjectsStage({
         // scale is about the ring's centre, so it travels along its own radius.
         const rise = i === centred ? 1 : fanRise(a, m);
         const k = 0.93 + 0.07 * rise;
+        // Focus: 1 at the fan's middle, 0 a pitch away. The neighbours shrink about their
+        // OWN centre (a scale about the ring's centre would also pull them toward the
+        // planet), and the landing entry carries each window out along its radius.
+        const e = 1 - clamp(Math.abs(a - mc) / m.pitch, 0, 1);
+        const sFocus = 1 - FOCUS_SHRINK * (1 - e);
+        const cR = m.rMid * k - (1 - ent) * ENTRY_RISE;
+        const sTot = k * sFocus * (0.92 + 0.08 * ent);
         g.setAttribute(
           'transform',
-          `rotate(${((th * 180) / Math.PI).toFixed(3)}) scale(${k.toFixed(4)})`
+          `rotate(${((th * 180) / Math.PI).toFixed(3)}) translate(${cR.toFixed(2)} 0) ` +
+            `scale(${sTot.toFixed(4)}) translate(${(-m.rMid).toFixed(2)} 0)`
         );
+        // No frame. The body is the focus dimming over the picture, and a gold hairline on
+        // the one window in focus - pointed at, or else the one at the fan's middle.
+        const hotNow = i === hovered.current || i === tapped.current;
+        const dim = FOCUS_DIM * (1 - e) * (hotNow ? 0.2 : 1);
+        const body = bodies[i];
+        body.style.fill = photos[i]
+          ? `rgba(5,7,20,${dim.toFixed(3)})`
+          : `rgba(12,16,38,${(0.72 + 0.4 * dim).toFixed(3)})`;
+        body.style.stroke = i === (active >= 0 ? active : centred) ? 'rgba(255,201,120,0.6)' : 'none';
 
         // KEEP THE PREVIEW THE RIGHT WAY UP.
         //
@@ -764,22 +854,45 @@ export default function ProjectsStage({
             `translate(${(-ux).toFixed(1)} ${(-uy).toFixed(1)})`;
           const cxImg = photoBox.x + photoBox.w / 2;
           const cyImg = photoBox.y + photoBox.h / 2;
-          // A rectangle rotated inside its own bounds does not cover them: measured with a
-          // solid fill in place of the previews, the sector came out with bare wedges at
-          // both corners. The image is therefore given the box that, rotated by phi, still
-          // contains the sector's box - which is the bounding box of the sector's box turned
-          // by -phi:
-          //     w = W*|cos| + H*|sin|      h = W*|sin| + H*|cos|
-          // Exactly that, and no more. A square on the diagonal also covers every angle, and
-          // was the first attempt, but it throws away most of the screenshot: at 390x844 it
-          // cropped a 1280x720 page down to one bar of a test marker.
+          // A rectangle rotated inside its own bounds does not cover them, so the image is
+          // sized off the sector's outline turned by -phi. The earlier version turned the
+          // sector's BOX instead (w = W|cos| + H|sin|), which covers too, but is larger than
+          // the sector in every tilted case: the picture came out zoomed and both sides of
+          // every site were cut off.
+          //
+          // That box then decides how the picture is FITTED, and it is fitted to its full
+          // width: a screenshot shows a site only when both of its sides are in it. The
+          // sector is taken into the picture's own upright frame (the inverse of the
+          // correction below), the picture spans that width, and its top edge sits at the
+          // top - the hero is what a visitor should see, and the bottom is what gives.
+          // Only where the sector is taller than the picture does it scale up and give a
+          // little at the sides instead.
           if (photoEl) {
-            const ac = Math.abs(Math.cos(phi));
-            const as = Math.abs(Math.sin(phi));
-            const iw = photoBox.w * ac + photoBox.h * as;
-            const ih = photoBox.w * as + photoBox.h * ac;
-            photoEl.setAttribute('x', (cxImg - iw / 2).toFixed(1));
-            photoEl.setAttribute('y', (cyImg - ih / 2).toFixed(1));
+            const cph = Math.cos(phi);
+            const sph = Math.sin(phi);
+            const fl = det < 0 ? -1 : 1;
+            let ux0 = Infinity, uy0 = Infinity, ux1 = -Infinity, uy1 = -Infinity;
+            for (let q = 0; q < sectorPts.length; q += 2) {
+              const dx = sectorPts[q] - cxImg;
+              const dy = sectorPts[q + 1] - cyImg;
+              const ux = cph * dx + sph * dy;
+              const uy = (-sph * dx + cph * dy) * fl;
+              if (ux < ux0) ux0 = ux;
+              if (ux > ux1) ux1 = ux;
+              if (uy < uy0) uy0 = uy;
+              if (uy > uy1) uy1 = uy;
+            }
+            const asp = aspects[i] || 1.6;
+            let iw = ux1 - ux0;
+            let ih = iw / asp;
+            let ix = cxImg + ux0;
+            if (ih < uy1 - uy0) {
+              ih = uy1 - uy0;
+              iw = ih * asp;
+              ix = cxImg + (ux0 + ux1) / 2 - iw / 2;
+            }
+            photoEl.setAttribute('x', ix.toFixed(1));
+            photoEl.setAttribute('y', (cyImg + uy0).toFixed(1));
             photoEl.setAttribute('width', iw.toFixed(1));
             photoEl.setAttribute('height', ih.toFixed(1));
             photoEl.setAttribute('transform', uprightAbout(cxImg, cyImg));
@@ -808,6 +921,10 @@ export default function ProjectsStage({
       // is the fraction of the ring currently on screen - the same information a scrollbar
       // gives, said as an arc.
       const rTrack = m.r1 + 16;
+      // The rail arrives with the first window.
+      const railIn = entryOf(firstVis).toFixed(3);
+      railArc.style.opacity = railIn;
+      thumbArc.style.opacity = railIn;
       if (span > 1) {
         const visible = arcUp(m) + arcDown(m);
         const frac = clamp(visible / (visible + span), 0.08, 1);
@@ -941,11 +1058,14 @@ export default function ProjectsStage({
       <header
         ref={headerRef}
         className="pointer-events-none absolute flex items-start justify-between gap-3"
-        style={
-          portrait
+        // The title waits for the landing too, and comes in with the first window.
+        style={{
+          ...(portrait
             ? { insetInlineStart: 0, insetInlineEnd: 0, top: '4.75rem', padding: '0 1rem' }
-            : { insetInlineStart: 0, top: '4.75rem', width: 'var(--ring-header-w, 18rem)', padding: '0 1.5rem' }
-        }
+            : { insetInlineStart: 0, top: '4.75rem', width: 'var(--ring-header-w, 18rem)', padding: '0 1.5rem' }),
+          opacity: arrived ? 1 : 0,
+          transition: arrived && !motionOff ? 'opacity 0.45s ease-out' : 'none',
+        }}
       >
         <div className="pointer-events-auto">
           <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl">{title}</h1>
