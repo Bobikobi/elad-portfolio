@@ -561,14 +561,14 @@ function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch:
 /**
  * World text waits for the camera (Elad, 2026-09-27): the world's copy stays hidden while
  * the camera flies and fades in once it lands. "Landed" = the damped position is within
- * 2% of the shot's own depth (camera→look distance) of its target, so the test scales with
+ * 6% of the shot's own depth (camera→look distance) of its target, so the test scales with
  * every world's framing. Latched: the planet keeps orbiting and the pose keeps drifting,
  * which must not hide the text again mid-read. The store clears it on a new focus.
  */
 function markSettled(cam: THREE.Camera, departure: number) {
   const s = useScene.getState();
   if (s.worldSettled || departure > 0.02) return;
-  if (cam.position.distanceTo(_tgt) < 0.02 * _tgt.distanceTo(_look)) s.setWorldSettled(true);
+  if (cam.position.distanceTo(_tgt) < 0.06 * _tgt.distanceTo(_look)) s.setWorldSettled(true);
 }
 
 export default function CameraRig() {
