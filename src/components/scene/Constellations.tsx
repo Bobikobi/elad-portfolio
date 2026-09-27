@@ -184,10 +184,11 @@ export default function Constellations() {
     if (vis.current > 0.5) {
       if (shared.tap) {
         const hit = nearest(shared.tap.x, shared.tap.y, HIT_TOUCH);
-        if (hit >= 0) { hot.current = hit; tapUntil.current = now + TAP_HOLD; }
+        // A tap that landed on a planet belongs to the planet.
+        if (hit >= 0 && !s.hoveredBody) { hot.current = hit; tapUntil.current = now + TAP_HOLD; }
         shared.tap = null;
       }
-      if (now < tapUntil.current) next = hot.current;
+      if (now < tapUntil.current && !s.hoveredBody) next = hot.current;
       else if (!shared.touch && !shared.down && !s.hoveredBody) next = nearest(shared.x, shared.y, HIT_MOUSE);
     } else shared.tap = null;
     hot.current = next;
@@ -209,10 +210,16 @@ export default function Constellations() {
     const el = shared.label;
     if (el) {
       if (next >= 0) {
-        // Centred over the figure, above its highest star on screen.
-        const pts = scr[next];
-        const x = pts.reduce((a, v) => a + v.x, 0) / pts.length;
-        const y = pts.reduce((a, v) => Math.min(a, v.y), Infinity);
+        // Centred over the figure's on-screen stars, above the highest one, kept inside the
+        // viewport (below the header) so a half-framed figure still shows its name.
+        let sx = 0, n = 0, y = Infinity;
+        for (let i = 0; i < world[next].length; i++) {
+          _p.copy(world[next][i]).applyMatrix4(g.matrixWorld).project(cam);
+          if (_p.z >= 1 || Math.abs(_p.x) >= 1 || Math.abs(_p.y) >= 1) continue;
+          sx += scr[next][i].x; n++; y = Math.min(y, scr[next][i].y);
+        }
+        const x = THREE.MathUtils.clamp(n ? sx / n : W / 2, 80, W - 80);
+        y = THREE.MathUtils.clamp(n ? y : H / 2, 120, H); // 120: pill clears the ~64px header
         el.textContent = shared.names[next];
         el.style.transform = `translate(${x.toFixed(1)}px, ${(y - 16).toFixed(1)}px) translate(-50%, -100%)`;
         el.style.opacity = '1';
