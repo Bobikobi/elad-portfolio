@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { socialMeta } from '@/lib/seo';
 import Home from '../page';
 
 export const metadata: Metadata = {
@@ -14,11 +15,7 @@ export const metadata: Metadata = {
       'x-default': 'https://www.eladsaadon.dev',
     },
   },
-  openGraph: {
-    locale: 'ru_RU',
-    alternateLocale: ['en_US', 'he_IL'],
-    url: 'https://www.eladsaadon.dev/ru',
-  },
+  ...socialMeta('ru', 'Элад Саадон | Фулстек-разработчик и архитектор систем ИИ', 'Элад Саадон — фулстек-разработчик и архитектор систем искусственного интеллекта из Израиля. Специализация: Next.js, React, TypeScript, интеграция ИИ и облачная автоматизация.', 'https://www.eladsaadon.dev/ru'),
 };
 
 export default Home;

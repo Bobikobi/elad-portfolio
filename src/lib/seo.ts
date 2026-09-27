@@ -49,3 +49,34 @@ export const defaultMetadata: Metadata = {
     images: ['/og-image.png'],
   },
 };
+
+type OgLocale = 'he' | 'en' | 'ru';
+const OG_LOCALE: Record<OgLocale, string> = { he: 'he_IL', en: 'en_US', ru: 'ru_RU' };
+/** Link-preview card per language (WhatsApp, Telegram, X...). */
+export const OG_IMAGE: Record<OgLocale, string> = {
+  he: '/og-image.png',
+  en: '/og-image.png',
+  ru: '/og-image.png',
+};
+
+/**
+ * openGraph + twitter for one page. Next merges metadata shallowly, so a page that sets
+ * openGraph at all replaces the root's whole block - image included. Every page that
+ * localizes its preview goes through here so none of them ships without an image.
+ */
+export function socialMeta(locale: OgLocale, title: string, description: string, url: string): Pick<Metadata, 'openGraph' | 'twitter'> {
+  const image = `${siteConfig.url}${OG_IMAGE[locale]}`;
+  return {
+    openGraph: {
+      type: 'website',
+      siteName: siteConfig.brand,
+      locale: OG_LOCALE[locale],
+      alternateLocale: (Object.keys(OG_LOCALE) as OgLocale[]).filter((l) => l !== locale).map((l) => OG_LOCALE[l]),
+      url,
+      title,
+      description,
+      images: [{ url: image, width: 1200, height: 630, alt: title }],
+    },
+    twitter: { card: 'summary_large_image', title, description, images: [image] },
+  };
+}
