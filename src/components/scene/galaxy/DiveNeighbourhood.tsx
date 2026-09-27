@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { softSprite } from '@/lib/spaceMaterials';
@@ -47,6 +47,8 @@ export default function DiveNeighbourhood() {
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     return geo;
   }, []);
+  // Handed in as a prop, so R3F does not dispose it; the act unmounts at every crossing.
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   useFrame(() => {
     if (matRef.current) matRef.current.opacity = smoothstep(FADE_FROM, FADE_TO, useScene.getState().scrollProgress) * OPACITY;
