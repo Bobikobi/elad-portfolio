@@ -790,6 +790,13 @@ function applyPose(
   flightPoint(cam.position, aim, pos, s, flight.lift);
   cam.fov = flight.fromFov + (fov - flight.fromFov) * smoother(s);
 
+  // Direct (mobile tour): straight line, always face target — no quaternion swing.
+  if (flight.direct) {
+    cam.lookAt(look.x, look.y, look.z);
+    if (s >= 1) flight.on = false;
+    return;
+  }
+
   // View direction: start -> destination heading, then limited per frame so neither a moving
   // target, a large turn nor a long frame can whip the camera.
   const target = _tmpQ.copy(flight.fromQ).slerp(destQuat(_fDest, cam.position, pos, look, s), trapezoid(s / flight.turn));
@@ -827,6 +834,8 @@ export default function CameraRig() {
                                         // arrival dolly is scroll-driven (settle lands at scrollY=max)
   const mobileArriveT = useRef(0);      // T7b: clock time the establishing shot settled (0 = not yet)
   const orbit = useRef({ yaw: 0, pitch: 0 }); // damped drag-to-rotate offset (T6)
+  const tourSpringVel = useRef(0);   // carousel spring velocity (stops/sec)
+  const prevTourDrag = useRef(false); // detect drag→release transition
   // B7: the reveal latch. See REVEAL_FRAMES — after a swap the curtain is held shut for a
   // number of DRAWN frames and then eased open, instead of being handed straight back to a
   // schedule that assumes the swap was free.
@@ -1337,10 +1346,26 @@ export default function CameraRig() {
           // --- MOBILE ORRERY -------------------------------------------------------
           // The camera is fixed near the sun (lib/orrery); the swipe moves the STARS along their
           // orbits (SolarAct reads tourPos). The camera moves only when a star is entered.
-          if (!store.tourDrag) {
-            const settled = store.tourPos + (store.tourStop - store.tourPos) * (1 - Math.exp(-dt / 0.16));
-            if (Math.abs(settled - store.tourStop) < 0.0005) { if (store.tourPos !== store.tourStop) store.setTourPos(store.tourStop); }
-            else store.setTourPos(settled);
+          {
+            const wasDragging = prevTourDrag.current;
+            prevTourDrag.current = store.tourDrag;
+            if (store.tourDrag) {
+              tourSpringVel.current = 0;
+            } else {
+              const N = TOUR_SECTIONS.length;
+              const raw = store.tourStop - store.tourPos;
+              const diff = ((raw % N + N + N / 2) % N) - N / 2;
+              if (wasDragging) tourSpringVel.current = Math.max(-3, Math.min(3, store.tourVel));
+              // Damped spring: omega=14 rad/s, zeta=0.72 (slight undershoot feel)
+              tourSpringVel.current += (196 * diff - 20.16 * tourSpringVel.current) * dt;
+              const nextMod = ((store.tourPos + tourSpringVel.current * dt) % N + N) % N;
+              if (Math.abs(diff) < 0.002 && Math.abs(tourSpringVel.current) < 0.02) {
+                if (store.tourPos !== store.tourStop) store.setTourPos(store.tourStop);
+                tourSpringVel.current = 0;
+              } else {
+                store.setTourPos(nextMod);
+              }
+            }
           }
           if (HUD_AVAILABLE) Object.assign(ORR, (window as unknown as { __orr?: Partial<typeof ORR> }).__orr);
           rigUp.copy(PLANE_N); cam.up.copy(rigUp);

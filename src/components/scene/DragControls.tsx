@@ -109,8 +109,10 @@ export default function DragControls() {
         const s = useScene.getState();
         const now = performance.now();
         const dPos = -(e.clientX - lastX) / window.innerWidth;
-        const max = TOUR_SECTIONS.length - 1;
-        const next = Math.min(max + 0.25, Math.max(-0.25, s.tourPos + dPos)); // small rubber band at the ends
+        const N = TOUR_SECTIONS.length;
+        // Circular wrap: no rubber-band ends, just modulo so the carousel loops
+        const raw = s.tourPos + dPos;
+        const next = ((raw % N) + N) % N;
         vTour = dPos / Math.max(0.001, (now - lastT) / 1000);
         s.setTourDrag(true);
         s.setTourPos(next);
@@ -130,10 +132,12 @@ export default function DragControls() {
     };
     const onUp = () => {
       if (dragging && useScene.getState().tourDrag) {
-        // Snap to the star the finger was heading for: nearest, nudged by the fling speed.
+        // Snap to nearest stop (circular), nudged by fling speed; seed spring velocity.
         const s = useScene.getState();
-        const max = TOUR_SECTIONS.length - 1;
-        const stop = Math.min(max, Math.max(0, Math.round(s.tourPos + Math.max(-1, Math.min(1, vTour * 0.2)))));
+        const N = TOUR_SECTIONS.length;
+        const nudged = s.tourPos + Math.max(-1, Math.min(1, vTour * 0.2));
+        const stop = ((Math.round(nudged) % N) + N) % N;
+        s.setTourVel(vTour);
         s.setTourStop(stop);
         s.setTourDrag(false);
       }

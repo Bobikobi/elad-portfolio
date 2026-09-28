@@ -46,6 +46,8 @@ interface SceneState {
   tourPos: number;
   /** True while a finger is rotating the carousel (CameraRig then stops easing tourPos). */
   tourDrag: boolean;
+  /** Drag velocity at lift-off (stops/sec, signed). CameraRig seeds the spring from it. */
+  tourVel: number;
   /** T7c: the tall galaxy→solar dive driver is mounted (a fresh visit), so scroll position
    *  is the authority on which act should be showing. Lets CameraRig reconcile an instant
    *  scroll teleport (End key / scrollbar / scrollTo / restoration) that skipped the
@@ -78,6 +80,7 @@ interface SceneState {
   setTourStop: (i: number) => void;
   setTourPos: (v: number) => void;
   setTourDrag: (v: boolean) => void;
+  setTourVel: (v: number) => void;
   setScrollDriven: (v: boolean) => void;
   setQuality: (q: Quality) => void;
   setDisplayHz: (hz: number) => void;
@@ -101,6 +104,7 @@ export const useScene = create<SceneState>((set) => ({
   tourStop: 0,
   tourPos: 0,
   tourDrag: false,
+  tourVel: 0,
   scrollDriven: false,
   // PERF-2: everyone STARTS low and is promoted only on proven headroom. The default used
   // to be 'high', which handed an integrated-GPU desktop a profile tuned for a gaming GPU
@@ -126,6 +130,7 @@ export const useScene = create<SceneState>((set) => ({
   setTourStop: (tourStop) => set({ tourStop }),
   setTourPos: (tourPos) => set({ tourPos }),
   setTourDrag: (tourDrag) => set({ tourDrag }),
+  setTourVel: (tourVel) => set({ tourVel }),
   setScrollDriven: (scrollDriven) => set({ scrollDriven }),
   setQuality: (quality) => set({ quality }),
   setDisplayHz: (displayHz) => set({ displayHz }),

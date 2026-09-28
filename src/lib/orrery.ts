@@ -1,3 +1,5 @@
+import { TOUR_SECTIONS } from '@/lib/sections';
+
 /**
  * Mobile orrery geometry, in the solar root's own frame (sun at the origin, orbits in the x/z plane).
  *
@@ -47,9 +49,12 @@ function rayAngle(g: OrrGeom, R: number): number {
   return Math.atan2(g.cz + g.dz * t, g.cx + g.dx * t);
 }
 
-/** Orbit angle a carousel star of radius R and index idx takes at carousel position pos. */
-export function orrSlot(R: number, idx: number, pos: number, g: OrrGeom = orrGeom()): number {
-  return rayAngle(g, R) + (idx - pos) * ORR.SP * g.dir;
+/** Orbit angle a carousel star of radius R and index idx takes at carousel position pos.
+ *  Uses the shortest circular path so the carousel wraps seamlessly at the N-stop boundary. */
+export function orrSlot(R: number, idx: number, pos: number, g: OrrGeom = orrGeom(), N = TOUR_SECTIONS.length): number {
+  const raw = idx - pos;
+  const d = ((raw % N + N + N / 2) % N) - N / 2;
+  return rayAngle(g, R) + d * ORR.SP * g.dir;
 }
 
 /** Fixed camera and look point, in the root's local frame. */
