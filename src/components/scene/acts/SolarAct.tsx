@@ -1,4 +1,5 @@
 'use client';
+import { orrSlot } from '@/lib/orrery';
 import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useCursor } from '@react-three/drei';
@@ -6,7 +7,7 @@ import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, planetRingNormal, PLANET_PAGES, RING_INNER_R, RING_OUTER_R } from '@/lib/planetPositions';
-import { PLANET_SECTION, sectionPath } from '@/lib/sections';
+import { PLANET_SECTION, sectionPath, TOUR_SECTIONS } from '@/lib/sections';
 import { BODY_FACTS } from '@/lib/bodyFacts';
 import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from '../DebugHud';
@@ -930,6 +931,15 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     // back to the overview. Everything local keeps running — self-rotation below, moons,
     // clouds, night lights, haze flow, twinkle, and the B5 vantage breath in CameraRig.
     if (!useScene.getState().focusedPlanet) angle.current += dt * spec.speed;
+    // Mobile orrery: while the carousel is showing, a carousel star's angle is set by the swipe
+    // position (see lib/orrery), on its own orbit. A focused world keeps the angle it had.
+    {
+      const st = useScene.getState();
+      if (st.tourMode && !st.focusedPlanet) {
+        const ti = TOUR_SECTIONS.findIndex((x) => x.focus === spec.key);
+        if (ti >= 0) angle.current = orrSlot(spec.orbit, ti, st.tourPos);
+      }
+    }
     // Atmosphere strength eases toward its idle value, brightening on hover (a fade, not a switch).
     const rimTarget = hovered && page ? atmoStrength * 1.8 : atmoStrength;
     // Through the live material, not the memoised literal — see ZodiacalDust for the reason.
