@@ -199,6 +199,12 @@ body::before {
   0%   { background-position: -500px 0; }
   100% { background-position: 500px 0; }
 }
+/* Home scroll hint: fades in from first paint, before hydration (Hero.tsx). */
+@keyframes dive-hint-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.dive-hint-in { animation: dive-hint-in 0.5s ease-out 0.4s both; }
 /* ===== Galaxy node drift (transform-only, GPU-composited) ===== */
 @keyframes galaxy-float-a {
   0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
