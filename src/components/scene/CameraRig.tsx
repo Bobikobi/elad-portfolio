@@ -309,6 +309,14 @@ const _ovPos = new THREE.Vector3();
 const _ovLook = new THREE.Vector3();
 const _entry = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+// The ecliptic's normal (SolarAct's solarRoot rotation.x = 0.42). The overview orbits about
+// it, so a full 360 keeps the camera the same height above the plane at every heading -
+// about world-Y the far side would sink below the tilted plane. `rigUp` is the up vector
+// the camera is steered with this frame: PLANE_N for the overview (the ring stays level
+// on screen at every heading), world-Y for everything else. Flights read it too, so a
+// flight into or out of a rotated overview rolls smoothly instead of snapping at the end.
+const PLANE_N = new THREE.Vector3(0, Math.cos(0.42), Math.sin(0.42));
+const rigUp = new THREE.Vector3(0, 1, 0);
 // Silhouette fit (B8b) — see publishLimb below.
 const _limbC = new THREE.Vector3();
 const _limbU = new THREE.Vector3();
@@ -558,15 +566,15 @@ function tourPlanetPose(pp: THREE.Vector3, r: number) {
   _tourLook.y += r * 0.8; // planet drops low in frame, label sits near centre-top
 }
 /**
- * Drag-to-rotate (T6): rotate `pos` around `look` by yaw (about world-Y) then pitch
+ * Drag-to-rotate (T6): rotate `pos` around `look` by yaw (about `axis`, world-Y by default) then pitch
  * (about the horizontal axis perpendicular to the view) — an offset applied on top of
  * the state pose, so the rig stays the sole camera owner (no OrbitControls).
  */
-function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch: number) {
+function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch: number, axis = UP) {
   if (yaw === 0 && pitch === 0) return;
   _orbOff.subVectors(pos, look);
-  _orbOff.applyAxisAngle(UP, yaw);
-  _orbAxis.crossVectors(UP, _orbOff);
+  _orbOff.applyAxisAngle(axis, yaw);
+  _orbAxis.crossVectors(axis, _orbOff);
   if (_orbAxis.lengthSq() < 1e-6) _orbAxis.set(1, 0, 0);
   _orbAxis.normalize();
   _orbOff.applyAxisAngle(_orbAxis, pitch);
@@ -655,7 +663,7 @@ const trapezoid = (x: number) => {
 
 /** Orientation a camera at `pos` needs to look at `look` (three's camera lookAt, as a quaternion). */
 function lookQuat(out: THREE.Quaternion, pos: THREE.Vector3, look: THREE.Vector3) {
-  return out.setFromRotationMatrix(_fM.lookAt(pos, look, UP));
+  return out.setFromRotationMatrix(_fM.lookAt(pos, look, rigUp));
 }
 
 /** Begin a flight from the camera's current pose, leaving world `leaving` for world `going`. */
@@ -1084,6 +1092,7 @@ export default function CameraRig() {
     // inertia lives in DragControls). Applied ONLY in WELCOME_IDLE + SOLAR_OVERVIEW below.
     damp(orbit.current, 'yaw', store.orbitYaw, 0.12, dt);
     damp(orbit.current, 'pitch', store.orbitPitch, 0.12, dt);
+    rigUp.copy(UP); cam.up.copy(UP); // the overview branch below switches both to PLANE_N
 
     if (act === 'galaxy') {
       prevAct.current = 'galaxy';
@@ -1196,7 +1205,7 @@ export default function CameraRig() {
         // Drag-to-rotate (T6): orbit the whole system in SOLAR_OVERVIEW. Applied to the
         // overview pose only — in ORBIT the camera uses _orbitPos (departure≈0 blends in
         // no overview), so a focused world is never rotated by the offset.
-        applyOrbit(_ovPos, _ovLook, orbit.current.yaw, orbit.current.pitch);
+        applyOrbit(_ovPos, _ovLook, orbit.current.yaw, orbit.current.pitch, PLANE_N);
 
         if (focused === 'belt') {
           // --- B14: ride the band (see BELT_RIDE) -------------------------------------
@@ -1388,10 +1397,12 @@ export default function CameraRig() {
           _entry.set(0, 8, 21);
           _tgt.copy(_entry).lerp(_ovPos, arrive);
           flight.on = false;
+          rigUp.copy(PLANE_N); cam.up.copy(rigUp);
           damp3(cam.position, _tgt, 0.3, dt);
           damp(cam, 'fov', 52 + (ovFov - 52) * arrive, 0.3, dt);
           cam.lookAt(_ovLook.x, _ovLook.y, _ovLook.z);
         } else {
+          rigUp.copy(PLANE_N); cam.up.copy(rigUp);
           applyPose(cam, _ovPos, _ovLook, _ovLook, ovFov, 0.7, dt, dtNominal.current);
         }
       }
