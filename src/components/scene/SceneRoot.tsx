@@ -122,7 +122,12 @@ export default function SceneRoot() {
         <GradientSky solar={act === 'solar'} />
         {/* Seeded (see SeededStars): drei's own Stars rolls this field fresh on every load, which
             G5 caught after the seeding pass had closed every Math.random() in our own files. */}
-        <SeededStars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.55} fade speed={0.5} />
+        {/* Galaxy act only: the solar act has the real naked-eye sky (RealSky, inside
+            Constellations) instead - random stars there read as noise in front of it. Hidden,
+            not unmounted, so scrolling back up does not rebuild 13000 stars. */}
+        <group visible={act === 'galaxy'}>
+          <SeededStars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.55} fade speed={0.5} />
+        </group>
         <HeroStars />
         {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
             In the solar act the veils drop to a faint backdrop so they read as distant
