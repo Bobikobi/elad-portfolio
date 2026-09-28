@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { motion, useScroll, useMotionValueEvent, useMotionValue } from 'framer-motion';
 import Link from 'next/link';
-import { ChevronDown } from 'lucide-react';
+import { Pointer } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { useViewMode } from '@/lib/viewModeContext';
 import { useScene } from '@/lib/sceneStore';
@@ -230,6 +230,163 @@ function GalaxyHome() {
     return () => cancelAnimationFrame(raf);
   }, [seenIntro]);
 
+  // One gesture, whole passage (owner, 2026-09-28: "one swipe and it goes"). The 800vh
+  // driver made the dive a long scroll - several wheel spins on a desktop, many swipes on a
+  // phone. Now any scroll intent on the home scene - a wheel notch, a vertical swipe, a
+  // paging key - plays the passage to the far end on its own, galaxy to solar or back, over
+  // PASSAGE_MS. The driver stays the single source of truth: the passage is played by
+  // scrolling it, one instant step per frame, so the camera, the swap curtain and the
+  // arrival dolly run exactly the machinery a hand scroll runs, only on a fixed clock.
+  // While it plays, further input is swallowed, so a second flick cannot stall it, reverse
+  // it or park it inside the curtain; after it lands, the input stays swallowed until the
+  // wheel has been quiet for a moment, so a trackpad's momentum tail cannot launch the
+  // return trip.
+  const [passage, setPassage] = useState(false);
+  useEffect(() => {
+    if (seenIntro === null) return;
+    // Two legs, each with its own clock: the dive down to the far edge of the curtain, then
+    // the arrival dolly. On one shared clock the arrival - the last twentieth of the driver,
+    // but a long camera move - got a third of a second and ran 2.5x faster than a hand
+    // scroll ever drives it.
+    const DIVE_MS = 1500;
+    const ARRIVE_MS = 900;
+    const EDGE = SWAP_V + COVER_PLATEAU + COVER_FALLOFF; // where the curtain has fully lifted
+    const QUIET_MS = 260;  // wheel silence that ends the post-arrival swallow
+    const SETTLE_MS = 500; // minimum swallow after arrival, whatever the wheel does
+    const SWIPE_PX = 12;
+    const STEP_MAX_MS = 100;  // 10 fps still plays in real time; only a true stall is clipped
+    const HOLD_MAX_MS = 2000;
+    // Per leg: accelerate over the first quarter, cruise, brake over the last quarter. Peak
+    // speed is 1.33x the mean (a sine in-out peaks at 1.57x), and the peak is what sets the
+    // largest camera step of the dive.
+    const RAMP = 0.25;
+    const V = 1 / (1 - RAMP);
+    const ease = (x: number) =>
+      x < RAMP ? (V * x * x) / (2 * RAMP)
+      : x > 1 - RAMP ? 1 - (V * (1 - x) * (1 - x)) / (2 * RAMP)
+      : V * (x - RAMP / 2);
+    let raf = 0;
+    let playing = false;
+    let landedAt = -Infinity;
+    let lastWheel = -Infinity;
+    const maxScroll = () => document.documentElement.scrollHeight - window.innerHeight;
+    const swallowing = (now: number) =>
+      playing || now - landedAt < SETTLE_MS || (now - landedAt < 4000 && now - lastWheel < QUIET_MS && lastWheel > landedAt);
+    // Leave native behaviour to anything that is not the scene: the nav drawer, the
+    // accessibility panel, form fields.
+    const foreign = (target: EventTarget | null) =>
+      target instanceof Element &&
+      !!target.closest('[role="dialog"], nav, input, textarea, select, [contenteditable="true"]');
+    const eligible = () => {
+      const s = useScene.getState();
+      return s.scrollDriven && !s.focusedPlanet;
+    };
+    const play = (dir: 1 | -1) => {
+      const max = maxScroll();
+      if (max <= 0) return false;
+      const from = window.scrollY / max;
+      const to = dir > 0 ? 1 : 0;
+      if (Math.abs(to - from) * max < 2) return false; // already at that end: nothing to play
+      // The legs still ahead of `from`, a leg entered part-way getting its share of the time.
+      const legs: [number, number, number][] = [];
+      const route: [number, number, number][] = dir > 0
+        ? [[0, EDGE, DIVE_MS], [EDGE, 1, ARRIVE_MS]]
+        : [[1, EDGE, ARRIVE_MS], [EDGE, 0, DIVE_MS]];
+      for (const [a, b, ms] of route) {
+        const left = (b - from) * dir;
+        if (left <= 0) continue;
+        const start = left < (b - a) * dir ? from : a;
+        legs.push([start, b, (ms * (b - start)) / (b - a)]);
+      }
+      playing = true;
+      setPassage(true);
+      const t0 = performance.now();
+      let prev = t0, elapsed = 0, held = 0;
+      const step = () => {
+        const now = performance.now();
+        const dt = now - prev;
+        prev = now;
+        // The clock runs on capped frame steps: the first solar mount stalls a frame for most
+        // of a second, and a wall clock would then jump the camera across the gap in one step.
+        // It also waits while the curtain is shut behind the scroll - the swap's reveal hold -
+        // so the arrival plays in view instead of finishing behind the curtain. Bounded, so a
+        // curtain that never lifts cannot keep the passage (and the swallowed input) alive.
+        const sc = useScene.getState();
+        if (sc.coverage > coverageFor(sc.scrollProgress) + 0.3 && held < HOLD_MAX_MS) held += dt;
+        else elapsed += Math.min(dt, STEP_MAX_MS);
+        let t = elapsed, leg = 0;
+        while (leg < legs.length - 1 && t >= legs[leg][2]) t -= legs[leg++][2];
+        const [a, b, ms] = legs[leg];
+        const x = Math.min(1, t / ms);
+        window.scrollTo({ top: (a + (b - a) * ease(x)) * max, behavior: 'instant' });
+        if (x < 1 || leg < legs.length - 1) { raf = requestAnimationFrame(step); return; }
+        playing = false;
+        landedAt = performance.now();
+        if (to === 0) setPassage(false); // back at the galaxy: the hint may show again
+        if (process.env.NEXT_PUBLIC_VERCEL_ENV !== 'production') (window as unknown as { __passage?: object }).__passage = { t0, t1: landedAt, dir }; // verification handle
+      };
+      raf = requestAnimationFrame(step);
+      return true;
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (!eligible() || foreign(e.target) || e.ctrlKey) return; // ctrl+wheel is a pinch-zoom
+      const now = performance.now();
+      if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      const swallow = swallowing(now); // judged against the PREVIOUS wheel, before this one counts
+      lastWheel = now;
+      if (swallow || e.deltaY === 0) return;
+      play(e.deltaY > 0 ? 1 : -1);
+    };
+
+    // Touch: every vertical move over the scene is taken from the browser from its first
+    // pixel - a native pan that has already begun cannot be cancelled, and it would fight the
+    // played passage frame by frame. Horizontal moves stay untouched (orbit, the mobile tour).
+    let tx = 0, ty = 0, decided: 'v' | 'h' | null = null, fired = false, touchOk = false;
+    const onTouchStart = (e: TouchEvent) => {
+      const p = e.touches[0];
+      touchOk = e.touches.length === 1 && eligible() && !foreign(e.target);
+      tx = p?.clientX ?? 0; ty = p?.clientY ?? 0; decided = null; fired = false;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (!touchOk) return;
+      const p = e.touches[0];
+      if (!p) return;
+      const dx = p.clientX - tx, dy = p.clientY - ty;
+      if (!decided && Math.max(Math.abs(dx), Math.abs(dy)) > 4) decided = Math.abs(dy) >= Math.abs(dx) ? 'v' : 'h';
+      if (decided === 'h') return;
+      if (e.cancelable) e.preventDefault();
+      if (fired || swallowing(performance.now()) || Math.abs(dy) < SWIPE_PX) return;
+      fired = true;
+      play(dy < 0 ? 1 : -1); // finger up = page forward
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (!eligible() || foreign(e.target) || e.altKey || e.ctrlKey || e.metaKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const fwd = e.key === 'PageDown' || e.key === 'ArrowDown' || e.key === 'End' || (e.key === ' ' && !e.shiftKey);
+      const back = e.key === 'PageUp' || e.key === 'ArrowUp' || e.key === 'Home' || (e.key === ' ' && e.shiftKey);
+      if (!fwd && !back) return;
+      if (e.key === ' ' && (tag === 'BUTTON' || tag === 'A')) return; // Space activates those
+      e.preventDefault();
+      if (swallowing(performance.now())) return;
+      play(fwd ? 1 : -1);
+    };
+
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('keydown', onKey);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [seenIntro]);
+
   // One render for both arrivals now. A repeat visitor gets the same driver and simply
   // starts at the end of it (see the layout effect above), so the runway back up to the
   // galaxy exists for them too.
@@ -268,17 +425,65 @@ function GalaxyHome() {
             {t('welcome.identity')}
           </motion.p>
         </motion.div>
-        <div className="absolute inset-x-0 bottom-10 flex flex-col items-center gap-2">
-          <span className="text-xs tracking-[0.2em] text-[var(--color-core-gold)]/80">{t('welcome.hint')}</span>
-          <motion.span
-            animate={{ y: [0, 8, 0], opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        {/* The hint is a mime of the gesture, not a word: a mouse whose wheel rolls on a
+            desktop, a finger swiping up on a touch screen. Server-rendered, with the device
+            picked by a media query and the fade-in done in CSS, so it shows on first paint
+            instead of waiting for hydration. It leaves the moment the passage starts
+            rather than riding the welcome fade, which a played passage outruns. */}
+        <div className="dive-hint-in absolute inset-x-0 bottom-10 flex justify-center">
+          <motion.div
+            initial={false}
+            animate={{ opacity: passage ? 0 : 1 }}
+            transition={{ duration: passage ? 0.15 : 0.4 }}
+            data-dive-hint={passage ? 'hidden' : 'shown'}
           >
-            <ChevronDown size={22} className="text-[var(--color-core-gold)]/80" />
-          </motion.span>
+            <span className="sr-only">{t('welcome.hint')}</span>
+            <span className="pointer-coarse:hidden"><WheelHint /></span>
+            <span className="hidden pointer-coarse:block"><SwipeHint /></span>
+          </motion.div>
         </div>
       </motion.div>
     </section>
+  );
+}
+
+const HINT_GOLD = 'var(--color-core-gold)';
+
+/** A mouse outline whose wheel dot rolls down and fades, on a loop. */
+function WheelHint() {
+  return (
+    <svg width="26" height="40" viewBox="0 0 26 40" fill="none" aria-hidden="true" style={{ opacity: 0.85 }}>
+      <rect x="1.5" y="1.5" width="23" height="37" rx="11.5" stroke={HINT_GOLD} strokeWidth="1.5" />
+      <motion.circle
+        cx="13" r="2.4" fill={HINT_GOLD}
+        initial={{ cy: 10, opacity: 0 }}
+        animate={{ cy: [10, 10, 20, 20], opacity: [0, 1, 0, 0] }}
+        transition={{ duration: 1.6, times: [0, 0.15, 0.75, 1], repeat: Infinity, ease: 'easeInOut' }}
+      />
+    </svg>
+  );
+}
+
+/** A pointing finger that travels up with a fading trail, on a loop. */
+function SwipeHint() {
+  return (
+    <div className="relative h-14 w-10" aria-hidden="true">
+      <motion.span
+        className="absolute left-1/2 top-2 w-[2px] -translate-x-1/2 rounded-full"
+        style={{ background: `linear-gradient(to top, transparent, ${HINT_GOLD})` }}
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: [0, 0, 26, 26], opacity: [0, 0.7, 0.4, 0] }}
+        transition={{ duration: 1.6, times: [0, 0.15, 0.7, 1], repeat: Infinity, ease: 'easeOut' }}
+      />
+      <motion.span
+        className="absolute bottom-0 left-1/2 -ml-[11px]"
+        initial={{ y: 0, opacity: 0 }}
+        animate={{ y: [0, 0, -26, -26], opacity: [0, 1, 1, 0] }}
+        transition={{ duration: 1.6, times: [0, 0.15, 0.7, 1], repeat: Infinity, ease: 'easeOut' }}
+      >
+        <Pointer size={22} strokeWidth={1.6} style={{ color: HINT_GOLD, opacity: 0.85 }} />
+      </motion.span>
+    </div>
   );
 }
 
