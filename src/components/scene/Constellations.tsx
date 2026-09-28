@@ -22,6 +22,8 @@ import { HUD_AVAILABLE } from './DebugHud';
  * pole; 210 deg is the setting where the most figures are reachable inside the drag limits
  * (±62 deg yaw, ±25 deg pitch), measured on a 16:9 frame - nine of them fully, Ursa Major
  * already 85% inside the resting frame. The other seven were never reachable and are not kept.
+ * (Chosen under the old ±62 deg yaw limit; the overview now turns a full 360 about the
+ * ecliptic normal, so the remaining zodiac figures could be added.)
  *
  * World-fixed: not a child of the spinning solar root (the sky does not turn with the system).
  */
