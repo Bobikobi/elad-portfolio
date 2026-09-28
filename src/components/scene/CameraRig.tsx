@@ -1,5 +1,5 @@
 'use client';
-import { ORR, orrGeom, orrPose, orrSlot } from '@/lib/orrery';
+import { ORR, orrGeom, orrPose, orrSlot, TOUR_ORBIT_R, BASE_RATE } from '@/lib/orrery';
 import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { damp, damp3 } from 'maath/easing';
@@ -790,10 +790,15 @@ function applyPose(
   flightPoint(cam.position, aim, pos, s, flight.lift);
   cam.fov = flight.fromFov + (fov - flight.fromFov) * smoother(s);
 
-  // Direct (mobile tour): straight line, always face target — no quaternion swing.
+  // Direct (mobile tour): straight-line dolly, but the turn to face the planet is gradual —
+  // slerp from the starting orientation toward "look at aim from here" and rate-limit per
+  // frame, same as the arc flight below, so the camera swings smoothly instead of snapping.
   if (flight.direct) {
-    cam.lookAt(look.x, look.y, look.z);
-    if (s >= 1) flight.on = false;
+    lookQuat(_fDest, cam.position, aim);
+    const target = _tmpQ.copy(flight.fromQ).slerp(_fDest, smoother(s));
+    const maxStep = Math.min(FLIGHT_TURN_RATE * step, FLIGHT_TURN_STEP * (nominal > 1 / 30 ? nominal * 60 : 1));
+    cam.quaternion.rotateTowards(target, maxStep);
+    if (s >= 1 && cam.quaternion.angleTo(_fDest) < 0.002) flight.on = false;
     return;
   }
 
@@ -1353,15 +1358,22 @@ export default function CameraRig() {
               tourSpringVel.current = 0;
             } else {
               const N = TOUR_SECTIONS.length;
-              const raw = store.tourStop - store.tourPos;
+              // The selected star keeps drifting on its own orbit (SolarAct) even while the
+              // carousel sits still, so the spring's target has to drift with it — otherwise
+              // the selected stop settles and then slides off the fixed view ray as the star
+              // moves on. Same rate as SolarAct's BASE_RATE / orbit^1.5, converted from
+              // rad/s to slots/s by ORR.SP (rad between neighbouring stops).
+              const stopIdx = ((store.tourStop % N) + N) % N;
+              const driftSlots = (state.clock.elapsedTime * (BASE_RATE / Math.pow(TOUR_ORBIT_R[stopIdx], 1.5))) / ORR.SP;
+              const target = store.tourStop + driftSlots;
+              const raw = target - store.tourPos;
               const diff = ((raw % N + N + N / 2) % N) - N / 2;
               if (wasDragging) tourSpringVel.current = Math.max(-3, Math.min(3, store.tourVel));
               // Damped spring: omega=14 rad/s, zeta=0.72 (slight undershoot feel)
               tourSpringVel.current += (196 * diff - 20.16 * tourSpringVel.current) * dt;
               const nextMod = ((store.tourPos + tourSpringVel.current * dt) % N + N) % N;
               if (Math.abs(diff) < 0.002 && Math.abs(tourSpringVel.current) < 0.02) {
-                if (store.tourPos !== store.tourStop) store.setTourPos(store.tourStop);
-                tourSpringVel.current = 0;
+                store.setTourPos(((target % N) + N) % N);
               } else {
                 store.setTourPos(nextMod);
               }

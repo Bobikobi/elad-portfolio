@@ -1069,7 +1069,15 @@ export default function ProjectsStage({
       >
         <div className="pointer-events-auto">
           <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl">{title}</h1>
-          <p className="world-body mt-2 text-[var(--color-star-white)]/55">{tagline}</p>
+          {/* Saturn's rings run pale/cream behind this header in the mobile orrery, and
+              `p` is reset to text-shadow: none globally (globals.css) - the header text
+              needs its own glow here or it goes white-on-white against the ring. */}
+          <p
+            className="world-body mt-2 text-[var(--color-star-white)]/55"
+            style={{ textShadow: 'var(--text-glow-heading)' }}
+          >
+            {tagline}
+          </p>
           {/* NEW-2: how many of the twelve are in view. Written by the frame loop off the
               same opacity the windows are drawn with. Digits and a slash, so it needs no
               translation and reads the same in all three locales. */}
@@ -1077,6 +1085,7 @@ export default function ProjectsStage({
             data-ring-count
             aria-hidden
             className="mt-1 font-mono text-xs tracking-widest text-[var(--color-core-gold)]/70"
+            style={{ textShadow: 'var(--text-glow-heading)' }}
           />
         </div>
         {/* The shared back control - see WorldBackLink for why there is exactly one. */}

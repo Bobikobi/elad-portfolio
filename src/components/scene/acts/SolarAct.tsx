@@ -1,5 +1,5 @@
 'use client';
-import { orrSlot } from '@/lib/orrery';
+import { orrSlot, BASE_RATE } from '@/lib/orrery';
 import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useCursor } from '@react-three/drei';
@@ -931,13 +931,19 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     // back to the overview. Everything local keeps running — self-rotation below, moons,
     // clouds, night lights, haze flow, twinkle, and the B5 vantage breath in CameraRig.
     if (!useScene.getState().focusedPlanet) angle.current += dt * spec.speed;
-    // Mobile orrery: while the carousel is showing, a carousel star's angle is set by the swipe
-    // position (see lib/orrery), on its own orbit. A focused world keeps the angle it had.
+    // Mobile orrery: while the carousel is showing, a carousel star's angle is set by the
+    // swipe position (see lib/orrery), on its own orbit - plus a slow, continuous drift so
+    // the carousel still visibly orbits the sun even at rest (Elad: "stars don't rotate
+    // around the sun"). Rate falls off with distance (BASE_RATE / orbit^1.5), so saturn
+    // creeps at ~0.005 rad/s and earth at ~0.018 rad/s. A focused world keeps the angle it had.
     {
       const st = useScene.getState();
       if (st.tourMode && !st.focusedPlanet) {
         const ti = TOUR_SECTIONS.findIndex((x) => x.focus === spec.key);
-        if (ti >= 0) angle.current = orrSlot(spec.orbit, ti, st.tourPos);
+        if (ti >= 0) {
+          const drift = state.clock.elapsedTime * (BASE_RATE / Math.pow(spec.orbit, 1.5));
+          angle.current = orrSlot(spec.orbit, ti, st.tourPos) + drift;
+        }
       }
     }
     // Atmosphere strength eases toward its idle value, brightening on hover (a fade, not a switch).

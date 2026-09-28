@@ -61,6 +61,11 @@ export default function DragControls() {
     let vYaw = 0, vPitch = 0, vTour = 0;
     let horiz: boolean | null = null; // touch axis lock
     let raf = 0;
+    // Tour detent: the stop the drag started from, and the RAW (unresisted) displacement
+    // since then, in stop-units. displayPos is a resisted function of tourRaw, never the
+    // raw finger delta itself, so the carousel never shows a position past the neighbouring
+    // stop while dragging.
+    let tourAnchor = 0, tourRaw = 0;
 
     const stopInertia = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
     const inertia = () => {
@@ -86,6 +91,7 @@ export default function DragControls() {
       active = true; dragging = false; horiz = null;
       startX = lastX = e.clientX; startY = lastY = e.clientY; lastT = performance.now();
       vYaw = vPitch = 0;
+      tourAnchor = useScene.getState().tourStop; tourRaw = 0;
       setCursor('grabbing');
     };
     const onMove = (e: PointerEvent) => {
@@ -103,15 +109,21 @@ export default function DragControls() {
         try { localStorage.setItem('seen-drag-hint', '1'); } catch { /* private mode */ }
       }
       if (!canDrag()) return;
-      // Mobile orrery: the finger turns the carousel 1:1 - a full-screen swipe moves exactly
-      // one star. Position is continuous while dragging, then snaps (see onUp).
+      // Mobile orrery: detent scroll, not freeform. A full-screen swipe is one stop of RAW
+      // displacement, but the carousel only ever shows a resisted (eased, clamped) fraction
+      // of it - the finger can drag past a stop, the carousel never visibly does. onUp turns
+      // that raw displacement into a snap: past 40% of a stop, advance; short of it, spring
+      // back to the stop the drag started from.
       if (isTour()) {
         const s = useScene.getState();
         const now = performance.now();
         const dPos = -(e.clientX - lastX) / window.innerWidth;
         const N = TOUR_SECTIONS.length;
-        // Circular wrap: no rubber-band ends, just modulo so the carousel loops
-        const raw = s.tourPos + dPos;
+        tourRaw += dPos;
+        const clamped = Math.max(-1, Math.min(1, tourRaw));
+        // easeOutCubic, sign-preserving: fast near zero, flattens toward +-1 stop.
+        const eased = Math.sign(clamped) * (1 - Math.pow(1 - Math.abs(clamped), 3));
+        const raw = tourAnchor + eased;
         const next = ((raw % N) + N) % N;
         vTour = dPos / Math.max(0.001, (now - lastT) / 1000);
         s.setTourDrag(true);
@@ -132,11 +144,14 @@ export default function DragControls() {
     };
     const onUp = () => {
       if (dragging && useScene.getState().tourDrag) {
-        // Snap to nearest stop (circular), nudged by fling speed; seed spring velocity.
+        // Detent release: past 40% of a stop, advance to the neighbour; short of it, spring
+        // back to the stop the drag started from. Displacement only - the eased on-screen
+        // position during the drag already absorbed the fling feel.
         const s = useScene.getState();
         const N = TOUR_SECTIONS.length;
-        const nudged = s.tourPos + Math.max(-1, Math.min(1, vTour * 0.2));
-        const stop = ((Math.round(nudged) % N) + N) % N;
+        const clamped = Math.max(-1, Math.min(1, tourRaw));
+        const advance = Math.abs(clamped) > 0.4 ? Math.sign(clamped) : 0;
+        const stop = (((tourAnchor + advance) % N) + N) % N;
         s.setTourVel(vTour);
         s.setTourStop(stop);
         s.setTourDrag(false);

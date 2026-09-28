@@ -193,7 +193,11 @@ export function PlanetLabelDriver() {
       // Mobile tour: only the active stop is labelled — the others are off-frame anyway
       // and their clamped pills would pile up along the edges.
       if (st.tourMode && !tourNear(key)) { hide(el); continue; }
-      const p = project(pos, (planetRadii.get(key) ?? 0.4) + 0.35);
+      // In the tour the star fills much more of the frame and sits dead centre, so the
+      // pill reads as a caption floating off to the side; Elad wants the name ON the
+      // star. The overview keeps the lift so the pill clears the disc there instead.
+      const lift = st.tourMode ? 0 : (planetRadii.get(key) ?? 0.4) + 0.35;
+      const p = project(pos, lift);
       if (st.tourMode && p.off) { hide(el); continue; } // out of frame: no clamped pill
       let { x, y } = p;
       if (p.off) {

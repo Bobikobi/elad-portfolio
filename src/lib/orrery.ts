@@ -9,6 +9,16 @@ import { TOUR_SECTIONS } from '@/lib/sections';
  * its neighbours a fixed angular step to either side. Radii are never touched, so each star keeps
  * its real distance from the sun; only the angle changes.
  */
+/** Orbit radii of the five carousel stops, in TOUR_SECTIONS order (earth, mars, belt,
+ *  jupiter, saturn) — must track each planet's `orbit` in SolarAct.tsx (and the belt's
+ *  own ring radius, BELT_RING_R in CameraRig.tsx). Exported so CameraRig can size the
+ *  continuous-orbit drift compensation for the selected stop without importing SolarAct. */
+export const TOUR_ORBIT_R = [3.35, 4.25, 5.1, 6.3, 8.0];
+/** rad/s baseline for the mobile tour's continuous orbit motion: each star's own rate is
+ *  BASE_RATE / orbit^1.5 (a Kepler-ish falloff), so saturn (orbit 8.0) drifts at ~0.005
+ *  rad/s and earth (orbit 3.35) at ~0.018 rad/s. */
+export const BASE_RATE = 0.113;
+
 export const ORR = {
   CR: 2.8,    // camera distance from the sun centre (sun radius is 1.5)
   h: 1.0,     // camera height above the orbital plane
