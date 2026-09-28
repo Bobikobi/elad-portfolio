@@ -570,6 +570,13 @@ function tourPlanetPose(pp: THREE.Vector3, r: number) {
  * (about the horizontal axis perpendicular to the view) — an offset applied on top of
  * the state pose, so the rig stays the sole camera owner (no OrbitControls).
  */
+/** Overview camera elevation above world-Y's horizontal, in degrees, for a viewport aspect. The
+ *  ecliptic plane is tilted a further 0.42 rad (SolarAct), so above the PLANE it sits ~24 deg
+ *  higher. Shared with DragControls, whose pitch limits are set in plane elevation. */
+export function overviewElevDeg(aspect: number) {
+  return 20 - 7 * clamp01((aspect - 0.6) / 1.2);
+}
+
 function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch: number, axis = UP) {
   if (yaw === 0 && pitch === 0) return;
   _orbOff.subVectors(pos, look);
@@ -1194,7 +1201,7 @@ export default function CameraRig() {
         // Sun disc target 35-45% of viewport HEIGHT on arrival (measured via Debug HUD):
         // dist = R/tan(f*fovY/2) with R=1.5 → ~40% desktop, ~38% portrait (mobile full-screen).
         const ovDist = 11.0 - 0.9 * wide;
-        const ovElev = (20 - 7 * wide) * DEG2RAD;
+        const ovElev = overviewElevDeg(aspect) * DEG2RAD;
         const ovFov = 42 - wide;
         _ovPos.set(
           Math.sin(t * 0.03) * 0.5 - 0.6 * wide,
@@ -1206,6 +1213,12 @@ export default function CameraRig() {
         // overview pose only — in ORBIT the camera uses _orbitPos (departure≈0 blends in
         // no overview), so a focused world is never rotated by the offset.
         applyOrbit(_ovPos, _ovLook, orbit.current.yaw, orbit.current.pitch, PLANE_N);
+        // The drag now reaches below the plane (DragControls). Crossing it at the resting
+        // distance (~10-11) would pass through Neptune's orbit (9.8), so the camera backs off by
+        // up to 30% as it nears edge-on.
+        _orbOff.subVectors(_ovPos, _ovLook);
+        const edgeOn = 1 - THREE.MathUtils.smoothstep(Math.abs(_orbOff.dot(PLANE_N)) / _orbOff.length(), 0, 0.4);
+        _ovPos.copy(_ovLook).addScaledVector(_orbOff, 1 + 0.3 * edgeOn);
 
         if (focused === 'belt') {
           // --- B14: ride the band (see BELT_RIDE) -------------------------------------

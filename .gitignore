@@ -55,6 +55,8 @@ next-env.d.ts
 /scripts/*
 # reusable verification harnesses live IN the repo (MEGA PLAN part 6); their output does not
 !/scripts/harness/
+# the sky assets in public/sky/ are baked by this, so it ships with them
+!/scripts/bake-sky.py
 PRIVATE_REPO_LIMITATION_AND_NEXT_STEP.md
 *.cer
 *.p12

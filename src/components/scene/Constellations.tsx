@@ -7,6 +7,7 @@ import { makeSparkleMaterial } from '@/lib/spaceMaterials';
 import { useScene } from '@/lib/sceneStore';
 import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from './DebugHud';
+import RealSky from './RealSky';
 
 /**
  * The real sky behind the solar system (Elad, 2026-09-27): constellation stars always, their
@@ -19,11 +20,10 @@ import { HUD_AVAILABLE } from './DebugHud';
  * the scene's -Y. Put the right way up, the Dippers and Polaris would be behind the camera at
  * every pose the drag allows. It is a rotation (e1 -> +X, e2 -> +Z, north -> -Y, det +1), not a
  * mirror, so every figure keeps its real handedness. SKY_LON then turns the sky about the
- * pole; 210 deg is the setting where the most figures are reachable inside the drag limits
- * (±62 deg yaw, ±25 deg pitch), measured on a 16:9 frame - nine of them fully, Ursa Major
- * already 85% inside the resting frame. The other seven were never reachable and are not kept.
- * (Chosen under the old ±62 deg yaw limit; the overview now turns a full 360 about the
- * ecliptic normal, so the remaining zodiac figures could be added.)
+ * pole; 210 deg was chosen under the old ±62 deg yaw limit to frame the most figures at rest,
+ * and is kept so the resting frame does not change. The overview now turns a full 360 about the
+ * ecliptic's normal, so all twelve zodiac figures are in (Elad, 2026-09-28), in their real order
+ * round the band the planets orbit in, with the naked-eye sky (RealSky) behind them.
  *
  * World-fixed: not a child of the spinning solar root (the sky does not turn with the system).
  */
@@ -240,6 +240,8 @@ export default function Constellations() {
       <primitive object={stars} />
       {lines.map((l, i) => <primitive key={i} object={l} />)}
       <sprite position={polaris.pos} scale={[9, 9, 1]} material={polaris.mat} />
+      {/* Last child: the figure lookups above index g.children from the front. */}
+      <RealSky lon0={SKY_LON} />
     </group>
   );
 }

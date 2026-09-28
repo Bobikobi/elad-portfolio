@@ -3,25 +3,34 @@ import { useEffect, useState } from 'react';
 import { useScene } from '@/lib/sceneStore';
 import { SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
+import { overviewElevDeg } from './CameraRig';
 
 /**
  * Drag-to-rotate (T6). A pointer layer that writes a yaw/pitch OFFSET into the store;
  * CameraRig applies it on top of the WELCOME_IDLE / SOLAR_OVERVIEW pose (so the rig is
  * still the sole camera owner — no OrbitControls). Active only in those two modes; a
  * <5px pointer sequence stays a click (planet navigation), a longer one rotates and
- * suppresses the click. Release coasts with damped inertia. Pitch is clamped ±25°, yaw
- * is free - a full 360 round the sun (Elad, 2026-09-28), about the ecliptic's normal. Mobile: the canvas has `touch-action: pan-y`, so vertical drags stay page
+ * suppresses the click. Release coasts with damped inertia. Yaw is free - a full 360 round
+ * the sun - and pitch runs from 80 deg above the planets' plane to 45 deg below it (Elad,
+ * 2026-09-28), both about the ecliptic's normal. Mobile: the canvas has `touch-action: pan-y`, so vertical drags stay page
  * scroll (which drives the dive) and only horizontal drags rotate. No auto-recenter.
  */
 // T6.1: 0.2°/px — a full-width (~300px) drag yaws ≤60°, so a moderate swing brings an
-// off-frame planet back in without the system flying past into empty space. Pitch stays
-// gentle and hard-clamped ±25°.
+// off-frame planet back in without the system flying past into empty space.
 const YAW_SENS = (0.2 * Math.PI) / 180;   // rad per px (≈0.00349)
 const PITCH_SENS = 0.003;
-const PITCH_CLAMP = (25 * Math.PI) / 180;
+// Limits in elevation above the ecliptic plane. 80 stops short of straight down the pole,
+// where the plane-normal "up" would spin the frame with every degree of yaw.
+const ELEV_MAX = 80;
+const ELEV_MIN = -45;
+const PLANE_TILT_DEG = (0.42 * 180) / Math.PI; // SolarAct's solarRoot rotation.x
 const THRESHOLD = 5;      // px - separates a rotate-drag from a navigating tap
 const SWIPE_THRESHOLD = 45; // px - a horizontal swipe that advances the mobile tour (T7b)
-const clampPitch = (p: number) => Math.max(-PITCH_CLAMP, Math.min(PITCH_CLAMP, p));
+// Positive pitch LOWERS the camera (CameraRig.applyOrbit), so the rest elevation sets both ends.
+const clampPitch = (p: number) => {
+  const rest = overviewElevDeg(window.innerWidth / window.innerHeight) + PLANE_TILT_DEG;
+  return Math.max(((rest - ELEV_MAX) * Math.PI) / 180, Math.min(((rest - ELEV_MIN) * Math.PI) / 180, p));
+};
 
 export default function DragControls() {
   const { t } = useI18n();
