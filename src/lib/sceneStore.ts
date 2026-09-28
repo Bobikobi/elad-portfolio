@@ -41,6 +41,11 @@ interface SceneState {
   /** Current tour stop — an index into SECTIONS (0..4). Persists across the session so a
    *  return to the overview resumes where the tour left off. */
   tourStop: number;
+  /** Mobile orrery: continuous carousel position (0..4, fractional while a finger drags or
+   *  the system settles). `tourStop` is the integer the carousel is heading to. */
+  tourPos: number;
+  /** True while a finger is rotating the carousel (CameraRig then stops easing tourPos). */
+  tourDrag: boolean;
   /** T7c: the tall galaxy→solar dive driver is mounted (a fresh visit), so scroll position
    *  is the authority on which act should be showing. Lets CameraRig reconcile an instant
    *  scroll teleport (End key / scrollbar / scrollTo / restoration) that skipped the
@@ -71,6 +76,8 @@ interface SceneState {
   setDragMoved: (v: boolean) => void;
   setTourMode: (v: boolean) => void;
   setTourStop: (i: number) => void;
+  setTourPos: (v: number) => void;
+  setTourDrag: (v: boolean) => void;
   setScrollDriven: (v: boolean) => void;
   setQuality: (q: Quality) => void;
   setDisplayHz: (hz: number) => void;
@@ -92,6 +99,8 @@ export const useScene = create<SceneState>((set) => ({
   dragMoved: false,
   tourMode: false,
   tourStop: 0,
+  tourPos: 0,
+  tourDrag: false,
   scrollDriven: false,
   // PERF-2: everyone STARTS low and is promoted only on proven headroom. The default used
   // to be 'high', which handed an integrated-GPU desktop a profile tuned for a gaming GPU
@@ -115,6 +124,8 @@ export const useScene = create<SceneState>((set) => ({
   setDragMoved: (dragMoved) => set({ dragMoved }),
   setTourMode: (tourMode) => set({ tourMode }),
   setTourStop: (tourStop) => set({ tourStop }),
+  setTourPos: (tourPos) => set({ tourPos }),
+  setTourDrag: (tourDrag) => set({ tourDrag }),
   setScrollDriven: (scrollDriven) => set({ scrollDriven }),
   setQuality: (quality) => set({ quality }),
   setDisplayHz: (displayHz) => set({ displayHz }),

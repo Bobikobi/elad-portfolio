@@ -1,6 +1,6 @@
 'use client';
 import { useScene } from '@/lib/sceneStore';
-import { SECTIONS } from '@/lib/sections';
+import { TOUR_SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
 
 /**
@@ -23,7 +23,7 @@ export default function TourDots() {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-9 z-20 flex justify-center">
       <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-white/12 bg-[rgba(5,7,20,0.45)] px-4 py-2.5 shadow-[0_6px_24px_rgba(5,7,20,0.5)] backdrop-blur-md">
-        {SECTIONS.map((s, i) => {
+        {TOUR_SECTIONS.map((s, i) => {
           const active = i === stop;
           return (
             <button

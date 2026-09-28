@@ -30,6 +30,11 @@ export const SECTIONS: Section[] = [
   { id: 'contact', focus: 'mars', navKey: 'nav.contact', slug: 'contact' },
 ];
 
+/** Mobile orrery order: inside out by orbit radius (earth 3.35, mars 4.25, belt 5.1,
+ *  jupiter 6.3, saturn 8.0), so a swipe walks outward through the system. */
+export const TOUR_SECTIONS: Section[] = ['about', 'contact', 'technologies', 'services', 'projects']
+  .map((id) => SECTIONS.find((s) => s.id === id) as Section);
+
 const BY_SLUG = new Map(SECTIONS.map((s) => [s.slug, s]));
 
 /** Reverse map: which section route a clicked planet opens. */

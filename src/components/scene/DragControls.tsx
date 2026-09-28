@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useScene } from '@/lib/sceneStore';
-import { SECTIONS } from '@/lib/sections';
+import { TOUR_SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
 import { overviewElevDeg } from './CameraRig';
 
@@ -25,7 +25,6 @@ const ELEV_MAX = 80;
 const ELEV_MIN = -45;
 const PLANE_TILT_DEG = (0.42 * 180) / Math.PI; // SolarAct's solarRoot rotation.x
 const THRESHOLD = 5;      // px - separates a rotate-drag from a navigating tap
-const SWIPE_THRESHOLD = 45; // px - a horizontal swipe that advances the mobile tour (T7b)
 // Positive pitch LOWERS the camera (CameraRig.applyOrbit), so the rest elevation sets both ends.
 const clampPitch = (p: number) => {
   const rest = overviewElevDeg(window.innerWidth / window.innerHeight) + PLANE_TILT_DEG;
@@ -57,9 +56,9 @@ export default function DragControls() {
       return s.tourMode && s.act === 'solar' && !s.focusedPlanet;
     };
 
-    let active = false, dragging = false, swiped = false;
+    let active = false, dragging = false;
     let startX = 0, startY = 0, lastX = 0, lastY = 0, lastT = 0;
-    let vYaw = 0, vPitch = 0;
+    let vYaw = 0, vPitch = 0, vTour = 0;
     let horiz: boolean | null = null; // touch axis lock
     let raf = 0;
 
@@ -84,7 +83,7 @@ export default function DragControls() {
       useScene.getState().setDragMoved(false);
       if ((e.target as HTMLElement)?.tagName !== 'CANVAS' || !canDrag()) return;
       stopInertia();
-      active = true; dragging = false; swiped = false; horiz = null;
+      active = true; dragging = false; horiz = null;
       startX = lastX = e.clientX; startY = lastY = e.clientY; lastT = performance.now();
       vYaw = vPitch = 0;
       setCursor('grabbing');
@@ -104,16 +103,18 @@ export default function DragControls() {
         try { localStorage.setItem('seen-drag-hint', '1'); } catch { /* private mode */ }
       }
       if (!canDrag()) return;
-      // T7b: in tour mode a horizontal swipe advances to the next/previous stop (one step
-      // per gesture, wrap-around) — never a rotate. Vertical is already page scroll above.
+      // Mobile orrery: the finger turns the carousel 1:1 - a full-screen swipe moves exactly
+      // one star. Position is continuous while dragging, then snaps (see onUp).
       if (isTour()) {
-        if (!swiped && Math.abs(totX) > SWIPE_THRESHOLD) {
-          const s = useScene.getState();
-          const n = SECTIONS.length;
-          const dir = totX < 0 ? 1 : -1; // swipe left → next planet (carousel convention)
-          s.setTourStop((((s.tourStop + dir) % n) + n) % n);
-          swiped = true;
-        }
+        const s = useScene.getState();
+        const now = performance.now();
+        const dPos = -(e.clientX - lastX) / window.innerWidth;
+        const max = TOUR_SECTIONS.length - 1;
+        const next = Math.min(max + 0.25, Math.max(-0.25, s.tourPos + dPos)); // small rubber band at the ends
+        vTour = dPos / Math.max(0.001, (now - lastT) / 1000);
+        s.setTourDrag(true);
+        s.setTourPos(next);
+        lastX = e.clientX; lastY = e.clientY; lastT = now;
         return;
       }
       const now = performance.now();
@@ -128,6 +129,14 @@ export default function DragControls() {
       lastX = e.clientX; lastY = e.clientY; lastT = now;
     };
     const onUp = () => {
+      if (dragging && useScene.getState().tourDrag) {
+        // Snap to the star the finger was heading for: nearest, nudged by the fling speed.
+        const s = useScene.getState();
+        const max = TOUR_SECTIONS.length - 1;
+        const stop = Math.min(max, Math.max(0, Math.round(s.tourPos + Math.max(-1, Math.min(1, vTour * 0.2)))));
+        s.setTourStop(stop);
+        s.setTourDrag(false);
+      }
       if (dragging && !reduce && (Math.abs(vYaw) > 0.05 || Math.abs(vPitch) > 0.05)) inertia();
       active = false; dragging = false;
       setCursor(canDrag() ? 'grab' : '');

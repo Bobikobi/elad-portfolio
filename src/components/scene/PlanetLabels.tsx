@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, PLANET_PAGES, beltTourAnchor } from '@/lib/planetPositions';
-import { PLANET_SECTION, SECTIONS, sectionPath } from '@/lib/sections';
+import { PLANET_SECTION, TOUR_SECTIONS, sectionPath } from '@/lib/sections';
 import { BODY_FACTS, DECORATIVE_BODIES } from '@/lib/bodyFacts';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useI18n } from '@/lib/i18n';
@@ -45,7 +45,6 @@ const register = (key: string) => (el: HTMLElement | null) => {
 const BELT_ANCHOR = new THREE.Vector3(5.0, 0.15, 0);
 
 const PAGE_KEYS = Object.keys(PLANET_PAGES);
-const TOUR_STOPS = SECTIONS.length;
 
 const _wp = new THREE.Vector3();
 const _ndc = new THREE.Vector3();
@@ -149,8 +148,11 @@ export function PlanetLabelDriver() {
     // the swap curtain all mean "no pills".
     const covFade = Math.max(0, Math.min(1, 1 - (st.coverage - 0.12) / 0.38));
     const overviewOn = st.act === 'solar' && !st.focusedPlanet && covFade > 0.001;
-    const tourIdx = ((st.tourStop % TOUR_STOPS) + TOUR_STOPS) % TOUR_STOPS;
-    const tourFocus = SECTIONS[tourIdx]?.focus;
+    // Mobile orrery: a star is labelled while it is within reach of the carousel's centre.
+    const tourNear = (focus: string) => {
+      const i = TOUR_SECTIONS.findIndex((s) => s.focus === focus);
+      return i >= 0 && Math.abs(i - st.tourPos) < 1.6;
+    };
 
     const project = (pos: THREE.Vector3, lift: number) => {
       _wp.copy(pos);
@@ -190,8 +192,9 @@ export function PlanetLabelDriver() {
       if (!overviewOn || !pos) { hide(el); continue; }
       // Mobile tour: only the active stop is labelled — the others are off-frame anyway
       // and their clamped pills would pile up along the edges.
-      if (st.tourMode && tourFocus !== key) { hide(el); continue; }
+      if (st.tourMode && !tourNear(key)) { hide(el); continue; }
       const p = project(pos, (planetRadii.get(key) ?? 0.4) + 0.35);
+      if (st.tourMode && p.off) { hide(el); continue; } // out of frame: no clamped pill
       let { x, y } = p;
       if (p.off) {
         // Never crop a section away: clamp the pill to the frame, clear of the navbar
@@ -205,7 +208,7 @@ export function PlanetLabelDriver() {
     // --- belt pill --------------------------------------------------------------------
     const belt = nodes.get('belt');
     if (belt) {
-      if (!overviewOn || (st.tourMode && tourFocus !== 'belt')) hide(belt);
+      if (!overviewOn || (st.tourMode && !tourNear('belt'))) hide(belt);
       else {
         const { x, y } = project(st.tourMode ? beltTourAnchor : BELT_ANCHOR, 0);
         place(
