@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { CONSTELLATIONS, POLARIS } from '@/lib/constellations';
 import { makeSparkleMaterial } from '@/lib/spaceMaterials';
 import { useScene } from '@/lib/sceneStore';
+import { ORR, orrGeom } from '@/lib/orrery';
 import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from './DebugHud';
 import RealSky from './RealSky';
@@ -34,7 +35,6 @@ const LINE_REST = 0.035;   // line opacity at rest - criterion: <= 12% brightnes
 const LINE_HOT = 0.62;       // hovered
 const HIT_MOUSE = 14;        // px from a segment that counts as hovering it
 const HIT_TOUCH = 28;
-const TAP_HOLD = 3.2;        // s a tapped figure stays lit on touch
 const DEG = Math.PI / 180;
 
 function skyPoint(lon: number, lat: number, out: THREE.Vector3) {
@@ -76,6 +76,7 @@ export default function Constellations() {
   const group = useRef<THREE.Group>(null);
   const hot = useRef(-1);
   const tapUntil = useRef(0);
+  const lit = useRef(-1); // the figure a tap lit (touch)
   const vis = useRef(0);
 
   const { stars, lines, world, polaris } = useMemo(() => {
@@ -151,6 +152,13 @@ export default function Constellations() {
     const s = useScene.getState();
     const overview = s.act === 'solar' && !s.focusedPlanet;
     vis.current = THREE.MathUtils.damp(vis.current, overview ? 1 : 0, 3, dt);
+    // Mobile orrery: the swipe turns the whole sky about the ecliptic normal by the same angle
+    // it swings the carousel planets round the sun (lib/orrery orrSlot: -SP per stop in the
+    // root frame; a +Y turn lowers a point's angle, hence the sign), so the camera and the sun
+    // read as still while the universe rotates past them (Elad, 2026-09-29). This group shares
+    // solarRoot's 0.42 tilt, so its local Y is the plane normal. A focused world or a desktop
+    // session holds whatever angle was reached, like the planets' own accumulators.
+    if (s.tourMode && !s.focusedPlanet) g.rotation.y = s.tourPos * ORR.SP * orrGeom().dir;
     g.updateMatrixWorld();
     const { width: W, height: H } = state.size;
     const cam = state.camera;
@@ -187,11 +195,17 @@ export default function Constellations() {
       if (shared.tap) {
         const hit = nearest(shared.tap.x, shared.tap.y, HIT_TOUCH);
         // A tap that landed on a planet belongs to the planet.
-        if (hit >= 0 && !s.hoveredBody) { hot.current = hit; tapUntil.current = now + TAP_HOLD; }
+        // A tapped figure stays lit until the next tap lands anywhere else, or it turns out of
+        // frame with the swipe (Elad, 2026-09-29: the name used to vanish on a timer instead).
+        if (hit >= 0 && !s.hoveredBody) { lit.current = hit; tapUntil.current = Infinity; }
+        else tapUntil.current = 0;
         shared.tap = null;
       }
-      if (now < tapUntil.current && !s.hoveredBody) next = hot.current;
-      else if (!shared.touch && !shared.down && !s.hoveredBody) next = nearest(shared.x, shared.y, HIT_MOUSE);
+      if (now < tapUntil.current && !s.hoveredBody && onScreen[lit.current]) next = lit.current;
+      else {
+        tapUntil.current = 0; // a body's card took over, or the figure left the frame
+        if (!shared.touch && !shared.down && !s.hoveredBody) next = nearest(shared.x, shared.y, HIT_MOUSE);
+      }
     } else shared.tap = null;
     hot.current = next;
 
@@ -228,8 +242,9 @@ export default function Constellations() {
       } else el.style.opacity = '0';
     }
     if (HUD_AVAILABLE) {
+      _p.set(1, 0, 0).transformDirection(g.matrixWorld);
       (window as unknown as Record<string, unknown>).__constellations = {
-        hot: next,
+        hot: next, yaw: g.rotation.y, probe: _p.toArray(),
         figs: CONSTELLATIONS.map((c, ci) => ({ id: c.id, on: onScreen[ci], pts: scr[ci].map((v) => [Math.round(v.x), Math.round(v.y)]), segs: c.segs })),
       };
     }
