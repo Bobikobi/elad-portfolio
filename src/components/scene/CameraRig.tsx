@@ -1,5 +1,5 @@
 'use client';
-import { ORR, orrGeom, orrPose, orrSlot } from '@/lib/orrery';
+import { ORR, orrGeom, orrPose, orrSlot, orrWrap } from '@/lib/orrery';
 import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { damp, damp3 } from 'maath/easing';
@@ -1385,7 +1385,9 @@ export default function CameraRig() {
               tourSpringVel.current = 0;
             } else {
               const target = store.tourStop;
-              const diff = target - store.tourPos; // linear: the carousel has ends, no wrap
+              // The carousel loops: tourPos runs on unbounded (the sky and the other bodies turn by it),
+              // and the stop is reached the short way round.
+              const diff = orrWrap(target - store.tourPos);
               // Critically damped spring, omega=24, zeta=1: lands in ~250ms with no overshoot.
               // The release velocity is kept only up to what the spring can absorb without
               // crossing the stop (v <= omega*|diff| toward it), so a flick never bounces.
@@ -1395,7 +1397,7 @@ export default function CameraRig() {
               }
               tourSpringVel.current += (576 * diff - 48 * tourSpringVel.current) * dt;
               if (Math.abs(diff) < 0.002 && Math.abs(tourSpringVel.current) < 0.02) {
-                store.setTourPos(target);
+                store.setTourPos(store.tourPos + diff);
               } else {
                 store.setTourPos(store.tourPos + tourSpringVel.current * dt);
               }

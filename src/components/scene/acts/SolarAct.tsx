@@ -1,5 +1,5 @@
 'use client';
-import { orrSlot } from '@/lib/orrery';
+import { ORR, orrGeom, orrSlot } from '@/lib/orrery';
 import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useCursor } from '@react-three/drei';
@@ -665,6 +665,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   const mesh = useRef<THREE.Mesh>(null);
   const ringMesh = useRef<THREE.Mesh>(null);
   const angle = useRef(spec.phase);
+  const lastTourPos = useRef<number | null>(null); // carousel position last frame (null = not in the carousel)
   // A1 hi-res crossfade state (page planets only).
   const hiShader = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
   const hiTex = useRef<THREE.Texture | null>(null);
@@ -941,8 +942,18 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         const ti = TOUR_SECTIONS.findIndex((x) => x.focus === spec.key);
         if (ti >= 0) {
           angle.current = orrSlot(spec.orbit, ti, st.tourPos);
+        } else if (lastTourPos.current !== null) {
+          // Every other body turns WITH the swipe, by the same angle orrSlot gives the carousel
+          // stars (-SP per stop), on top of its own slow drift - the whole system, sky
+          // included (Constellations), rotates past a still camera (Elad, 2026-09-29).
+          const d = st.tourPos - lastTourPos.current;
+          angle.current -= d * ORR.SP * orrGeom().dir;
+          // A tapped tooltip closes once its body is swiped away: on touch nothing else
+          // would ever close it (Elad, 2026-09-29: Uranus left its window open).
+          if (Math.abs(d) > 1e-3 && st.hoveredBody === spec.key) st.setHoveredBody(null);
         }
-      }
+        lastTourPos.current = st.tourPos;
+      } else lastTourPos.current = null;
     }
     // Atmosphere strength eases toward its idle value, brightening on hover (a fade, not a switch).
     const rimTarget = hovered && page ? atmoStrength * 1.8 : atmoStrength;

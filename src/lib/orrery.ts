@@ -53,10 +53,17 @@ function rayAngle(g: OrrGeom, R: number): number {
   return Math.atan2(g.cz + g.dz * t, g.cx + g.dx * t);
 }
 
-/** Orbit angle a carousel star of radius R and index idx takes at carousel position pos.
- *  Linear, no wrap: the carousel has two ends (0 and N-1) and resists past them. */
+/** The carousel loops (Elad, 2026-09-29): `tourPos` runs on unbounded, and a stop index is
+ *  taken mod N. `orrWrap(d)` folds a stop offset into [-N/2, N/2). */
+export function orrWrap(d: number, n: number = TOUR_ORBIT_R.length): number {
+  return d - n * Math.floor(d / n + 0.5);
+}
+
+/** Orbit angle a carousel star of radius R and index idx takes at carousel position pos. The
+ *  offset is wrapped, so the star 2.5 stops away on one side re-enters on the other - out of
+ *  frame, where the jump is not seen. */
 export function orrSlot(R: number, idx: number, pos: number, g: OrrGeom = orrGeom()): number {
-  return rayAngle(g, R) + (idx - pos) * ORR.SP * g.dir;
+  return rayAngle(g, R) + orrWrap(idx - pos) * ORR.SP * g.dir;
 }
 
 /** Screen pixels the star at stop `idx` moves per unit of carousel position, at rest on the
@@ -64,7 +71,9 @@ export function orrSlot(R: number, idx: number, pos: number, g: OrrGeom = orrGeo
  *  (the camera's up is the orbital plane's normal, so the root's own tilt cancels out). */
 export function orrPxPerStop(idx: number, width: number, height: number, at: number = idx): number {
   const g = orrGeom();
-  const R = TOUR_ORBIT_R[Math.max(0, Math.min(TOUR_ORBIT_R.length - 1, idx))];
+  const N = TOUR_ORBIT_R.length;
+  idx = ((Math.round(idx) % N) + N) % N;
+  const R = TOUR_ORBIT_R[idx];
   const { pos, look } = orrPose(g);
   let fx = look[0] - pos[0], fy = look[1] - pos[1], fz = look[2] - pos[2];
   const fl = Math.hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
