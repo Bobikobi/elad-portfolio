@@ -542,15 +542,23 @@ function beltRidePose(pos: THREE.Vector3, look: THREE.Vector3, ride: BeltRide, d
 const _tourPos = new THREE.Vector3();
 const _tourLook = new THREE.Vector3();
 const _orrTmp = new THREE.Vector3();
-// Phone-motion parallax (lib/tilt) on the orrery camera. Per degree of phone turn the camera
-// SLIDES this far along its own right/up axes (near stars shift more than far ones - the depth
-// cue) and turns this fraction of a degree (the "look around" of a 360 photo). The slide is
-// taken off again at the top of the next frame so the pose damping never sees it.
-const TILT_SLIDE = 0.0125; // world units per degree
-const TILT_TURN = 0.06;    // camera degrees per phone degree
+// Phone-motion "window" parallax (lib/tilt) on the orrery camera: head-coupled, off-axis
+// projection. The screen is a window at depth WIN_D * z, where z is the focused body's depth in
+// front of the camera; turning the phone moves the VIEWER sideways (TILT_SLIDE * z per degree,
+// along the camera's own right/up axes) while an asymmetric frustum keeps that window plane
+// pinned on screen. No rotation - the pose's own orientation is kept - so far stars shift ~d and
+// the focused body ~d * (1 - WIN_D): you see past the frame's edges instead of orbiting the
+// planet. Scaling by the body's own depth (earth sits at ~0.7x the look distance, saturn ~1.5x)
+// keeps the effect the same at every stop. The slide is taken off again at the top of the next
+// frame (and the view offset cleared) so the pose damping never sees it.
+const TILT_SLIDE = 0.002; // fraction of the focused body's depth per degree
+const WIN_D = 0.6;        // window depth as a fraction of the focused body's depth
 const tiltOff = new THREE.Vector3();
 const _tiltPrev = new THREE.Vector3();
 const _tiltAx = new THREE.Vector3();
+const _winP = new THREE.Vector3();
+const _winS = new THREE.Vector3();
+const _winQ = new THREE.Quaternion();
 /** Fixed mobile-orrery camera in world space: the root-local pose (lib/orrery) through solarRoot. */
 function orreryCamera(scene: THREE.Scene, pos: THREE.Vector3, look: THREE.Vector3): boolean {
   const root = scene.getObjectByName('solarRoot');
@@ -909,6 +917,7 @@ export default function CameraRig() {
     const cam = state.camera as THREE.PerspectiveCamera;
     const t = state.clock.elapsedTime;
     _tiltPrev.copy(tiltOff); tiltOff.set(0, 0, 0);
+    if (cam.view?.enabled) cam.clearViewOffset();
 
     // B7 — advance the reveal latch once per DRAWN frame, before anything reads it. While
     // it is held the curtain is pinned shut; afterwards it eases open on a wall clock and
@@ -1422,15 +1431,39 @@ export default function CameraRig() {
           } else {
             applyPose(cam, _tourPos, _tourLook, _tourLook, ORR.fov, 0.5, dt, dtNominal.current);
             const tl = stepTilt(dt);
+            _winQ.copy(cam.quaternion);
+            const fk = TOUR_SECTIONS[store.tourStop]?.focus;
+            const focus = fk === 'belt' ? beltTourAnchor : (fk && planetPositions.get(fk)) || _tourLook;
             if (!flight.on && (tl.x || tl.y)) {
+              cam.getWorldDirection(_tiltAx);
+              const z = Math.max(0.1, _winP.copy(focus).sub(cam.position).dot(_tiltAx));
+              const dR = tl.x * TILT_SLIDE * z;
+              const dU = -tl.y * TILT_SLIDE * z;
               _tiltAx.set(1, 0, 0).applyQuaternion(cam.quaternion);
-              tiltOff.addScaledVector(_tiltAx, tl.x * TILT_SLIDE);
+              tiltOff.addScaledVector(_tiltAx, dR);
               _tiltAx.set(0, 1, 0).applyQuaternion(cam.quaternion);
-              tiltOff.addScaledVector(_tiltAx, -tl.y * TILT_SLIDE);
+              tiltOff.addScaledVector(_tiltAx, dU);
               cam.position.add(tiltOff);
-              cam.rotateY(-tl.x * TILT_TURN * DEG2RAD);
-              cam.rotateX(-tl.y * TILT_TURN * DEG2RAD);
+              // Window half-height at depth D is D * tan(fov/2); a full view is 2x that. The
+              // offset is in view fractions; three's offsetY runs top-down, hence the sign.
+              // setViewOffset REPLACES cam.aspect with fullWidth / fullHeight, so the full view
+              // is passed as (aspect x 1) to keep the viewport's own aspect.
+              const winH = 2 * WIN_D * z * Math.tan((cam.fov * DEG2RAD) / 2);
+              const a = cam.aspect;
+              cam.setViewOffset(a, 1, -dR / winH, dU / winH, a, 1);
             }
+            // Read-only verification handle: NDC of the focused body and of a far point on the
+            // pose's sightline, so the window parallax can be measured against tilt 0.
+            cam.updateMatrixWorld();
+            _winP.copy(focus).project(cam);
+            _winS.copy(_tourLook).sub(_tourPos).setLength(5000).add(_tourLook).project(cam);
+            (window as unknown as { __win?: unknown }).__win = {
+              ox: cam.view?.enabled ? cam.view.offsetX / cam.view.fullWidth : 0, oy: cam.view?.enabled ? cam.view.offsetY : 0,
+              aspect: cam.aspect,
+              planet: fk, planetNdc: [_winP.x, _winP.y], starNdc: [_winS.x, _winS.y],
+              quat: [cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w],
+              turn: cam.quaternion.angleTo(_winQ), // rad the tilt turned the camera this frame; 0 by design
+            };
           }
         } else if (store.scrollDriven && arrivedViaDive.current && scrollProgress >= SWAP_V) {
           // T7a: scroll-driven arrival dolly. The far entry pose eases to the overview
