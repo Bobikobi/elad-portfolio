@@ -35,7 +35,6 @@ const LINE_REST = 0.035;   // line opacity at rest - criterion: <= 12% brightnes
 const LINE_HOT = 0.62;       // hovered
 const HIT_MOUSE = 14;        // px from a segment that counts as hovering it
 const HIT_TOUCH = 28;
-const TAP_HOLD = 3.2;        // s a tapped figure stays lit on touch
 const DEG = Math.PI / 180;
 
 function skyPoint(lon: number, lat: number, out: THREE.Vector3) {
@@ -77,6 +76,7 @@ export default function Constellations() {
   const group = useRef<THREE.Group>(null);
   const hot = useRef(-1);
   const tapUntil = useRef(0);
+  const lit = useRef(-1); // the figure a tap lit (touch)
   const vis = useRef(0);
 
   const { stars, lines, world, polaris } = useMemo(() => {
@@ -195,11 +195,17 @@ export default function Constellations() {
       if (shared.tap) {
         const hit = nearest(shared.tap.x, shared.tap.y, HIT_TOUCH);
         // A tap that landed on a planet belongs to the planet.
-        if (hit >= 0 && !s.hoveredBody) { hot.current = hit; tapUntil.current = now + TAP_HOLD; }
+        // A tapped figure stays lit until the next tap lands anywhere else, or it turns out of
+        // frame with the swipe (Elad, 2026-09-29: the name used to vanish on a timer instead).
+        if (hit >= 0 && !s.hoveredBody) { lit.current = hit; tapUntil.current = Infinity; }
+        else tapUntil.current = 0;
         shared.tap = null;
       }
-      if (now < tapUntil.current && !s.hoveredBody) next = hot.current;
-      else if (!shared.touch && !shared.down && !s.hoveredBody) next = nearest(shared.x, shared.y, HIT_MOUSE);
+      if (now < tapUntil.current && !s.hoveredBody && onScreen[lit.current]) next = lit.current;
+      else {
+        tapUntil.current = 0; // a body's card took over, or the figure left the frame
+        if (!shared.touch && !shared.down && !s.hoveredBody) next = nearest(shared.x, shared.y, HIT_MOUSE);
+      }
     } else shared.tap = null;
     hot.current = next;
 
