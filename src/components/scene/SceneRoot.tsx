@@ -20,6 +20,7 @@ import { FramePacer, ResolutionScaler } from './PerfPacer';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
+import TourSky from './TourSky';
 import {
   ClockFreezeProbe,
   HudProbe,
@@ -128,19 +129,21 @@ export default function SceneRoot() {
         <group visible={act === 'galaxy'}>
           <SeededStars radius={84} depth={64} count={high ? 13000 : 4000} factor={4} saturation={0.55} fade speed={0.5} />
         </group>
-        <HeroStars />
-        {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
-            In the solar act the veils drop to a faint backdrop so they read as distant
-            nebulosity, not the milky haze that used to wash the poster frame - corners
-            stay <10% brightness but never empty (stars + a nebula touch everywhere). */}
-        {/* B4: 0.28 left the solar sky effectively empty, which is most of why the worlds
-            read as faded. The veils are a BACKDROP, not a rumour of one. */}
-        {/* GALAXY-REST: `anchor` is the gold "galaxy we dived out of". It belongs to the solar
-            act, where we HAVE dived out of one; in the welcome frame it is a bright gold ellipse
-            hanging half off the left border, and it is what the edge measurement was reading
-            there all along - 10.3 of the left band's 10.3, in master as well. Solar keeps it at
-            exactly its old strength; the swap happens behind DiveFade's black. */}
-        <Nebula intensity={act === 'solar' ? 0.5 : 1} anchor={act === 'solar' ? 1 : 0} />
+        <TourSky>
+          <HeroStars />
+          {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
+              In the solar act the veils drop to a faint backdrop so they read as distant
+              nebulosity, not the milky haze that used to wash the poster frame - corners
+              stay <10% brightness but never empty (stars + a nebula touch everywhere). */}
+          {/* B4: 0.28 left the solar sky effectively empty, which is most of why the worlds
+              read as faded. The veils are a BACKDROP, not a rumour of one. */}
+          {/* GALAXY-REST: `anchor` is the gold "galaxy we dived out of". It belongs to the solar
+              act, where we HAVE dived out of one; in the welcome frame it is a bright gold ellipse
+              hanging half off the left border, and it is what the edge measurement was reading
+              there all along - 10.3 of the left band's 10.3, in master as well. Solar keeps it at
+              exactly its old strength; the swap happens behind DiveFade's black. */}
+          <Nebula intensity={act === 'solar' ? 0.5 : 1} anchor={act === 'solar' ? 1 : 0} />
+        </TourSky>
         {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
         {act === 'solar' && <Constellations />}
         {/* In-world swap curtain - persists across the act swap, covers the seam. */}
