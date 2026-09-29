@@ -551,7 +551,7 @@ const _orrTmp = new THREE.Vector3();
 // planet. Scaling by the body's own depth (earth sits at ~0.7x the look distance, saturn ~1.5x)
 // keeps the effect the same at every stop. The slide is taken off again at the top of the next
 // frame (and the view offset cleared) so the pose damping never sees it.
-const TILT_SLIDE = 0.004; // fraction of the focused body's depth per degree
+const TILT_SLIDE = 0.002; // fraction of the focused body's depth per degree
 const WIN_D = 0.6;        // window depth as a fraction of the focused body's depth
 const tiltOff = new THREE.Vector3();
 const _tiltPrev = new THREE.Vector3();
@@ -1444,8 +1444,11 @@ export default function CameraRig() {
               cam.position.add(tiltOff);
               // Window half-height at depth D is D * tan(fov/2); a full view is 2x that. The
               // offset is in view fractions; three's offsetY runs top-down, hence the sign.
+              // setViewOffset REPLACES cam.aspect with fullWidth / fullHeight, so the full view
+              // is passed as (aspect x 1) to keep the viewport's own aspect.
               const winH = 2 * WIN_D * z * Math.tan((cam.fov * DEG2RAD) / 2);
-              cam.setViewOffset(1, 1, -dR / (winH * cam.aspect), dU / winH, 1, 1);
+              const a = cam.aspect;
+              cam.setViewOffset(a, 1, -dR / winH, dU / winH, a, 1);
             }
             // Read-only verification handle: NDC of the focused body and of a far point on the
             // pose's sightline, so the window parallax can be measured against tilt 0.
@@ -1453,7 +1456,8 @@ export default function CameraRig() {
             _winP.copy(focus).project(cam);
             _winS.copy(_tourLook).sub(_tourPos).setLength(5000).add(_tourLook).project(cam);
             (window as unknown as { __win?: unknown }).__win = {
-              ox: cam.view?.enabled ? cam.view.offsetX : 0, oy: cam.view?.enabled ? cam.view.offsetY : 0,
+              ox: cam.view?.enabled ? cam.view.offsetX / cam.view.fullWidth : 0, oy: cam.view?.enabled ? cam.view.offsetY : 0,
+              aspect: cam.aspect,
               planet: fk, planetNdc: [_winP.x, _winP.y], starNdc: [_winS.x, _winS.y],
               quat: [cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w],
               turn: cam.quaternion.angleTo(_winQ), // rad the tilt turned the camera this frame; 0 by design
