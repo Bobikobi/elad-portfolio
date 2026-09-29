@@ -51,6 +51,9 @@ export function stepTilt(dt: number) {
   const a = 1 - Math.exp(-dt / SMOOTH);
   tilt.x += (raw.x - tilt.x) * a;
   tilt.y += (raw.y - tilt.y) * a;
+  // Verification handle, present in production like PerfPacer's `__perf` - read-only, no
+  // secrets, and the only way to measure real-device tilt against the on-screen effect.
+  if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__tilt = { ...tilt };
   return tilt;
 }
 
