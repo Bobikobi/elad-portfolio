@@ -432,6 +432,13 @@ html[lang='ru'] .world-body {
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
+/* Phone (GPT review, 2026-09-28): a phone is held further from the eye than its pixels
+   suggest - body copy 17px, secondary text and chips never under 14px. Desktop keeps B9. */
+@media (max-width: 767px) {
+  .world-title { font-size: 1.25rem; }
+  .world-body { font-size: 1.0625rem; }
+  .world-chip, .world-eyebrow { font-size: 0.875rem; }
+}
 
 /* ===== Projects ring (B8b) ===== */
 /* The windows are SVG <path> annular sectors; this is only their skin. The hairline has

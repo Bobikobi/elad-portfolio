@@ -1,5 +1,3 @@
-import { TOUR_SECTIONS } from '@/lib/sections';
-
 /**
  * Mobile orrery geometry, in the solar root's own frame (sun at the origin, orbits in the x/z plane).
  *
@@ -10,14 +8,10 @@ import { TOUR_SECTIONS } from '@/lib/sections';
  * its real distance from the sun; only the angle changes.
  */
 /** Orbit radii of the five carousel stops, in TOUR_SECTIONS order (earth, mars, belt,
- *  jupiter, saturn) — must track each planet's `orbit` in SolarAct.tsx (and the belt's
- *  own ring radius, BELT_RING_R in CameraRig.tsx). Exported so CameraRig can size the
- *  continuous-orbit drift compensation for the selected stop without importing SolarAct. */
+ *  jupiter, saturn) - must track each planet's `orbit` in SolarAct.tsx (and the belt's
+ *  own ring radius, BELT_RING_R in CameraRig.tsx). DragControls uses them to turn finger
+ *  pixels into carousel position 1:1. */
 export const TOUR_ORBIT_R = [3.35, 4.25, 5.1, 6.3, 8.0];
-/** rad/s baseline for the mobile tour's continuous orbit motion: each star's own rate is
- *  BASE_RATE / orbit^1.5 (a Kepler-ish falloff), so saturn (orbit 8.0) drifts at ~0.005
- *  rad/s and earth (orbit 3.35) at ~0.018 rad/s. */
-export const BASE_RATE = 0.113;
 
 export const ORR = {
   CR: 2.8,    // camera distance from the sun centre (sun radius is 1.5)
@@ -60,11 +54,30 @@ function rayAngle(g: OrrGeom, R: number): number {
 }
 
 /** Orbit angle a carousel star of radius R and index idx takes at carousel position pos.
- *  Uses the shortest circular path so the carousel wraps seamlessly at the N-stop boundary. */
-export function orrSlot(R: number, idx: number, pos: number, g: OrrGeom = orrGeom(), N = TOUR_SECTIONS.length): number {
-  const raw = idx - pos;
-  const d = ((raw % N + N + N / 2) % N) - N / 2;
-  return rayAngle(g, R) + d * ORR.SP * g.dir;
+ *  Linear, no wrap: the carousel has two ends (0 and N-1) and resists past them. */
+export function orrSlot(R: number, idx: number, pos: number, g: OrrGeom = orrGeom()): number {
+  return rayAngle(g, R) + (idx - pos) * ORR.SP * g.dir;
+}
+
+/** Screen pixels the star at stop `idx` moves per unit of carousel position, at rest on the
+ *  view ray. Projects two nearby slots through the fixed orrery camera, in the root frame
+ *  (the camera's up is the orbital plane's normal, so the root's own tilt cancels out). */
+export function orrPxPerStop(idx: number, width: number, height: number): number {
+  const g = orrGeom();
+  const R = TOUR_ORBIT_R[Math.max(0, Math.min(TOUR_ORBIT_R.length - 1, idx))];
+  const { pos, look } = orrPose(g);
+  let fx = look[0] - pos[0], fy = look[1] - pos[1], fz = look[2] - pos[2];
+  const fl = Math.hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
+  // right = forward x up, up = +y
+  let rx = -fz, rz = fx; const rl = Math.hypot(rx, rz); rx /= rl; rz /= rl;
+  const focal = height / 2 / Math.tan((ORR.fov * Math.PI) / 360);
+  const sx = (p: number) => {
+    const an = orrSlot(R, idx, p, g);
+    const px = Math.cos(an) * R - pos[0], py = -pos[1], pz = Math.sin(an) * R - pos[2];
+    return (focal * (px * rx + pz * rz)) / (px * fx + py * fy + pz * fz) + width / 2;
+  };
+  const e = 0.02;
+  return Math.abs(sx(idx + e) - sx(idx - e)) / (2 * e);
 }
 
 /** Fixed camera and look point, in the root's local frame. */

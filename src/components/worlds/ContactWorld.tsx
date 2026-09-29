@@ -16,7 +16,7 @@ const CHIPS = [
 export default function ContactWorld({ locale }: { locale: Locale }) {
   return (
     <div className="text-start">
-      <p className="mb-5 text-sm text-[var(--color-star-white)]/70">{t('contact.subtitle', locale)}</p>
+      <p className="mb-5 text-[17px] md:text-sm text-[var(--color-star-white)]/70">{t('contact.subtitle', locale)}</p>
       <ContactForm />
       <div className="mt-6 flex flex-wrap gap-2">
         {CHIPS.map((c) => (
@@ -25,7 +25,7 @@ export default function ContactWorld({ locale }: { locale: Locale }) {
             href={c.href}
             target={c.href.startsWith('http') ? '_blank' : undefined}
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-xs text-[var(--color-star-white)]/75 transition-colors hover:border-[var(--color-core-gold)]/40 hover:text-[var(--color-core-gold)]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-[14px] md:text-xs text-[var(--color-star-white)]/75 transition-colors hover:border-[var(--color-core-gold)]/40 hover:text-[var(--color-core-gold)]"
           >
             <c.icon size={13} />
             {c.label}

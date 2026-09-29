@@ -1,5 +1,5 @@
 'use client';
-import { orrSlot, BASE_RATE } from '@/lib/orrery';
+import { orrSlot } from '@/lib/orrery';
 import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useCursor } from '@react-three/drei';
@@ -932,17 +932,15 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     // clouds, night lights, haze flow, twinkle, and the B5 vantage breath in CameraRig.
     if (!useScene.getState().focusedPlanet) angle.current += dt * spec.speed;
     // Mobile orrery: while the carousel is showing, a carousel star's angle is set by the
-    // swipe position (see lib/orrery), on its own orbit - plus a slow, continuous drift so
-    // the carousel still visibly orbits the sun even at rest (Elad: "stars don't rotate
-    // around the sun"). Rate falls off with distance (BASE_RATE / orbit^1.5), so saturn
-    // creeps at ~0.005 rad/s and earth at ~0.018 rad/s. A focused world keeps the angle it had.
+    // swipe position (see lib/orrery), on its own orbit. No drift at rest: the selected star
+    // stays on the view ray (a drift walked it off-screen within a minute). A focused world
+    // keeps the angle it had.
     {
       const st = useScene.getState();
       if (st.tourMode && !st.focusedPlanet) {
         const ti = TOUR_SECTIONS.findIndex((x) => x.focus === spec.key);
         if (ti >= 0) {
-          const drift = state.clock.elapsedTime * (BASE_RATE / Math.pow(spec.orbit, 1.5));
-          angle.current = orrSlot(spec.orbit, ti, st.tourPos) + drift;
+          angle.current = orrSlot(spec.orbit, ti, st.tourPos);
         }
       }
     }
@@ -1004,7 +1002,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         eclipseRawReport[spec.key] = +target.toFixed(4);
       }
     }
-    if (mesh.current) mesh.current.rotation.y += dt * 0.3;
+    // Mobile: ~1 deg/s, so a world's continents hold still while it is read (0.3 rad/s
+    // swapped them within seconds). Desktop keeps its reviewed spin.
+    if (mesh.current) mesh.current.rotation.y += dt * (useScene.getState().tourMode ? 0.02 : 0.3);
   });
 
   const bind =

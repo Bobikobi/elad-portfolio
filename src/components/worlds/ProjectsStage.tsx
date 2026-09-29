@@ -157,6 +157,7 @@ export default function ProjectsStage({
     const shownActive = { current: -2 };
     const shownCount = { current: -1 };
     const countEl = document.querySelector<HTMLElement>('[data-ring-count]')!;
+    const introEl = document.querySelector<HTMLElement>('[data-projects-intro]');
     /** The preview image's box in CANONICAL space, as the last rebuild placed it. The
      *  per-frame upright correction rotates about its centre. */
     const photoBox = { x: 0, y: 0, w: 0, h: 0 };
@@ -949,6 +950,9 @@ export default function ProjectsStage({
         panelDesc.textContent = src?.dataset.desc ?? '';
         panelTech.textContent = src?.dataset.tech ?? '';
         panel.style.opacity = src ? '1' : '0';
+        // Portrait: at the phone type sizes the words need the strip the heading sits in, so the
+        // heading steps aside while a project is described instead of the two overprinting.
+        if (introEl) introEl.style.opacity = src && portrait ? '0' : '';
         // The way into a project on a phone. A tap on the preview now TOGGLES the words
         // rather than entering (NEW-4), so without this a touch visitor could read about
         // twelve projects and open none of them.
@@ -979,8 +983,10 @@ export default function ProjectsStage({
       const px = (m.portrait ? (vw - pw) / 2 : m.cx - m.sweep * (m.R * 0.3) - pw / 2)
         + (m.portrait ? slide.current : 0);
       panel.style.width = `${pw.toFixed(0)}px`;
-      panel.style.setProperty('--panel-title', m.portrait ? '1.1rem' : '1.6rem');
-      panel.style.setProperty('--panel-body', m.portrait ? '0.8125rem' : '0.9375rem');
+      // Phone floor (GPT review, 2026-09-28): body 17px, secondary lines 14px.
+      panel.style.setProperty('--panel-title', m.portrait ? '1.25rem' : '1.6rem');
+      panel.style.setProperty('--panel-body', m.portrait ? '1.0625rem' : '0.9375rem');
+      panel.style.setProperty('--panel-small', m.portrait ? '0.875rem' : '0.75rem');
 
       // THE WORDS MUST NOT SIT ON THE PICTURES.
       //
@@ -1067,7 +1073,7 @@ export default function ProjectsStage({
           transition: arrived && !motionOff ? 'opacity 0.45s ease-out' : 'none',
         }}
       >
-        <div className="pointer-events-auto">
+        <div data-projects-intro className="pointer-events-auto transition-opacity duration-300">
           <h1 className="text-2xl text-[var(--color-star-white)] md:text-3xl">{title}</h1>
           {/* Saturn's rings run pale/cream behind this header in the mobile orrery, and
               `p` is reset to text-shadow: none globally (globals.css) - the header text
@@ -1084,7 +1090,7 @@ export default function ProjectsStage({
           <p
             data-ring-count
             aria-hidden
-            className="mt-1 font-mono text-xs tracking-widest text-[var(--color-core-gold)]/70"
+            className="mt-1 font-mono text-[14px] md:text-xs tracking-widest text-[var(--color-core-gold)]/70"
             style={{ textShadow: 'var(--text-glow-heading)' }}
           />
         </div>
@@ -1152,7 +1158,7 @@ export default function ProjectsStage({
         <div
           data-panel-tech
           className="mt-2.5 text-[var(--color-core-gold)]/85"
-          style={{ fontSize: '0.75rem', letterSpacing: '0.04em' }}
+          style={{ fontSize: 'var(--panel-small, 0.75rem)', letterSpacing: '0.04em' }}
         />
         {/* Empty except on a tap-armed panel that has somewhere to go - see the frame loop.
             It is the ONLY part of the words that is ever a click target, and only on touch;
@@ -1160,7 +1166,7 @@ export default function ProjectsStage({
         <div
           data-panel-visit
           className="mt-3 inline-flex items-center rounded-full border border-[var(--color-core-gold)]/45 px-3 py-1 text-[var(--color-core-gold)] empty:hidden"
-          style={{ fontSize: '0.8125rem', letterSpacing: '0.06em', pointerEvents: 'none' }}
+          style={{ fontSize: 'max(var(--panel-small, 0.75rem), 0.8125rem)', letterSpacing: '0.06em', pointerEvents: 'none' }}
         />
       </div>
 

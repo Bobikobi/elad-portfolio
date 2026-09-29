@@ -22,7 +22,7 @@ export default function TourDots() {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-9 z-20 flex justify-center">
-      <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-white/12 bg-[rgba(5,7,20,0.45)] px-4 py-2.5 shadow-[0_6px_24px_rgba(5,7,20,0.5)] backdrop-blur-md">
+      <div className="pointer-events-auto flex items-center rounded-full border border-white/12 bg-[rgba(5,7,20,0.45)] px-1 shadow-[0_6px_24px_rgba(5,7,20,0.5)] backdrop-blur-md">
         {TOUR_SECTIONS.map((s, i) => {
           const active = i === stop;
           return (
@@ -32,10 +32,15 @@ export default function TourDots() {
               aria-label={t(s.navKey)}
               aria-current={active ? 'true' : undefined}
               onClick={() => setTourStop(i)}
-              className={`h-2.5 rounded-full transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)] ${
-                active ? 'w-6 bg-[var(--color-core-gold)]' : 'w-2.5 bg-white/35 hover:bg-white/60'
-              }`}
-            />
+              // 44px touch target around a small visual dot (the dot alone was 10px).
+              className="group flex h-11 w-9 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)]"
+            >
+              <span
+                className={`block h-2.5 rounded-full transition-all duration-300 ${
+                  active ? 'w-6 bg-[var(--color-core-gold)]' : 'w-2.5 bg-white/35 group-hover:bg-white/60'
+                }`}
+              />
+            </button>
           );
         })}
       </div>

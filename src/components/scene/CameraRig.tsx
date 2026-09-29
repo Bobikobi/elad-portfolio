@@ -1,5 +1,5 @@
 'use client';
-import { ORR, orrGeom, orrPose, orrSlot, TOUR_ORBIT_R, BASE_RATE } from '@/lib/orrery';
+import { ORR, orrGeom, orrPose, orrSlot } from '@/lib/orrery';
 import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { damp, damp3 } from 'maath/easing';
@@ -638,6 +638,13 @@ const flight = {
   fromFov: 45,
   lastAim: new THREE.Vector3(),
 };
+// Mobile dive: the side of the planet the camera approached from (planet -> camera, unit),
+// captured when the dive starts. The world pose then stands on THAT side instead of the
+// sun-solved vantage, so the dive is a straight push-in: measured before, the solved vantage
+// swung the camera 91 deg round Mars and took it off-screen on the way.
+const tourApproach = new THREE.Vector3();
+let tourApproachFor: string | null = null;
+const _fLook = new THREE.Vector3();
 const _fDir0 = new THREE.Vector3();
 const _fDir3 = new THREE.Vector3();
 const _fDir = new THREE.Vector3();
@@ -679,6 +686,11 @@ function startFlight(cam: THREE.PerspectiveCamera, leaving: string | null, going
   flight.leaving = leaving;
   flight.going = going;
   flight.direct = useScene.getState().tourMode;
+  const bp = going ? planetPositions.get(going) : undefined;
+  if (flight.direct && bp) {
+    tourApproach.copy(cam.position).sub(bp).normalize();
+    tourApproachFor = going;
+  }
   flight.dur = 0; // sized on the first frame, once the destination pose is known
 }
 
@@ -778,7 +790,7 @@ function applyPose(
     return;
   }
   if (flight.dur === 0) {
-    if (flight.direct) { flight.lift = 0; flight.dur = 1.3; flight.turn = 0.7; }
+    if (flight.direct) { flight.lift = 0; flight.dur = flight.going ? 0.9 : 0.7; flight.turn = 1; }
     else {
       flight.lift = chooseLift(aim, pos);
       planFlight(pos, look, aim);
@@ -790,12 +802,14 @@ function applyPose(
   flightPoint(cam.position, aim, pos, s, flight.lift);
   cam.fov = flight.fromFov + (fov - flight.fromFov) * smoother(s);
 
-  // Direct (mobile tour): straight-line dolly, but the turn to face the planet is gradual —
-  // slerp from the starting orientation toward "look at aim from here" and rate-limit per
-  // frame, same as the arc flight below, so the camera swings smoothly instead of snapping.
+  // Direct (mobile tour): straight-line dolly. The view heads for the planet early (it stays in
+  // frame and grows) and hands over to the pose's own look point by the end, so the flight
+  // lands exactly on the orientation the resting pose will keep - no final turn. The old
+  // version ended aimed at the planet and then snapped 13.6 deg to the offset look point.
   if (flight.direct) {
-    lookQuat(_fDest, cam.position, aim);
-    const target = _tmpQ.copy(flight.fromQ).slerp(_fDest, smoother(s));
+    _fLook.copy(aim).lerp(look, smoother(s));
+    lookQuat(_fDest, cam.position, _fLook);
+    const target = _tmpQ.copy(flight.fromQ).slerp(_fDest, smoother(Math.min(1, s / 0.6)));
     const maxStep = Math.min(FLIGHT_TURN_RATE * step, FLIGHT_TURN_STEP * (nominal > 1 / 30 ? nominal * 60 : 1));
     cam.quaternion.rotateTowards(target, maxStep);
     if (s >= 1 && cam.quaternion.angleTo(_fDest) < 0.002) flight.on = false;
@@ -1288,7 +1302,8 @@ export default function CameraRig() {
             else _planeN.set(0, 1, 0);
           }
           if (vantageFor.current !== focused) { vantageFor.current = focused as string; vantagePhi.current = null; }
-          const phi = orbitVantage(
+          const approach = store.tourMode && tourApproachFor === focused;
+          const phi = approach ? 0 : orbitVantage(
             _camDir,
             _sunDir,
             _planeN,
@@ -1299,7 +1314,8 @@ export default function CameraRig() {
           );
           // Commit the branch only once the planet has a real position: a body not yet
           // placed sits at the origin, and a choice made there is arbitrary.
-          vantagePhi.current = _sunDir.lengthSq() > 0.5 ? phi : null;
+          if (approach) _camDir.copy(tourApproach);
+          else vantagePhi.current = _sunDir.lengthSq() > 0.5 ? phi : null;
           _orbitPos.copy(pp).addScaledVector(_camDir, d);
           _orbitPos.x += Math.sin(t * 0.2) * 0.03 * d; // living micro-drift
           _orbitPos.y += Math.cos(t * 0.15) * 0.02 * d;
@@ -1357,25 +1373,20 @@ export default function CameraRig() {
             if (store.tourDrag) {
               tourSpringVel.current = 0;
             } else {
-              const N = TOUR_SECTIONS.length;
-              // The selected star keeps drifting on its own orbit (SolarAct) even while the
-              // carousel sits still, so the spring's target has to drift with it — otherwise
-              // the selected stop settles and then slides off the fixed view ray as the star
-              // moves on. Same rate as SolarAct's BASE_RATE / orbit^1.5, converted from
-              // rad/s to slots/s by ORR.SP (rad between neighbouring stops).
-              const stopIdx = ((store.tourStop % N) + N) % N;
-              const driftSlots = (state.clock.elapsedTime * (BASE_RATE / Math.pow(TOUR_ORBIT_R[stopIdx], 1.5))) / ORR.SP;
-              const target = store.tourStop + driftSlots;
-              const raw = target - store.tourPos;
-              const diff = ((raw % N + N + N / 2) % N) - N / 2;
-              if (wasDragging) tourSpringVel.current = Math.max(-3, Math.min(3, store.tourVel));
-              // Damped spring: omega=14 rad/s, zeta=0.72 (slight undershoot feel)
-              tourSpringVel.current += (196 * diff - 20.16 * tourSpringVel.current) * dt;
-              const nextMod = ((store.tourPos + tourSpringVel.current * dt) % N + N) % N;
+              const target = store.tourStop;
+              const diff = target - store.tourPos; // linear: the carousel has ends, no wrap
+              // Critically damped spring, omega=24, zeta=1: lands in ~250ms with no overshoot.
+              // The release velocity is kept only up to what the spring can absorb without
+              // crossing the stop (v <= omega*|diff| toward it), so a flick never bounces.
+              if (wasDragging) {
+                const v = store.tourVel;
+                tourSpringVel.current = Math.sign(v) === Math.sign(diff) ? Math.sign(v) * Math.min(Math.abs(v), 24 * Math.abs(diff) * 0.9) : 0;
+              }
+              tourSpringVel.current += (576 * diff - 48 * tourSpringVel.current) * dt;
               if (Math.abs(diff) < 0.002 && Math.abs(tourSpringVel.current) < 0.02) {
-                store.setTourPos(((target % N) + N) % N);
+                store.setTourPos(target);
               } else {
-                store.setTourPos(nextMod);
+                store.setTourPos(store.tourPos + tourSpringVel.current * dt);
               }
             }
           }

@@ -4,6 +4,7 @@ import { useScene } from '@/lib/sceneStore';
 import { TOUR_SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
 import { overviewElevDeg } from './CameraRig';
+import { orrPxPerStop } from '@/lib/orrery';
 
 /**
  * Drag-to-rotate (T6). A pointer layer that writes a yaw/pitch OFFSET into the store;
@@ -25,6 +26,15 @@ const ELEV_MAX = 80;
 const ELEV_MIN = -45;
 const PLANE_TILT_DEG = (0.42 * 180) / Math.PI; // SolarAct's solarRoot rotation.x
 const THRESHOLD = 5;      // px - separates a rotate-drag from a navigating tap
+// Mobile carousel gesture (GPT review, 2026-09-28): a drag is recognised after 8px when it is
+// clearly horizontal; the star follows the finger 1:1; release commits past 22% of a stop or on
+// a flick; one stop per gesture; the two ends resist over at most 24px instead of wrapping.
+const TOUR_THRESHOLD = 8;
+const TOUR_H_RATIO = 1.25;
+const TOUR_COMMIT = 0.22;         // stops
+const TOUR_FLICK_V = 0.45;        // px/ms, measured over the last 80ms
+const TOUR_FLICK_MIN = 12;        // px of total travel before a flick counts
+const TOUR_OVERSCROLL = 24;       // px
 // Positive pitch LOWERS the camera (CameraRig.applyOrbit), so the rest elevation sets both ends.
 const clampPitch = (p: number) => {
   const rest = overviewElevDeg(window.innerWidth / window.innerHeight) + PLANE_TILT_DEG;
@@ -65,7 +75,8 @@ export default function DragControls() {
     // since then, in stop-units. displayPos is a resisted function of tourRaw, never the
     // raw finger delta itself, so the carousel never shows a position past the neighbouring
     // stop while dragging.
-    let tourAnchor = 0, tourRaw = 0;
+    let tourAnchor = 0, tourRaw = 0, tourPx = 300;
+    let tourSamples: { t: number; x: number }[] = [];
 
     const stopInertia = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
     const inertia = () => {
@@ -86,22 +97,29 @@ export default function DragControls() {
 
     const onDown = (e: PointerEvent) => {
       useScene.getState().setDragMoved(false);
-      if ((e.target as HTMLElement)?.tagName !== 'CANVAS' || !canDrag()) return;
+      // Mobile orrery: the centred star's label sits right under it, so a swipe that starts on
+      // it must still move the carousel (its click is skipped via dragMoved).
+      const tgt = e.target as HTMLElement | null;
+      const onCanvas = tgt?.tagName === 'CANVAS' || (isTour() && !!tgt?.closest('[data-planet-label]'));
+      if (!onCanvas || !canDrag()) return;
       stopInertia();
       active = true; dragging = false; horiz = null;
       startX = lastX = e.clientX; startY = lastY = e.clientY; lastT = performance.now();
       vYaw = vPitch = 0;
       tourAnchor = useScene.getState().tourStop; tourRaw = 0;
+      tourPx = orrPxPerStop(tourAnchor, window.innerWidth, window.innerHeight) || 300;
+      tourSamples = [{ t: performance.now(), x: e.clientX }];
       setCursor('grabbing');
     };
     const onMove = (e: PointerEvent) => {
       if (!active) return;
       const totX = e.clientX - startX, totY = e.clientY - startY;
       if (!dragging) {
-        if (Math.hypot(totX, totY) <= THRESHOLD) return;
+        const tour = isTour() && e.pointerType === 'touch';
+        if (Math.hypot(totX, totY) <= (tour ? TOUR_THRESHOLD : THRESHOLD)) return;
         // Touch: lock to the dominant axis — horizontal rotates, vertical is left to
-        // the page (dive scroll).
-        horiz = e.pointerType === 'touch' ? Math.abs(totX) > Math.abs(totY) : true;
+        // the page (dive scroll). The carousel wants a clearly horizontal start.
+        horiz = e.pointerType === 'touch' ? Math.abs(totX) > Math.abs(totY) * (tour ? TOUR_H_RATIO : 1) : true;
         if (!horiz) { active = false; setCursor(canDrag() ? 'grab' : ''); return; }
         dragging = true;
         useScene.getState().setDragMoved(true);
@@ -109,25 +127,26 @@ export default function DragControls() {
         try { localStorage.setItem('seen-drag-hint', '1'); } catch { /* private mode */ }
       }
       if (!canDrag()) return;
-      // Mobile orrery: detent scroll, not freeform. A full-screen swipe is one stop of RAW
-      // displacement, but the carousel only ever shows a resisted (eased, clamped) fraction
-      // of it - the finger can drag past a stop, the carousel never visibly does. onUp turns
-      // that raw displacement into a snap: past 40% of a stop, advance; short of it, spring
-      // back to the stop the drag started from.
+      // Mobile orrery: the star under the finger follows it 1:1 in screen space (pixels are
+      // turned into carousel position by the fixed camera's own projection), clamped to one
+      // stop either way, and past the first/last stop it gives at most TOUR_OVERSCROLL px.
       if (isTour()) {
         const s = useScene.getState();
         const now = performance.now();
-        const dPos = -(e.clientX - lastX) / window.innerWidth;
         const N = TOUR_SECTIONS.length;
-        tourRaw += dPos;
-        const clamped = Math.max(-1, Math.min(1, tourRaw));
-        // easeOutCubic, sign-preserving: fast near zero, flattens toward +-1 stop.
-        const eased = Math.sign(clamped) * (1 - Math.pow(1 - Math.abs(clamped), 3));
-        const raw = tourAnchor + eased;
-        const next = ((raw % N) + N) % N;
-        vTour = dPos / Math.max(0.001, (now - lastT) / 1000);
+        tourRaw = -(e.clientX - startX) / tourPx;
+        let pos = tourAnchor + Math.max(-1, Math.min(1, tourRaw));
+        const over = pos < 0 ? pos : pos > N - 1 ? pos - (N - 1) : 0;
+        if (over) {
+          const px = Math.abs(over) * tourPx;
+          pos -= over - Math.sign(over) * (TOUR_OVERSCROLL * (1 - Math.exp(-px / TOUR_OVERSCROLL))) / tourPx;
+        }
+        tourSamples.push({ t: now, x: e.clientX });
+        while (tourSamples.length > 2 && now - tourSamples[0].t > 80) tourSamples.shift();
+        const dtS = Math.max(0.001, (now - lastT) / 1000);
+        vTour = -(e.clientX - lastX) / tourPx / dtS;
         s.setTourDrag(true);
-        s.setTourPos(next);
+        s.setTourPos(pos);
         lastX = e.clientX; lastY = e.clientY; lastT = now;
         return;
       }
@@ -144,14 +163,15 @@ export default function DragControls() {
     };
     const onUp = () => {
       if (dragging && useScene.getState().tourDrag) {
-        // Detent release: past 40% of a stop, advance to the neighbour; short of it, spring
-        // back to the stop the drag started from. Displacement only - the eased on-screen
-        // position during the drag already absorbed the fling feel.
+        // Release: past TOUR_COMMIT of a stop, or a flick (speed over the last 80ms), moves one
+        // stop in the drag's direction; otherwise spring back. Never past either end.
         const s = useScene.getState();
         const N = TOUR_SECTIONS.length;
-        const clamped = Math.max(-1, Math.min(1, tourRaw));
-        const advance = Math.abs(clamped) > 0.4 ? Math.sign(clamped) : 0;
-        const stop = (((tourAnchor + advance) % N) + N) % N;
+        const first = tourSamples[0], last = tourSamples[tourSamples.length - 1];
+        const flickV = first && last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0; // px/ms
+        const flick = Math.abs(flickV) >= TOUR_FLICK_V && Math.abs(tourRaw) * tourPx >= TOUR_FLICK_MIN;
+        const advance = Math.abs(tourRaw) >= TOUR_COMMIT ? Math.sign(tourRaw) : flick ? -Math.sign(flickV) : 0;
+        const stop = Math.max(0, Math.min(N - 1, tourAnchor + advance));
         s.setTourVel(vTour);
         s.setTourStop(stop);
         s.setTourDrag(false);

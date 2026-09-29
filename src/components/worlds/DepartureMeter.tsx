@@ -16,7 +16,7 @@ export default function DepartureMeter({ value, label }: { value: number; label:
         <path d="M2 22 A 40 40 0 0 1 44 22" stroke="var(--color-core-gold)" strokeWidth="1" strokeOpacity="0.5" fill="none" />
         <circle cx={2 + 42 * v} cy={22 - 20 * Math.sin(Math.PI * v)} r="2.5" fill="var(--color-core-gold)" />
       </svg>
-      <span className="text-[11px] tracking-[0.14em] text-[var(--color-core-gold)]/80">{label}</span>
+      <span className="text-[14px] md:text-[11px] tracking-[0.14em] text-[var(--color-core-gold)]/80">{label}</span>
     </div>
   );
 }
