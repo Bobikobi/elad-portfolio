@@ -18,7 +18,7 @@ export const ORR = {
   h: 1.0,     // camera height above the orbital plane
   beta: 0.78, // rad between the view axis and the direction to the sun
   Lref: 6.5,  // distance along the view axis at which the axis meets the plane
-  SP: 0.3,    // rad of orbit between neighbouring carousel stars
+  SP: 0.4,    // rad of orbit between neighbouring carousel stars (0.3 made the loop feel short, Elad 2026-09-29)
   fov: 56,
   ty: 0,      // extra height of the look point
 };
