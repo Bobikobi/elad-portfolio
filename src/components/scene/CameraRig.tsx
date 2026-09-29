@@ -543,15 +543,16 @@ const _tourPos = new THREE.Vector3();
 const _tourLook = new THREE.Vector3();
 const _orrTmp = new THREE.Vector3();
 // Phone-motion "window" parallax (lib/tilt) on the orrery camera: head-coupled, off-axis
-// projection. The screen is a window at depth WIN_D * dist; turning the phone moves the VIEWER
-// sideways (TILT_SLIDE * dist per degree, along the camera's own right/up axes) while an
-// asymmetric frustum keeps that window plane pinned on screen. No rotation - the pose's own
-// orientation is kept - so far stars shift ~d and the focused planet ~d * (1 - WIN_D): you see
-// past the frame's edges instead of orbiting the planet. The slide is taken off again at the
-// top of the next frame (and the view offset cleared) so the pose damping never sees it.
-const TILT_SLIDE = 0.003; // fraction of the camera-look distance per degree
-const WIN_D = 0.45;       // window depth as a fraction of the camera-look distance (the focused
-                          // planet sits at ~0.73 of it, so it lands behind the window and moves)
+// projection. The screen is a window at depth WIN_D * z, where z is the focused body's depth in
+// front of the camera; turning the phone moves the VIEWER sideways (TILT_SLIDE * z per degree,
+// along the camera's own right/up axes) while an asymmetric frustum keeps that window plane
+// pinned on screen. No rotation - the pose's own orientation is kept - so far stars shift ~d and
+// the focused body ~d * (1 - WIN_D): you see past the frame's edges instead of orbiting the
+// planet. Scaling by the body's own depth (earth sits at ~0.7x the look distance, saturn ~1.5x)
+// keeps the effect the same at every stop. The slide is taken off again at the top of the next
+// frame (and the view offset cleared) so the pose damping never sees it.
+const TILT_SLIDE = 0.004; // fraction of the focused body's depth per degree
+const WIN_D = 0.6;        // window depth as a fraction of the focused body's depth
 const tiltOff = new THREE.Vector3();
 const _tiltPrev = new THREE.Vector3();
 const _tiltAx = new THREE.Vector3();
@@ -1429,10 +1430,13 @@ export default function CameraRig() {
             applyPose(cam, _tourPos, _tourLook, _tourLook, ORR.fov, 0.5, dt, dtNominal.current);
             const tl = stepTilt(dt);
             _winQ.copy(cam.quaternion);
+            const fk = TOUR_SECTIONS[store.tourStop]?.focus;
+            const focus = fk === 'belt' ? beltTourAnchor : (fk && planetPositions.get(fk)) || _tourLook;
             if (!flight.on && (tl.x || tl.y)) {
-              const dist = cam.position.distanceTo(_tourLook);
-              const dR = tl.x * TILT_SLIDE * dist;
-              const dU = -tl.y * TILT_SLIDE * dist;
+              cam.getWorldDirection(_tiltAx);
+              const z = Math.max(0.1, _winP.copy(focus).sub(cam.position).dot(_tiltAx));
+              const dR = tl.x * TILT_SLIDE * z;
+              const dU = -tl.y * TILT_SLIDE * z;
               _tiltAx.set(1, 0, 0).applyQuaternion(cam.quaternion);
               tiltOff.addScaledVector(_tiltAx, dR);
               _tiltAx.set(0, 1, 0).applyQuaternion(cam.quaternion);
@@ -1440,15 +1444,13 @@ export default function CameraRig() {
               cam.position.add(tiltOff);
               // Window half-height at depth D is D * tan(fov/2); a full view is 2x that. The
               // offset is in view fractions; three's offsetY runs top-down, hence the sign.
-              const winH = 2 * WIN_D * dist * Math.tan((cam.fov * DEG2RAD) / 2);
+              const winH = 2 * WIN_D * z * Math.tan((cam.fov * DEG2RAD) / 2);
               cam.setViewOffset(1, 1, -dR / (winH * cam.aspect), dU / winH, 1, 1);
             }
-            // Read-only verification handle: NDC of the focused planet and of a far point on the
+            // Read-only verification handle: NDC of the focused body and of a far point on the
             // pose's sightline, so the window parallax can be measured against tilt 0.
-            const fk = TOUR_SECTIONS[store.tourStop]?.focus;
-            const fpPos = fk ? planetPositions.get(fk) : undefined;
             cam.updateMatrixWorld();
-            _winP.copy(fpPos ?? _tourLook).project(cam);
+            _winP.copy(focus).project(cam);
             _winS.copy(_tourLook).sub(_tourPos).setLength(5000).add(_tourLook).project(cam);
             (window as unknown as { __win?: unknown }).__win = {
               ox: cam.view?.enabled ? cam.view.offsetX : 0, oy: cam.view?.enabled ? cam.view.offsetY : 0,
