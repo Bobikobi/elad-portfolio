@@ -1002,9 +1002,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         eclipseRawReport[spec.key] = +target.toFixed(4);
       }
     }
-    // Mobile: ~1 deg/s, so a world's continents hold still while it is read (0.3 rad/s
-    // swapped them within seconds). Desktop keeps its reviewed spin.
-    if (mesh.current) mesh.current.rotation.y += dt * (useScene.getState().tourMode ? 0.02 : 0.3);
+    // Mobile: ~4.6 deg/s (a turn per ~80s). 0.3 rad/s swapped continents within seconds of
+    // reading; 0.02 read as no spin at all (Elad, 2026-09-29). Desktop keeps its reviewed spin.
+    if (mesh.current) mesh.current.rotation.y += dt * (useScene.getState().tourMode ? 0.08 : 0.3);
   });
 
   const bind =

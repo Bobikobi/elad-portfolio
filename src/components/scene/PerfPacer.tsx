@@ -145,6 +145,7 @@ const EVAL_MS = 1000;      // one decision per second - a buffer resize is not f
 const WARMUP_MS = 4000;    // same reason as the governor's grace: compiles are not steady state
 const LOW_RATIO = 0.85;    // below this share of target = scale down
 const HIGH_RATIO = 0.95;   // above this share = room to scale back up
+const BUDGET_PX = 1600 * 900; // a plain laptop's cost at the old flat dpr 1 - see `base` below
 
 /**
  * Dynamic resolution scaling — the largest win available that is invisible at rest.
@@ -175,10 +176,22 @@ export function ResolutionScaler() {
   // pixels than the low tier, but 1.5 was 2.25x the fragments of 1.0 and it was being
   // handed to every machine that started high — which, before the inversion, was all of
   // them. 1.25 is 1.56x: still visibly crisper, materially cheaper.
-  const base =
-    quality === 'high'
-      ? Math.min(typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1, 1.25)
-      : 1;
+  //
+  // A flat 1.0 on the low tier was correct for a laptop's few-hundred-thousand CSS pixels,
+  // but wrong for a phone: a 390x844 layout is a third of a laptop viewport, so the SAME
+  // physical-pixel budget that made a laptop look fine at dpr 1 buys a phone dpr ~2 for
+  // free — and without it, the browser upscales a 1x canvas onto a 3x screen, which is
+  // exactly what reads as blur, and shrinks each star point below one real device pixel,
+  // which is what reads as flicker as the sub-pixel coverage changes frame to frame (Elad,
+  // 2026-09-29). BUDGET_PX is that laptop's own cost, so a phone spends the same and no
+  // more - this is a resolution correction, not a tier promotion (TIER COMPOSITION LAW:
+  // quality still only ever gates particle counts and sample rates, never this budget).
+  const rawDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+  const viewportPx =
+    typeof window === 'undefined' ? BUDGET_PX : window.innerWidth * window.innerHeight;
+  const budgetCap = Math.sqrt(BUDGET_PX / Math.max(viewportPx, 1));
+  const tierCap = quality === 'high' ? 1.25 : 2;
+  const base = Math.min(rawDpr, tierCap, budgetCap);
 
   const apply = (next: number) => {
     const dpr = +(base * next).toFixed(3);
