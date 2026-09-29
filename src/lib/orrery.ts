@@ -62,7 +62,7 @@ export function orrSlot(R: number, idx: number, pos: number, g: OrrGeom = orrGeo
 /** Screen pixels the star at stop `idx` moves per unit of carousel position, at rest on the
  *  view ray. Projects two nearby slots through the fixed orrery camera, in the root frame
  *  (the camera's up is the orbital plane's normal, so the root's own tilt cancels out). */
-export function orrPxPerStop(idx: number, width: number, height: number): number {
+export function orrPxPerStop(idx: number, width: number, height: number, at: number = idx): number {
   const g = orrGeom();
   const R = TOUR_ORBIT_R[Math.max(0, Math.min(TOUR_ORBIT_R.length - 1, idx))];
   const { pos, look } = orrPose(g);
@@ -77,7 +77,7 @@ export function orrPxPerStop(idx: number, width: number, height: number): number
     return (focal * (px * rx + pz * rz)) / (px * fx + py * fy + pz * fz) + width / 2;
   };
   const e = 0.02;
-  return Math.abs(sx(idx + e) - sx(idx - e)) / (2 * e);
+  return Math.abs(sx(at + e) - sx(at - e)) / (2 * e);
 }
 
 /** Fixed camera and look point, in the root's local frame. */

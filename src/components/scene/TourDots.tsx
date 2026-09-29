@@ -1,5 +1,7 @@
 'use client';
+import { useEffect, useSyncExternalStore } from 'react';
 import { useScene } from '@/lib/sceneStore';
+import { needsPermission, onTiltLive, requestTilt, startTilt, tilt } from '@/lib/tilt';
 import { TOUR_SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
 
@@ -9,6 +11,10 @@ import { useI18n } from '@/lib/i18n';
  * overview tour is live (solar act, no world focused). Tapping a dot flies straight to
  * that stop — a shortcut alongside the horizontal swipe. Hidden on desktop and inside a
  * focused world.
+ *
+ * It also switches on phone-motion parallax (lib/tilt). Android delivers the gyroscope
+ * unasked; iOS needs one tap, so on iOS a small "enable motion" pill sits above the dots
+ * until the sensor is live.
  */
 export default function TourDots() {
   const { t } = useI18n();
@@ -17,10 +23,26 @@ export default function TourDots() {
   const focused = useScene((s) => s.focusedPlanet);
   const stop = useScene((s) => s.tourStop);
   const setTourStop = useScene((s) => s.setTourStop);
+  const askMotion = useSyncExternalStore(onTiltLive, () => needsPermission() && !tilt.live && !tilt.refused, () => false);
+
+  useEffect(() => { if (tourMode) startTilt(); }, [tourMode]);
 
   if (!tourMode || act !== 'solar' || focused) return null;
 
   return (
+    <>
+    {askMotion && (
+      <div className="pointer-events-none fixed inset-x-0 bottom-24 z-20 flex justify-center">
+        <button
+          type="button"
+          onClick={() => { void requestTilt(); }}
+          className="pointer-events-auto flex h-11 items-center gap-2 rounded-full border border-white/15 bg-[rgba(5,7,20,0.6)] px-4 text-[14px] text-[var(--color-star-white)] shadow-[0_6px_24px_rgba(5,7,20,0.5)] backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)]"
+        >
+          <span aria-hidden className="text-[var(--color-core-gold)]">&#x21BB;</span>
+          {t('welcome.motion')}
+        </button>
+      </div>
+    )}
     <div className="pointer-events-none fixed inset-x-0 bottom-9 z-20 flex justify-center">
       <div className="pointer-events-auto flex items-center rounded-full border border-white/12 bg-[rgba(5,7,20,0.45)] px-1 shadow-[0_6px_24px_rgba(5,7,20,0.5)] backdrop-blur-md">
         {TOUR_SECTIONS.map((s, i) => {
@@ -45,5 +67,6 @@ export default function TourDots() {
         })}
       </div>
     </div>
+    </>
   );
 }

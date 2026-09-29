@@ -13,6 +13,7 @@ import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 import { NEUTRAL_APERTURE, ORBIT_APERTURE } from '@/lib/photometry';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useMotionDisabled } from '@/hooks/useMotionDisabled';
+import { stepTilt } from '@/lib/tilt';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** Clamp into [-1, 1] — the valid domain of acos, which clamp01 is NOT. */
@@ -541,6 +542,15 @@ function beltRidePose(pos: THREE.Vector3, look: THREE.Vector3, ride: BeltRide, d
 const _tourPos = new THREE.Vector3();
 const _tourLook = new THREE.Vector3();
 const _orrTmp = new THREE.Vector3();
+// Phone-motion parallax (lib/tilt) on the orrery camera. Per degree of phone turn the camera
+// SLIDES this far along its own right/up axes (near stars shift more than far ones - the depth
+// cue) and turns this fraction of a degree (the "look around" of a 360 photo). The slide is
+// taken off again at the top of the next frame so the pose damping never sees it.
+const TILT_SLIDE = 0.0125; // world units per degree
+const TILT_TURN = 0.06;    // camera degrees per phone degree
+const tiltOff = new THREE.Vector3();
+const _tiltPrev = new THREE.Vector3();
+const _tiltAx = new THREE.Vector3();
 /** Fixed mobile-orrery camera in world space: the root-local pose (lib/orrery) through solarRoot. */
 function orreryCamera(scene: THREE.Scene, pos: THREE.Vector3, look: THREE.Vector3): boolean {
   const root = scene.getObjectByName('solarRoot');
@@ -898,6 +908,7 @@ export default function CameraRig() {
     const scrollProgress = store.scrollProgress;
     const cam = state.camera as THREE.PerspectiveCamera;
     const t = state.clock.elapsedTime;
+    _tiltPrev.copy(tiltOff); tiltOff.set(0, 0, 0);
 
     // B7 — advance the reveal latch once per DRAWN frame, before anything reads it. While
     // it is held the curtain is pinned shut; afterwards it eases open on a wall clock and
@@ -1391,6 +1402,7 @@ export default function CameraRig() {
             }
           }
           if (HUD_AVAILABLE) Object.assign(ORR, (window as unknown as { __orr?: Partial<typeof ORR> }).__orr);
+          cam.position.sub(_tiltPrev);
           rigUp.copy(PLANE_N); cam.up.copy(rigUp);
           orreryBeltPoint(state.scene, store.tourPos, _orrTmp);
           beltTourAnchor.copy(_orrTmp);
@@ -1407,6 +1419,16 @@ export default function CameraRig() {
             cam.lookAt(_tourLook.x, _tourLook.y, _tourLook.z);
           } else {
             applyPose(cam, _tourPos, _tourLook, _tourLook, ORR.fov, 0.5, dt, dtNominal.current);
+            const tl = stepTilt(dt);
+            if (!flight.on && (tl.x || tl.y)) {
+              _tiltAx.set(1, 0, 0).applyQuaternion(cam.quaternion);
+              tiltOff.addScaledVector(_tiltAx, tl.x * TILT_SLIDE);
+              _tiltAx.set(0, 1, 0).applyQuaternion(cam.quaternion);
+              tiltOff.addScaledVector(_tiltAx, -tl.y * TILT_SLIDE);
+              cam.position.add(tiltOff);
+              cam.rotateY(-tl.x * TILT_TURN * DEG2RAD);
+              cam.rotateX(-tl.y * TILT_TURN * DEG2RAD);
+            }
           }
         } else if (store.scrollDriven && arrivedViaDive.current && scrollProgress >= SWAP_V) {
           // T7a: scroll-driven arrival dolly. The far entry pose eases to the overview
