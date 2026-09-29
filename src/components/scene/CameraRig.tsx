@@ -550,12 +550,14 @@ const _orrTmp = new THREE.Vector3();
 // past the frame's edges instead of orbiting the planet. The slide is taken off again at the
 // top of the next frame (and the view offset cleared) so the pose damping never sees it.
 const TILT_SLIDE = 0.003; // fraction of the camera-look distance per degree
-const WIN_D = 0.7;        // window depth as a fraction of the camera-look distance
+const WIN_D = 0.45;       // window depth as a fraction of the camera-look distance (the focused
+                          // planet sits at ~0.73 of it, so it lands behind the window and moves)
 const tiltOff = new THREE.Vector3();
 const _tiltPrev = new THREE.Vector3();
 const _tiltAx = new THREE.Vector3();
 const _winP = new THREE.Vector3();
 const _winS = new THREE.Vector3();
+const _winQ = new THREE.Quaternion();
 /** Fixed mobile-orrery camera in world space: the root-local pose (lib/orrery) through solarRoot. */
 function orreryCamera(scene: THREE.Scene, pos: THREE.Vector3, look: THREE.Vector3): boolean {
   const root = scene.getObjectByName('solarRoot');
@@ -1426,6 +1428,7 @@ export default function CameraRig() {
           } else {
             applyPose(cam, _tourPos, _tourLook, _tourLook, ORR.fov, 0.5, dt, dtNominal.current);
             const tl = stepTilt(dt);
+            _winQ.copy(cam.quaternion);
             if (!flight.on && (tl.x || tl.y)) {
               const dist = cam.position.distanceTo(_tourLook);
               const dR = tl.x * TILT_SLIDE * dist;
@@ -1451,6 +1454,7 @@ export default function CameraRig() {
               ox: cam.view?.enabled ? cam.view.offsetX : 0, oy: cam.view?.enabled ? cam.view.offsetY : 0,
               planet: fk, planetNdc: [_winP.x, _winP.y], starNdc: [_winS.x, _winS.y],
               quat: [cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w],
+              turn: cam.quaternion.angleTo(_winQ), // rad the tilt turned the camera this frame; 0 by design
             };
           }
         } else if (store.scrollDriven && arrivedViaDive.current && scrollProgress >= SWAP_V) {
