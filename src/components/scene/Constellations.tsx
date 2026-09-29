@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { CONSTELLATIONS, POLARIS } from '@/lib/constellations';
 import { makeSparkleMaterial } from '@/lib/spaceMaterials';
 import { useScene } from '@/lib/sceneStore';
+import { ORR, orrGeom } from '@/lib/orrery';
 import { useI18n } from '@/lib/i18n';
 import { HUD_AVAILABLE } from './DebugHud';
 import RealSky from './RealSky';
@@ -151,6 +152,13 @@ export default function Constellations() {
     const s = useScene.getState();
     const overview = s.act === 'solar' && !s.focusedPlanet;
     vis.current = THREE.MathUtils.damp(vis.current, overview ? 1 : 0, 3, dt);
+    // Mobile orrery: the swipe turns the whole sky about the ecliptic normal by the same angle
+    // it swings the carousel planets round the sun (lib/orrery orrSlot: -SP per stop in the
+    // root frame; a +Y turn lowers a point's angle, hence the sign), so the camera and the sun
+    // read as still while the universe rotates past them (Elad, 2026-09-29). This group shares
+    // solarRoot's 0.42 tilt, so its local Y is the plane normal. A focused world or a desktop
+    // session holds whatever angle was reached, like the planets' own accumulators.
+    if (s.tourMode && !s.focusedPlanet) g.rotation.y = s.tourPos * ORR.SP * orrGeom().dir;
     g.updateMatrixWorld();
     const { width: W, height: H } = state.size;
     const cam = state.camera;
@@ -228,8 +236,9 @@ export default function Constellations() {
       } else el.style.opacity = '0';
     }
     if (HUD_AVAILABLE) {
+      _p.set(1, 0, 0).transformDirection(g.matrixWorld);
       (window as unknown as Record<string, unknown>).__constellations = {
-        hot: next,
+        hot: next, yaw: g.rotation.y, probe: _p.toArray(),
         figs: CONSTELLATIONS.map((c, ci) => ({ id: c.id, on: onScreen[ci], pts: scr[ci].map((v) => [Math.round(v.x), Math.round(v.y)]), segs: c.segs })),
       };
     }
