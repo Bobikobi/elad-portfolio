@@ -19,15 +19,18 @@
 // from a tap; `needsPermission()` tells the UI whether to offer that tap. Android just
 // delivers events.
 
+import { useScene } from '@/lib/sceneStore';
+
 const MAX = 25;        // deg - the view never swings further than this much phone turn
 const SMOOTH = 0.18;   // s - low-pass on the output; slow enough to read as calm, not jerky
 
 /** Phone turn in degrees since the last recentre: x = turned right, y = tilted to look down. */
 export const tilt = { x: 0, y: 0, live: false, refused: false };
 
-let raw = { x: 0, y: 0 };
+const raw = { x: 0, y: 0 };
 let baseline: { beta: number; gamma: number } | null = null;
 let started = false;
+let storeSubscribed = false;
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((f) => f());
 
@@ -57,13 +60,25 @@ export function stepTilt(dt: number) {
   return tilt;
 }
 
-/** Re-anchor "centre" to the phone's current angle - called when the tour moves to a new
- *  stop, so the new planet always starts framed straight rather than carrying the old tilt. */
+/** Re-anchor "centre" to the phone's current angle AND snap the visible offset back to zero
+ *  immediately - called whenever the tour moves to a new stop (any path: drag release, dot
+ *  tap, ...), so the new planet always starts framed straight rather than carrying the old
+ *  tilt, easing back over the smoothing window. */
 export function recenterTilt() {
   baseline = null;
+  raw.x = 0;
+  raw.y = 0;
+  tilt.x = 0;
+  tilt.y = 0;
 }
 
 export function startTilt() {
+  if (!storeSubscribed) {
+    storeSubscribed = true;
+    // Centralised here rather than at each call site (drag release, dot tap, ...) - any
+    // future way to change `tourStop` gets a straight-framed planet for free.
+    useScene.subscribe((s, prev) => { if (s.tourStop !== prev.tourStop) recenterTilt(); });
+  }
   if (started || typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return;
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   started = true;
