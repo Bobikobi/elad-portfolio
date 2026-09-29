@@ -38,7 +38,7 @@ export default function WorldBackLink({
       }}
       className={
         'pointer-events-auto inline-flex shrink-0 items-center rounded-full border ' +
-        'border-white/15 bg-[rgba(5,7,20,0.6)] px-3 py-1 text-xs text-[var(--color-star-white)]/75 ' +
+        'border-white/15 bg-[rgba(5,7,20,0.6)] px-3 py-1 text-[14px] md:text-xs text-[var(--color-star-white)]/75 ' +
         'transition-colors hover:border-[var(--color-core-gold)]/60 hover:text-[var(--color-core-gold)] ' +
         className
       }

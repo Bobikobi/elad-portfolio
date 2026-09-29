@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useScene } from '@/lib/sceneStore';
-import { SECTIONS } from '@/lib/sections';
+import { TOUR_SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
 import { overviewElevDeg } from './CameraRig';
+import { orrPxPerStop } from '@/lib/orrery';
 
 /**
  * Drag-to-rotate (T6). A pointer layer that writes a yaw/pitch OFFSET into the store;
@@ -25,7 +26,17 @@ const ELEV_MAX = 80;
 const ELEV_MIN = -45;
 const PLANE_TILT_DEG = (0.42 * 180) / Math.PI; // SolarAct's solarRoot rotation.x
 const THRESHOLD = 5;      // px - separates a rotate-drag from a navigating tap
-const SWIPE_THRESHOLD = 45; // px - a horizontal swipe that advances the mobile tour (T7b)
+// Mobile carousel gesture (GPT review, 2026-09-28): a drag is recognised after 8px when it is
+// clearly horizontal; the star follows the finger 1:1, as far as the finger goes; release lands on
+// the stop nearest where the fling would coast to (at least one stop past 22% of a stop or on a
+// flick, so a fast flick crosses several); the two ends resist over at most 24px, no wrap.
+const TOUR_THRESHOLD = 8;
+const TOUR_H_RATIO = 1.25;
+const TOUR_COMMIT = 0.22;         // stops
+const TOUR_FLICK_V = 0.45;        // px/ms, measured over the last 80ms
+const TOUR_FLICK_MIN = 12;        // px of total travel before a flick counts
+const TOUR_OVERSCROLL = 24;       // px
+const TOUR_COAST = 0.18;          // s of release velocity added before picking the stop
 // Positive pitch LOWERS the camera (CameraRig.applyOrbit), so the rest elevation sets both ends.
 const clampPitch = (p: number) => {
   const rest = overviewElevDeg(window.innerWidth / window.innerHeight) + PLANE_TILT_DEG;
@@ -57,11 +68,16 @@ export default function DragControls() {
       return s.tourMode && s.act === 'solar' && !s.focusedPlanet;
     };
 
-    let active = false, dragging = false, swiped = false;
+    let active = false, dragging = false;
     let startX = 0, startY = 0, lastX = 0, lastY = 0, lastT = 0;
-    let vYaw = 0, vPitch = 0;
+    let vYaw = 0, vPitch = 0, vTour = 0;
     let horiz: boolean | null = null; // touch axis lock
     let raf = 0;
+    // Tour detent: the stop the drag started from, and the RAW (unresisted) displacement
+    // since then, in stop-units. The shown position is tourRaw itself except past either
+    // end, where it is resisted.
+    let tourAnchor = 0, tourRaw = 0, tourPx = 300;
+    let tourSamples: { t: number; x: number }[] = [];
 
     const stopInertia = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
     const inertia = () => {
@@ -82,21 +98,29 @@ export default function DragControls() {
 
     const onDown = (e: PointerEvent) => {
       useScene.getState().setDragMoved(false);
-      if ((e.target as HTMLElement)?.tagName !== 'CANVAS' || !canDrag()) return;
+      // Mobile orrery: the centred star's label sits right under it, so a swipe that starts on
+      // it must still move the carousel (its click is skipped via dragMoved).
+      const tgt = e.target as HTMLElement | null;
+      const onCanvas = tgt?.tagName === 'CANVAS' || (isTour() && !!tgt?.closest('[data-planet-label]'));
+      if (!onCanvas || !canDrag()) return;
       stopInertia();
-      active = true; dragging = false; swiped = false; horiz = null;
+      active = true; dragging = false; horiz = null;
       startX = lastX = e.clientX; startY = lastY = e.clientY; lastT = performance.now();
       vYaw = vPitch = 0;
+      tourAnchor = useScene.getState().tourStop; tourRaw = 0;
+      tourPx = orrPxPerStop(tourAnchor, window.innerWidth, window.innerHeight) || 300;
+      tourSamples = [{ t: performance.now(), x: e.clientX }];
       setCursor('grabbing');
     };
     const onMove = (e: PointerEvent) => {
       if (!active) return;
       const totX = e.clientX - startX, totY = e.clientY - startY;
       if (!dragging) {
-        if (Math.hypot(totX, totY) <= THRESHOLD) return;
+        const tour = isTour() && e.pointerType === 'touch';
+        if (Math.hypot(totX, totY) <= (tour ? TOUR_THRESHOLD : THRESHOLD)) return;
         // Touch: lock to the dominant axis — horizontal rotates, vertical is left to
-        // the page (dive scroll).
-        horiz = e.pointerType === 'touch' ? Math.abs(totX) > Math.abs(totY) : true;
+        // the page (dive scroll). The carousel wants a clearly horizontal start.
+        horiz = e.pointerType === 'touch' ? Math.abs(totX) > Math.abs(totY) * (tour ? TOUR_H_RATIO : 1) : true;
         if (!horiz) { active = false; setCursor(canDrag() ? 'grab' : ''); return; }
         dragging = true;
         useScene.getState().setDragMoved(true);
@@ -104,16 +128,30 @@ export default function DragControls() {
         try { localStorage.setItem('seen-drag-hint', '1'); } catch { /* private mode */ }
       }
       if (!canDrag()) return;
-      // T7b: in tour mode a horizontal swipe advances to the next/previous stop (one step
-      // per gesture, wrap-around) — never a rotate. Vertical is already page scroll above.
+      // Mobile orrery: the star under the finger follows it 1:1 in screen space (pixels are
+      // turned into carousel position by the fixed camera's own projection), across as many
+      // stops as the finger travels; past the first/last stop it gives at most TOUR_OVERSCROLL px.
       if (isTour()) {
-        if (!swiped && Math.abs(totX) > SWIPE_THRESHOLD) {
-          const s = useScene.getState();
-          const n = SECTIONS.length;
-          const dir = totX < 0 ? 1 : -1; // swipe left → next planet (carousel convention)
-          s.setTourStop((((s.tourStop + dir) % n) + n) % n);
-          swiped = true;
+        const s = useScene.getState();
+        const now = performance.now();
+        const N = TOUR_SECTIONS.length;
+        // Incremental, with the px-per-stop of the grabbed star where it is NOW - perspective
+        // changes it as the star leaves the centre, and 1:1 must hold across several stops.
+        const px = orrPxPerStop(tourAnchor, window.innerWidth, window.innerHeight, tourAnchor + tourRaw) || tourPx;
+        tourRaw -= (e.clientX - lastX) / px;
+        let pos = tourAnchor + tourRaw;
+        const over = pos < 0 ? pos : pos > N - 1 ? pos - (N - 1) : 0;
+        if (over) {
+          const px = Math.abs(over) * tourPx;
+          pos -= over - Math.sign(over) * (TOUR_OVERSCROLL * (1 - Math.exp(-px / TOUR_OVERSCROLL))) / tourPx;
         }
+        tourSamples.push({ t: now, x: e.clientX });
+        while (tourSamples.length > 2 && now - tourSamples[0].t > 80) tourSamples.shift();
+        const dtS = Math.max(0.001, (now - lastT) / 1000);
+        vTour = -(e.clientX - lastX) / tourPx / dtS;
+        s.setTourDrag(true);
+        s.setTourPos(pos);
+        lastX = e.clientX; lastY = e.clientY; lastT = now;
         return;
       }
       const now = performance.now();
@@ -128,6 +166,24 @@ export default function DragControls() {
       lastX = e.clientX; lastY = e.clientY; lastT = now;
     };
     const onUp = () => {
+      if (dragging && useScene.getState().tourDrag) {
+        // Release: the stop nearest where the release speed would coast to; past TOUR_COMMIT of
+        // a stop, or on a flick (speed over the last 80ms), at least one stop in the drag's
+        // direction; otherwise spring back. Never past either end.
+        const s = useScene.getState();
+        const N = TOUR_SECTIONS.length;
+        const first = tourSamples[0], last = tourSamples[tourSamples.length - 1];
+        const flickV = first && last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0; // px/ms
+        const flick = Math.abs(flickV) >= TOUR_FLICK_V && Math.abs(tourRaw) * tourPx >= TOUR_FLICK_MIN;
+        const dir = Math.abs(tourRaw) >= TOUR_COMMIT ? Math.sign(tourRaw) : flick ? -Math.sign(flickV) : 0;
+        const coast = flick ? (-flickV * 1000 / tourPx) * TOUR_COAST : 0; // stops
+        let stop = Math.round(tourAnchor + tourRaw + coast);
+        if (dir && Math.sign(stop - tourAnchor) !== dir) stop = tourAnchor + dir;
+        stop = Math.max(0, Math.min(N - 1, stop));
+        s.setTourVel(vTour);
+        s.setTourStop(stop);
+        s.setTourDrag(false);
+      }
       if (dragging && !reduce && (Math.abs(vYaw) > 0.05 || Math.abs(vPitch) > 0.05)) inertia();
       active = false; dragging = false;
       setCursor(canDrag() ? 'grab' : '');

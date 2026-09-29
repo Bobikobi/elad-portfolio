@@ -1,17 +1,19 @@
 'use client';
+import { ORR, orrGeom, orrPose, orrSlot } from '@/lib/orrery';
 import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { damp, damp3 } from 'maath/easing';
 import * as THREE from 'three';
 import { useScene, type Act } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, planetRingNormal, beltTourAnchor } from '@/lib/planetPositions';
+import { TOUR_SECTIONS } from '@/lib/sections';
 import { RING_OUTER_R } from '@/lib/planetPositions';
-import { SECTIONS } from '@/lib/sections';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect, livePlanetPlane } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 import { NEUTRAL_APERTURE, ORBIT_APERTURE } from '@/lib/photometry';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useMotionDisabled } from '@/hooks/useMotionDisabled';
+import { stepTilt } from '@/lib/tilt';
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** Clamp into [-1, 1] — the valid domain of acos, which clamp01 is NOT. */
@@ -537,33 +539,36 @@ function beltRidePose(pos: THREE.Vector3, look: THREE.Vector3, ride: BeltRide, d
 // making planets untappable) we run a guided tour: a brief WIDE establishing shot, then
 // framed "zoom-above" stops the user swipes between. Poses live here (the rig is the sole
 // camera owner); DragControls writes the stop index, the dots read it.
-const EST_DIST = 30;                    // establishing: far enough that the page-planets fit portrait
-const EST_ELEV = 35 * DEG2RAD;          // elevated ~35° so the ecliptic reads as a system, not a line
-const EST_FOV = 64;                     // wide vertical fov so the narrow portrait frame still holds it
-const EST_HOLD = 1.7;                   // s - how long the establishing shot lingers before the tour
-const EST_EASE = 1.4;                   // s - glide from establishing to the first stop
-const TOUR_FOV = 44;                    // per-stop fov
-const TOUR_FILL = 0.4;                  // planet ≈ 40% of viewport height (huge; leaves room for the label)
 const _tourPos = new THREE.Vector3();
 const _tourLook = new THREE.Vector3();
-const _est = new THREE.Vector3();
-const _el = new THREE.Vector3(); // establishing look target
-/** A framed "zoom-above" stop for one page-planet: a mostly-lit gibbous vantage, elevated,
- *  with the planet large and sitting a little low so its label rides near the top. */
-function tourPlanetPose(pp: THREE.Vector3, r: number) {
-  _sunDir.copy(pp).normalize();
-  _side.copy(UP).cross(_sunDir);
-  if (_side.lengthSq() < 1e-4) _side.set(1, 0, 0);
-  _side.normalize();
-  const A = 0.7; // ~40° off the lit direction → a bright gibbous face with a terminator edge
-  _camDir.copy(_sunDir).multiplyScalar(-Math.cos(A)); // -sunDir = toward the lit side (sun behind camera)
-  _camDir.addScaledVector(_side, Math.sin(A));
-  _camDir.y += 0.6; // "zoom-above"
-  _camDir.normalize();
-  const d = r / (TOUR_FILL * Math.tan((TOUR_FOV * DEG2RAD) / 2));
-  _tourPos.copy(pp).addScaledVector(_camDir, d);
-  _tourLook.copy(pp);
-  _tourLook.y += r * 0.8; // planet drops low in frame, label sits near centre-top
+const _orrTmp = new THREE.Vector3();
+// Phone-motion parallax (lib/tilt) on the orrery camera. Per degree of phone turn the camera
+// SLIDES this far along its own right/up axes (near stars shift more than far ones - the depth
+// cue) and turns this fraction of a degree (the "look around" of a 360 photo). The slide is
+// taken off again at the top of the next frame so the pose damping never sees it.
+const TILT_SLIDE = 0.0125; // world units per degree
+const TILT_TURN = 0.06;    // camera degrees per phone degree
+const tiltOff = new THREE.Vector3();
+const _tiltPrev = new THREE.Vector3();
+const _tiltAx = new THREE.Vector3();
+/** Fixed mobile-orrery camera in world space: the root-local pose (lib/orrery) through solarRoot. */
+function orreryCamera(scene: THREE.Scene, pos: THREE.Vector3, look: THREE.Vector3): boolean {
+  const root = scene.getObjectByName('solarRoot');
+  if (!root) return false;
+  const g = orrGeom();
+  const q = orrPose(g);
+  pos.set(q.pos[0], q.pos[1], q.pos[2]);
+  look.set(q.look[0], q.look[1], q.look[2]);
+  root.localToWorld(pos);
+  root.localToWorld(look);
+  return true;
+}
+/** World point on the belt ring the carousel is currently showing (the belt's label anchor). */
+function orreryBeltPoint(scene: THREE.Scene, pos: number, out: THREE.Vector3) {
+  const root = scene.getObjectByName('solarRoot');
+  const a = orrSlot(BELT_RING_R, TOUR_SECTIONS.findIndex((x) => x.focus === 'belt'), pos);
+  out.set(Math.cos(a) * BELT_RING_R, 0, Math.sin(a) * BELT_RING_R);
+  if (root) root.localToWorld(out);
 }
 /**
  * Drag-to-rotate (T6): rotate `pos` around `look` by yaw (about `axis`, world-Y by default) then pitch
@@ -637,11 +642,19 @@ const flight = {
   lastFocus: undefined as string | null | undefined,
   leaving: null as string | null,
   going: null as string | null,
+  direct: false, // mobile tour: a straight dive, not the arc the desktop takes
   fromPos: new THREE.Vector3(),
   fromQ: new THREE.Quaternion(),
   fromFov: 45,
   lastAim: new THREE.Vector3(),
 };
+// Mobile dive: the side of the planet the camera approached from (planet -> camera, unit),
+// captured when the dive starts. The world pose then stands on THAT side instead of the
+// sun-solved vantage, so the dive is a straight push-in: measured before, the solved vantage
+// swung the camera 91 deg round Mars and took it off-screen on the way.
+const tourApproach = new THREE.Vector3();
+let tourApproachFor: string | null = null;
+const _fLook = new THREE.Vector3();
 const _fDir0 = new THREE.Vector3();
 const _fDir3 = new THREE.Vector3();
 const _fDir = new THREE.Vector3();
@@ -682,11 +695,18 @@ function startFlight(cam: THREE.PerspectiveCamera, leaving: string | null, going
   flight.fromFov = cam.fov;
   flight.leaving = leaving;
   flight.going = going;
+  flight.direct = useScene.getState().tourMode;
+  const bp = going ? planetPositions.get(going) : undefined;
+  if (flight.direct && bp) {
+    tourApproach.copy(cam.position).sub(bp).normalize();
+    tourApproachFor = going;
+  }
   flight.dur = 0; // sized on the first frame, once the destination pose is known
 }
 
 /** The flight path at progress `s`, around target `aim`, ending at `end`. Writes `out`. */
 function flightPoint(out: THREE.Vector3, aim: THREE.Vector3, end: THREE.Vector3, s: number, lift: number) {
+  if (flight.direct) return out.copy(flight.fromPos).lerp(end, smoother(s));
   if (!flight.going) {
     // Out to the overview: a straight crane back and up. Circling the look point here would
     // add the whole swing to the turn (~200 degrees instead of ~110) and stretch the shot.
@@ -780,14 +800,31 @@ function applyPose(
     return;
   }
   if (flight.dur === 0) {
-    flight.lift = chooseLift(aim, pos);
-    planFlight(pos, look, aim);
+    if (flight.direct) { flight.lift = 0; flight.dur = flight.going ? 0.9 : 0.7; flight.turn = 1; }
+    else {
+      flight.lift = chooseLift(aim, pos);
+      planFlight(pos, look, aim);
+    }
   }
   const step = Math.min(dt, Math.max(2.5 * nominal, 1 / 40));
   flight.el += step;
   const s = Math.min(1, flight.el / flight.dur);
   flightPoint(cam.position, aim, pos, s, flight.lift);
   cam.fov = flight.fromFov + (fov - flight.fromFov) * smoother(s);
+
+  // Direct (mobile tour): straight-line dolly. The view heads for the planet early (it stays in
+  // frame and grows) and hands over to the pose's own look point by the end, so the flight
+  // lands exactly on the orientation the resting pose will keep - no final turn. The old
+  // version ended aimed at the planet and then snapped 13.6 deg to the offset look point.
+  if (flight.direct) {
+    _fLook.copy(aim).lerp(look, smoother(s));
+    lookQuat(_fDest, cam.position, _fLook);
+    const target = _tmpQ.copy(flight.fromQ).slerp(_fDest, smoother(Math.min(1, s / 0.6)));
+    const maxStep = Math.min(FLIGHT_TURN_RATE * step, FLIGHT_TURN_STEP * (nominal > 1 / 30 ? nominal * 60 : 1));
+    cam.quaternion.rotateTowards(target, maxStep);
+    if (s >= 1 && cam.quaternion.angleTo(_fDest) < 0.002) flight.on = false;
+    return;
+  }
 
   // View direction: start -> destination heading, then limited per frame so neither a moving
   // target, a large turn nor a long frame can whip the camera.
@@ -826,6 +863,8 @@ export default function CameraRig() {
                                         // arrival dolly is scroll-driven (settle lands at scrollY=max)
   const mobileArriveT = useRef(0);      // T7b: clock time the establishing shot settled (0 = not yet)
   const orbit = useRef({ yaw: 0, pitch: 0 }); // damped drag-to-rotate offset (T6)
+  const tourSpringVel = useRef(0);   // carousel spring velocity (stops/sec)
+  const prevTourDrag = useRef(false); // detect drag→release transition
   // B7: the reveal latch. See REVEAL_FRAMES — after a swap the curtain is held shut for a
   // number of DRAWN frames and then eased open, instead of being handed straight back to a
   // schedule that assumes the swap was free.
@@ -869,6 +908,7 @@ export default function CameraRig() {
     const scrollProgress = store.scrollProgress;
     const cam = state.camera as THREE.PerspectiveCamera;
     const t = state.clock.elapsedTime;
+    _tiltPrev.copy(tiltOff); tiltOff.set(0, 0, 0);
 
     // B7 — advance the reveal latch once per DRAWN frame, before anything reads it. While
     // it is held the curtain is pinned shut; afterwards it eases open on a wall clock and
@@ -1273,7 +1313,8 @@ export default function CameraRig() {
             else _planeN.set(0, 1, 0);
           }
           if (vantageFor.current !== focused) { vantageFor.current = focused as string; vantagePhi.current = null; }
-          const phi = orbitVantage(
+          const approach = store.tourMode && tourApproachFor === focused;
+          const phi = approach ? 0 : orbitVantage(
             _camDir,
             _sunDir,
             _planeN,
@@ -1284,7 +1325,8 @@ export default function CameraRig() {
           );
           // Commit the branch only once the planet has a real position: a body not yet
           // placed sits at the origin, and a choice made there is arbitrary.
-          vantagePhi.current = _sunDir.lengthSq() > 0.5 ? phi : null;
+          if (approach) _camDir.copy(tourApproach);
+          else vantagePhi.current = _sunDir.lengthSq() > 0.5 ? phi : null;
           _orbitPos.copy(pp).addScaledVector(_camDir, d);
           _orbitPos.x += Math.sin(t * 0.2) * 0.03 * d; // living micro-drift
           _orbitPos.y += Math.cos(t * 0.15) * 0.02 * d;
@@ -1333,72 +1375,60 @@ export default function CameraRig() {
             RING_OUTER_R, state.size.width, state.size.height
           );
         } else if (store.tourMode) {
-          // --- T7b: MOBILE TOUR ---------------------------------------------------
-          // Portrait crops the wide overview to mostly-sun, so we guide instead: a brief
-          // WIDE establishing shot (understand the space), then a framed "zoom-above" stop
-          // the user swipes between (DragControls writes tourStop). Vertical scroll stays
-          // the page; tap still enters the world (the planet's own click handler).
-          _est.set(
-            Math.sin(t * 0.03) * 0.6,
-            EST_DIST * Math.sin(EST_ELEV) + Math.sin(t * 0.05) * 0.2,
-            EST_DIST * Math.cos(EST_ELEV)
-          );
-          _el.set(0, 0.2, 0);
-          const stopIdx = ((store.tourStop % SECTIONS.length) + SECTIONS.length) % SECTIONS.length;
-          const focus = SECTIONS[stopIdx].focus;
-          let stopFov = TOUR_FOV;
-          if (focus === 'belt') {
-            // B14: the belt stop rides the band too — from further out, so it establishes
-            // the ring and entering the world moves into it.
-            beltRidePose(_tourPos, _tourLook, BELT_RIDE.tour, document.documentElement.dir === 'rtl' ? -1 : 1, t * BELT_DRIFT + 1.35);
-            // Where this pose is actually aimed on the ring — the pill's anchor. Drop the
-            // sightline onto the ecliptic, then pull that point back onto the ring radius,
-            // so the label lands on the band the stop is showing rather than on a constant.
-            _beltDir.copy(_tourLook).sub(_tourPos).normalize();
-            const s = _beltDir.y < -1e-3 ? -_tourPos.y / _beltDir.y : 8;
-            beltTourAnchor.copy(_tourPos).addScaledVector(_beltDir, s);
-            beltTourAnchor.y = 0;
-            beltTourAnchor.setLength(BELT_RING_R);
-            const root = beltRoot(state.scene);
-            if (root) {
-              root.localToWorld(_tourPos);
-              root.localToWorld(_tourLook);
-              root.localToWorld(beltTourAnchor);
-            }
-            stopFov = BELT_RIDE.tour.fov;
-          } else {
-            const tp = planetPositions.get(focus);
-            const tr = planetRadii.get(focus) ?? 0.4;
-            if (tp) {
-              tourPlanetPose(tp, tr);
+          // --- MOBILE ORRERY -------------------------------------------------------
+          // The camera is fixed near the sun (lib/orrery); the swipe moves the STARS along their
+          // orbits (SolarAct reads tourPos). The camera moves only when a star is entered.
+          {
+            const wasDragging = prevTourDrag.current;
+            prevTourDrag.current = store.tourDrag;
+            if (store.tourDrag) {
+              tourSpringVel.current = 0;
             } else {
-              // Planet not mounted yet (first solar frame) → hold the establishing pose.
-              _tourPos.copy(_est); _tourLook.copy(_el); stopFov = EST_FOV;
+              const target = store.tourStop;
+              const diff = target - store.tourPos; // linear: the carousel has ends, no wrap
+              // Critically damped spring, omega=24, zeta=1: lands in ~250ms with no overshoot.
+              // The release velocity is kept only up to what the spring can absorb without
+              // crossing the stop (v <= omega*|diff| toward it), so a flick never bounces.
+              if (wasDragging) {
+                const v = store.tourVel;
+                tourSpringVel.current = Math.sign(v) === Math.sign(diff) ? Math.sign(v) * Math.min(Math.abs(v), 24 * Math.abs(diff) * 0.9) : 0;
+              }
+              tourSpringVel.current += (576 * diff - 48 * tourSpringVel.current) * dt;
+              if (Math.abs(diff) < 0.002 && Math.abs(tourSpringVel.current) < 0.02) {
+                store.setTourPos(target);
+              } else {
+                store.setTourPos(store.tourPos + tourSpringVel.current * dt);
+              }
             }
           }
-          // R5.1: the scroll-driven approach is valid ONLY while the tall dive driver is
-          // actually mounted. On an in-session return the driver is gone and
-          // `scrollProgress` is frozen at whatever the visitor last scrolled to — reading
-          // it here stranded the camera part-way through the approach with no scroll left
-          // to finish it (a hard stuck state). Without a driver we fall through to the
-          // time-damped path, which always settles.
+          if (HUD_AVAILABLE) Object.assign(ORR, (window as unknown as { __orr?: Partial<typeof ORR> }).__orr);
+          cam.position.sub(_tiltPrev);
+          rigUp.copy(PLANE_N); cam.up.copy(rigUp);
+          orreryBeltPoint(state.scene, store.tourPos, _orrTmp);
+          beltTourAnchor.copy(_orrTmp);
+          if (!orreryCamera(state.scene, _tourPos, _tourLook)) { _tourPos.set(0, 8, 21); _tourLook.set(0, 0, 0); }
           const diving = store.scrollDriven && arrivedViaDive.current && scrollProgress < 0.999;
           if (diving) {
-            // Scroll-driven approach to the establishing pose (T7a rule: settle at max).
+            // Scroll-driven approach to the fixed pose (T7a rule: settle at max).
             const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
             _entry.set(0, 8, 21);
-            _tgt.copy(_entry).lerp(_est, arrive);
+            _tgt.copy(_entry).lerp(_tourPos, arrive);
             flight.on = false;
             damp3(cam.position, _tgt, 0.3, dt);
-            damp(cam, 'fov', 52 + (EST_FOV - 52) * arrive, 0.3, dt);
-            cam.lookAt(_el.x, _el.y, _el.z);
+            damp(cam, 'fov', 52 + (ORR.fov - 52) * arrive, 0.3, dt);
+            cam.lookAt(_tourLook.x, _tourLook.y, _tourLook.z);
           } else {
-            if (mobileArriveT.current === 0) mobileArriveT.current = t; // establishing settled → start the beat
-            const held = t - mobileArriveT.current;
-            const blend = easeInOutCubic(clamp01((held - EST_HOLD) / EST_EASE)); // 0 wide → 1 framed
-            _tgt.copy(_est).lerp(_tourPos, blend);
-            _look.copy(_el).lerp(_tourLook, blend);
-            applyPose(cam, _tgt, _look, _look, EST_FOV + (stopFov - EST_FOV) * blend, 0.45, dt, dtNominal.current);
+            applyPose(cam, _tourPos, _tourLook, _tourLook, ORR.fov, 0.5, dt, dtNominal.current);
+            const tl = stepTilt(dt);
+            if (!flight.on && (tl.x || tl.y)) {
+              _tiltAx.set(1, 0, 0).applyQuaternion(cam.quaternion);
+              tiltOff.addScaledVector(_tiltAx, tl.x * TILT_SLIDE);
+              _tiltAx.set(0, 1, 0).applyQuaternion(cam.quaternion);
+              tiltOff.addScaledVector(_tiltAx, -tl.y * TILT_SLIDE);
+              cam.position.add(tiltOff);
+              cam.rotateY(-tl.x * TILT_TURN * DEG2RAD);
+              cam.rotateX(-tl.y * TILT_TURN * DEG2RAD);
+            }
           }
         } else if (store.scrollDriven && arrivedViaDive.current && scrollProgress >= SWAP_V) {
           // T7a: scroll-driven arrival dolly. The far entry pose eases to the overview

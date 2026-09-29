@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 import { useScene } from '@/lib/sceneStore';
 import { planetPositions, planetRadii, PLANET_PAGES, beltTourAnchor } from '@/lib/planetPositions';
-import { PLANET_SECTION, SECTIONS, sectionPath } from '@/lib/sections';
+import { PLANET_SECTION, TOUR_SECTIONS, sectionPath } from '@/lib/sections';
 import { BODY_FACTS, DECORATIVE_BODIES } from '@/lib/bodyFacts';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useI18n } from '@/lib/i18n';
@@ -45,7 +45,6 @@ const register = (key: string) => (el: HTMLElement | null) => {
 const BELT_ANCHOR = new THREE.Vector3(5.0, 0.15, 0);
 
 const PAGE_KEYS = Object.keys(PLANET_PAGES);
-const TOUR_STOPS = SECTIONS.length;
 
 const _wp = new THREE.Vector3();
 const _ndc = new THREE.Vector3();
@@ -149,8 +148,15 @@ export function PlanetLabelDriver() {
     // the swap curtain all mean "no pills".
     const covFade = Math.max(0, Math.min(1, 1 - (st.coverage - 0.12) / 0.38));
     const overviewOn = st.act === 'solar' && !st.focusedPlanet && covFade > 0.001;
-    const tourIdx = ((st.tourStop % TOUR_STOPS) + TOUR_STOPS) % TOUR_STOPS;
-    const tourFocus = SECTIONS[tourIdx]?.focus;
+    // Mobile orrery: only the stop in the centre is labelled, fading out over half a stop of
+    // swipe. Neighbours used to keep their pills too, and the belt's pill (anchored between
+    // mars and jupiter) landed on top of mars's, so mars read "Technologies".
+    const tourWeight = (focus: string) => {
+      const i = TOUR_SECTIONS.findIndex((s) => s.focus === focus);
+      if (i < 0) return 0;
+      const N = TOUR_SECTIONS.length, d = Math.abs(i - st.tourPos) % N;
+      return Math.max(0, 1 - Math.min(d, N - d) / 0.5);
+    };
 
     const project = (pos: THREE.Vector3, lift: number) => {
       _wp.copy(pos);
@@ -190,30 +196,43 @@ export function PlanetLabelDriver() {
       if (!overviewOn || !pos) { hide(el); continue; }
       // Mobile tour: only the active stop is labelled — the others are off-frame anyway
       // and their clamped pills would pile up along the edges.
-      if (st.tourMode && tourFocus !== key) { hide(el); continue; }
-      const p = project(pos, (planetRadii.get(key) ?? 0.4) + 0.35);
+      const tw = st.tourMode ? tourWeight(key) : 1;
+      if (tw <= 0) { hide(el); continue; }
+      // In the tour the caption sits just BELOW the disc, in screen space (GPT review: a
+      // name pasted on the planet fights its texture). The overview keeps the world-space
+      // lift so the pill clears the disc there instead.
+      const lift = st.tourMode ? 0 : (planetRadii.get(key) ?? 0.4) + 0.35;
+      const p = project(pos, lift);
+      if (st.tourMode && p.off) { hide(el); continue; } // out of frame: no clamped pill
       let { x, y } = p;
+      if (st.tourMode) {
+        const d = cam.position.distanceTo(pos);
+        const rPx = ((2 * Math.atan((planetRadii.get(key) ?? 0.3) / d)) / (cam.fov * DEG2RAD)) * vh * 0.5;
+        y = Math.min(vh - 150, y + rPx + 16 + el.offsetHeight / 2);
+      }
       if (p.off) {
         // Never crop a section away: clamp the pill to the frame, clear of the navbar
         // (top) and the tour dots / drag hint (bottom).
         x = Math.min(vw - 66, Math.max(66, x));
         y = Math.min(vh - 96, Math.max(74, y));
       }
-      place(el, x, y, covFade, covFade > 0.5);
+      place(el, x, y, covFade * tw, covFade * tw > 0.5);
     }
 
     // --- belt pill --------------------------------------------------------------------
     const belt = nodes.get('belt');
     if (belt) {
-      if (!overviewOn || (st.tourMode && tourFocus !== 'belt')) hide(belt);
+      const btw = st.tourMode ? tourWeight('belt') : 1;
+      if (!overviewOn || btw <= 0) hide(belt);
       else {
-        const { x, y } = project(st.tourMode ? beltTourAnchor : BELT_ANCHOR, 0);
+        const { x, y: by } = project(st.tourMode ? beltTourAnchor : BELT_ANCHOR, 0);
+        const y = st.tourMode ? by + 24 + belt.offsetHeight / 2 : by;
         place(
           belt,
           Math.min(vw - 66, Math.max(66, x)),
           Math.min(vh - 96, Math.max(74, y)),
-          covFade,
-          covFade > 0.5
+          covFade * btw,
+          covFade * btw > 0.5
         );
       }
     }
@@ -329,7 +348,13 @@ export function PlanetLabelDriver() {
 
 // --- DOM overlay -----------------------------------------------------------------------
 
-function Pill({ nodeKey, label, onOpen }: { nodeKey: string; label: string; onOpen: () => void }) {
+const PILL_BASE = 'absolute left-0 top-0 cursor-pointer whitespace-nowrap border text-[var(--color-star-white)] shadow-[0_4px_18px_rgba(5,7,20,0.55)] transition-colors duration-200 hover:border-[var(--color-core-gold)]/70 hover:text-[var(--color-core-gold)] focus:outline-none focus-visible:border-[var(--color-core-gold)] focus-visible:text-[var(--color-core-gold)] focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(5,7,20,0.9)]';
+// Mobile tour caption (GPT review): 20/26 semibold name, a 14px "tap to enter" line under it,
+// a 48px-tall touch target, on a darker plate so both lines hold >= 4.5:1 over any planet.
+const PILL_TOUR = 'touch-pan-y flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-2xl border-white/25 bg-[rgba(5,7,20,0.86)] px-5 py-2 text-[20px] font-semibold leading-[26px]';
+const PILL_DESK = 'rounded-full border-white/20 bg-[rgba(5,7,20,0.78)] px-3.5 py-1.5 text-[13px] font-medium leading-none';
+
+function Pill({ nodeKey, label, hint, tour, onOpen }: { nodeKey: string; label: string; hint: string; tour: boolean; onOpen: () => void }) {
   return (
     <button
       ref={register(nodeKey)}
@@ -338,10 +363,11 @@ function Pill({ nodeKey, label, onOpen }: { nodeKey: string; label: string; onOp
       aria-label={label}
       onClick={onOpen}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
-      className="absolute left-0 top-0 cursor-pointer whitespace-nowrap rounded-full border border-white/20 bg-[rgba(5,7,20,0.78)] px-3.5 py-1.5 text-[13px] font-medium leading-none text-[var(--color-star-white)] shadow-[0_4px_18px_rgba(5,7,20,0.55)] transition-colors duration-200 hover:border-[var(--color-core-gold)]/70 hover:text-[var(--color-core-gold)] focus:outline-none focus-visible:border-[var(--color-core-gold)] focus-visible:text-[var(--color-core-gold)] focus-visible:ring-2 focus-visible:ring-[var(--color-core-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(5,7,20,0.9)]"
+      className={`${PILL_BASE} ${tour ? PILL_TOUR : PILL_DESK}`}
       style={{ fontFamily: 'var(--font-body, var(--font-hebrew))', opacity: 0, visibility: 'hidden', willChange: 'transform' }}
     >
       {label}
+      {tour && <span className="text-[14px] font-normal leading-5 text-[var(--color-star-white)]/80">{hint}</span>}
     </button>
   );
 }
@@ -354,6 +380,7 @@ export default function PlanetLabelsOverlay() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const hovered = useScene((s) => s.hoveredBody);
+  const tour = useScene((s) => s.tourMode);
 
   const open = (key: string) => {
     if (useScene.getState().dragMoved) return; // a rotate-drag / swipe ended here
@@ -367,9 +394,9 @@ export default function PlanetLabelsOverlay() {
   return (
     <div className="pointer-events-none fixed inset-0 z-20 overflow-hidden">
       {PAGE_KEYS.map((key) => (
-        <Pill key={key} nodeKey={key} label={t(PLANET_PAGES[key].labelKey)} onOpen={() => open(key)} />
+        <Pill key={key} nodeKey={key} label={t(PLANET_PAGES[key].labelKey)} hint={t('welcome.tapHint')} tour={tour} onOpen={() => open(key)} />
       ))}
-      <Pill nodeKey="belt" label={t('nav.tech')} onOpen={() => open('belt')} />
+      <Pill nodeKey="belt" label={t('nav.tech')} hint={t('welcome.tapHint')} tour={tour} onOpen={() => open('belt')} />
 
       {/* Keyboard route to the decorative facts: visually hidden, one per body. */}
       {DECORATIVE_BODIES.map((key) => (
