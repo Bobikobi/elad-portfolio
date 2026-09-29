@@ -5,6 +5,7 @@ import { TOUR_SECTIONS } from '@/lib/sections';
 import { useI18n } from '@/lib/i18n';
 import { overviewElevDeg } from './CameraRig';
 import { orrPxPerStop } from '@/lib/orrery';
+import { recenterTilt } from '@/lib/tilt';
 
 /**
  * Drag-to-rotate (T6). A pointer layer that writes a yaw/pitch OFFSET into the store;
@@ -183,6 +184,7 @@ export default function DragControls() {
         s.setTourVel(vTour);
         s.setTourStop(stop);
         s.setTourDrag(false);
+        if (stop !== tourAnchor) recenterTilt(); // new planet frames straight, not tilted
       }
       if (dragging && !reduce && (Math.abs(vYaw) > 0.05 || Math.abs(vPitch) > 0.05)) inertia();
       active = false; dragging = false;
