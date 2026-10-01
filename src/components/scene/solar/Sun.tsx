@@ -95,7 +95,7 @@ const FIB_KEEP = 0.7;
 const FIB_GAIN = 0.8;
 const FIB_MEAN = 0.25;
 const FIB_AMP = 3.0;
-const FIB_FINE = 2.9;
+const FIB_FINE = 2.2;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
 const sunVert = /* glsl */ `
@@ -254,17 +254,20 @@ const sunFrag = /* glsl */ `
     float r1 = 1.0 - abs(noise(fbq) * 2.0 - 1.0);
     float r2 = 1.0 - abs(noise(fbq * 1.7 + wv * 2.0 + vec3(0.0, uTime * 0.03, 0.0)) * 2.0 - 1.0);
     // Same footprint fade as the fire octaves: fibrils narrower than a pixel sparkle.
-    float fibAA = 1.0 - smoothstep(0.35, 0.7, length(fwidth(fbq)));
-    float fibAA2 = 1.0 - smoothstep(0.35, 0.7, 1.7 * length(fwidth(fbq)));
+    float fw = length(fwidth(fbq));
+    float fibAA = 1.0 - smoothstep(0.35, 0.7, fw);
+    float fibAA2 = 1.0 - smoothstep(0.35, 0.7, 1.7 * fw);
     float fib = mix(${glslFloat(FIB_MEAN)}, pow(r1, 4.0), fibAA) * 0.6 + mix(${glslFloat(FIB_MEAN)}, pow(r2, 4.0), fibAA2) * 0.4;
     // Where the pixels can carry it, the whole stack moves up an octave: r2 leads and a finer
     // r3 follows. A phone draws the sun at ~2x the render pixels of a laptop, and with the sun
     // filling its screen the 36-scale fibrils read as fat blotches there (Elad, 2026-10-01).
-    // Gated by footprint, not tier: at a laptop's footprint fibAA3 is 0 and nothing changes.
-    float fibAA3 = 1.0 - smoothstep(0.3, 0.5, ${glslFloat(FIB_FINE)} * length(fwidth(fbq)));
+    // Gated by footprint, not tier: a phone's fw is ~0.1-0.2, a laptop's 0.3+, so fibAA3 is 0
+    // on a laptop and nothing changes there. r3 keeps its own fade like the octaves above.
+    float fibAA3 = 1.0 - smoothstep(0.17, 0.27, fw);
     if (fibAA3 > 0.0) {
       float r3 = 1.0 - abs(noise(fbq * ${glslFloat(FIB_FINE)} + wv * 3.0 + vec3(0.0, uTime * 0.05, 0.0)) * 2.0 - 1.0);
-      float fibFine = mix(${glslFloat(FIB_MEAN)}, pow(r2, 4.0), fibAA2) * 0.6 + pow(r3, 4.0) * 0.4;
+      float fibAA4 = 1.0 - smoothstep(0.35, 0.7, ${glslFloat(FIB_FINE)} * fw);
+      float fibFine = mix(${glslFloat(FIB_MEAN)}, pow(r2, 4.0), fibAA2) * 0.6 + mix(${glslFloat(FIB_MEAN)}, pow(r3, 4.0), fibAA4) * 0.4;
       fib = mix(fib, fibFine, fibAA3);
     }
     n = n * ${glslFloat(FIB_KEEP)} + ${glslFloat((1 - FIB_KEEP) * 0.5)} + (fib - ${glslFloat(FIB_MEAN)}) * ${glslFloat(FIB_GAIN)};
