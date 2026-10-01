@@ -17,11 +17,16 @@ for i in range(len(marks)-1):
     turns=[];sp=[];tr=[];dts=[]
     for a,b in zip(fr,fr[1:]):
         dt=(b['t']-a['t'])/1000; dts.append(dt)
-        ang=qang(a['q'],b['q']); tr.append(ang/dt)
+        ang=qang(a['q'],b['q'])
         # per RENDER frame when the page exposes a frame counter (the rig's rAF can straddle a render)
         nf=(b['fl'][4]-a['fl'][4]) if a.get('fl') and len(a['fl'])>4 and b.get('fl') else 1
         turns.append(ang/nf if nf>0 else 0)
-        sp.append(math.dist(a['p'],b['p'])/dt)
+        # Rates over at least ~one frame: a sample a few ms after a long frame carries that frame's
+        # whole move, and read over 3-6ms a resting camera's 0.7 deg/s drift showed as 4-9 deg/s and
+        # stretched the measured duration past the flight (#70).
+        w=fr[max(0,fr.index(b)-2)] if dt<0.010 else a
+        wdt=(b['t']-w['t'])/1000
+        tr.append(qang(w['q'],b['q'])/wdt); sp.append(math.dist(w['p'],b['p'])/wdt)
     peak=max(sp); 
     # movement start/end
     st=next(i for i,(s,r) in enumerate(zip(sp,tr)) if s>0.02*peak or r>2)
@@ -47,6 +52,14 @@ for i in range(len(marks)-1):
         out['in_frame_25']= bool(b and not b[4] and -b[2]<b[0]<W+b[2] and -b[2]<b[1]<H+b[2])
         infr=next((f['t'] for f in mv if f['b'].get(dst) and not f['b'][dst][4] and -f['b'][dst][2]<f['b'][dst][0]<W+f['b'][dst][2] and -f['b'][dst][2]<f['b'][dst][1]<H+f['b'][dst][2]),None)
         out['first_in_frame_pct']=round((infr-ts)/(dur*1000)*100,1) if infr else None
+        # How far the view must turn before the destination can be in frame (#70 crit 4): the angle
+        # from the camera's heading at the start to the destination's centre.
+        bd=(marks[i].get('bodies') or {}).get(dst)
+        if bd:
+            f0=fr[st]; x,y,z,w=f0['q']
+            fwd=(-2*(x*z+w*y),-2*(y*z-w*x),-(1-2*(x*x+y*y)))
+            v=[bd[k]-f0['p'][k] for k in range(3)]; n=math.sqrt(sum(c*c for c in v))
+            out['turn_to_dst_deg']=round(math.degrees(math.acos(max(-1,min(1,sum(a*b for a,b in zip(fwd,v))/n)))),1)
     if src not in ('overview','belt') and dst!='overview':
         s=[dR(f,src) for f in mv]; s=[x for x in s if x]
         out['pullback_x']=round(max(s)/s[0],2)
@@ -63,6 +76,8 @@ for i in range(len(marks)-1):
     fr=[f for f in rec if marks[i]['t']<=f['t']<marks[i+1]['t'] and f.get('rg')]
     if len(fr)<10: continue
     el=[f['rg'][0] for f in fr]
-    rate=max(abs(b-a) for a,b in zip(el,el[1:]))
+    # per RENDER frame, as the turn is: the recorder's rAF can run twice in one render or skip one
+    nf=lambda a,b:(b['fl'][4]-a['fl'][4]) if a.get('fl') and b.get('fl') and len(a['fl'])>4 else 1
+    rate=max((abs(b['rg'][0]-a['rg'][0])/nf(a,b) if nf(a,b)>0 else 0) for a,b in zip(fr,fr[1:]))
     cross=[(round(fr[k+1]['rg'][1]/0.74,2)) for k in range(len(el)-1) if el[k]*el[k+1]<0]
     print(json.dumps({'ring':lab,'elev_start':round(el[0],1),'elev_end':round(el[-1],1),'max_elev_change_deg_frame':round(rate,2),'plane_crossings_at_R':cross}))
