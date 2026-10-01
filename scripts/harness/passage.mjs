@@ -6,6 +6,7 @@
  *   BASE=<alias> TAG=base-down node scripts/harness/passage.mjs
  *   BASE=<alias> TAG=base-up DIR=up node scripts/harness/passage.mjs
  *   W=390 H=844 ...                                   (phone: touch + mobile emulation)
+ *   SEEN=1 DIR=up ...                                 (returning visitor: enters on /about, Escape home, starts in the overview)
  *
  * crossing.mjs drives a frame-indexed scroll ramp; since #64 the passage is a timed two-leg
  * move played by Hero itself, so the clock that matters is the wall clock, and this rig only
@@ -22,6 +23,7 @@ const DIR = (process.env.DIR || 'down').toLowerCase();
 const W = +(process.env.W || 1280), H = +(process.env.H || 720), MOB = W < 700;
 const SETTLE = +(process.env.SETTLE || 12000);
 const POST_MS = +(process.env.POST_MS || 3500);
+const SEEN = !!process.env.SEEN;
 const OUT = process.env.OUT || path.join(process.cwd(), '.harness-out', 'passage', TAG);
 const BYPASS = (() => {
   try { return fs.readFileSync(path.join(os.homedir(), '.claude', 'secrets', 'vercel-bypass.txt'), 'utf8').trim() || null; } catch { return null; }
@@ -72,8 +74,11 @@ try {
     };
     requestAnimationFrame(tick);
   });
-  await page.goto(`${BASE}/?hud=1&tier=high`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  // A returning visitor is one who entered on a world and left it: Escape routes home in-document,
+  // and Hero lands in the overview (a reload of / is always a fresh visit).
+  await page.goto(`${BASE}/${SEEN ? 'about' : ''}?hud=1&tier=high`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await sleep(SETTLE);
+  if (SEEN) { await page.keyboard.press('Escape'); await sleep(SETTLE); }
   const probe = await page.evaluate(() => {
     const gl = document.createElement('canvas').getContext('webgl2');
     const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
@@ -81,7 +86,7 @@ try {
   });
   if (/swiftshader|llvmpipe|^none$/i.test(probe.gpu)) throw new Error(`software GPU: ${probe.gpu}`);
   if (probe.act !== 'galaxy') console.log(probe.gpu, await page.evaluate(() => JSON.stringify({ t: document.title, c: document.querySelectorAll('canvas').length, three: !!window.__three, hud: !!window.__hud, clock: !!window.__clock, body: document.body.innerText.slice(0, 200) })));
-  if (probe.act !== 'galaxy') throw new Error(`act is ${probe.act}, not galaxy`);
+  if (probe.act !== (SEEN ? 'solar' : 'galaxy')) throw new Error(`act is ${probe.act}`);
   // Canvas only: the numbers describe the scene, not the welcome text and the navbar.
   await page.evaluate(() => {
     const canvas = document.querySelector('canvas');
@@ -101,7 +106,7 @@ try {
     }
     throw new Error('the passage did not land');
   };
-  if (DIR === 'up') {
+  if (DIR === 'up' && !SEEN) {
     await gesture(120);
     await sleep(4000);
     await page.evaluate(() => { window.__passage = null; });

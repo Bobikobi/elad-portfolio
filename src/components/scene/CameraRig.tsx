@@ -1065,6 +1065,12 @@ export default function CameraRig() {
     } else if (!store.focusedPlanet) {
       // Scroll velocity (per second) → "at rest" detection for the T7c reconcile.
       const vel = prevScroll.current < 0 ? 1 : Math.abs(scrollProgress - prevScroll.current) / Math.max(dt, 1e-4);
+      // A visit resting in the overview with no dive behind it (a returning visitor, a
+      // reconciled swap) held the overview until the curtain when scrolled up (#82); leaving
+      // the bottom plays the arrival backwards, as it does after a dive.
+      if (act === 'solar' && store.scrollDriven && reconcile.current === 0 && prevScroll.current >= 0.999 && scrollProgress < 0.999) {
+        arrivedViaDive.current = true;
+      }
       prevScroll.current = scrollProgress;
       const scrollSide: Act = scrollProgress >= SWAP_V ? 'solar' : 'galaxy';
 
