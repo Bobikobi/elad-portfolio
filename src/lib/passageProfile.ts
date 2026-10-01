@@ -69,14 +69,17 @@ export function diveAt(p: number): number {
  *
  * The distance shrinks geometrically, so the apparent speed follows the ease on every screen.
  * Moved linearly, the phone's 7.5x zoom (desktop's is 2x) sped up halfway through the arrival
- * and peaked there at twice the dive's speed. The ease power then sets the opening speed,
- * power x |ln ratio| per arrival: held near 2.3, the pace the dive enters the curtain at, and
- * never below a quadratic, the gentlest braking that still lands without a jolt (desktop
- * gets a cubic, the phone a quadratic).
+ * and peaked there at twice the dive's speed. The opening speed is k x |ln ratio| per
+ * arrival, so k follows the zoom to hold it near 2.3, the pace the dive enters the curtain
+ * at. The ease is the cubic that leaves at speed k and lands at rest: k 3 is the cubic
+ * ease-out (desktop), k 2 the quadratic, and the phone's deep zoom takes the floor of 1.5,
+ * which still brakes all the way down (a quadratic left it at twice the dive's speed,
+ * measured on the preview).
  */
 export function arriveAt(p: number, ratio = 1): number {
   const x = Math.min(1, Math.max(0, (timeAt(p) - T_ARRIVE) / (PASSAGE_MS - T_ARRIVE)));
   const zoom = Math.abs(Math.log(ratio));
-  const a = 1 - (1 - x) ** Math.min(3, Math.max(2, 2.3 / Math.max(zoom, 1e-3)));
+  const k = Math.min(3, Math.max(1.5, 2.3 / Math.max(zoom, 1e-3)));
+  const a = x * (k + x * (3 - 2 * k + x * (k - 2)));
   return zoom < 1e-3 ? a : (1 - ratio ** a) / (1 - ratio);
 }
