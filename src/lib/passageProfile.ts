@@ -44,6 +44,8 @@ export function timeAt(p: number): number {
 
 const T_START = timeAt(DIVE_START);
 const T_SWAP = timeAt(SWAP_V);
+/** The arrival starts where the curtain is 60% shut on its way open, not at the swap. */
+const T_ARRIVE = timeAt(SWAP_V + COVER_PLATEAU + 0.4 * COVER_FALLOFF);
 
 /**
  * Dive progress (0..1 along the dive path) at scroll `p`. Ease-IN only: it leaves the rest
@@ -57,10 +59,13 @@ export function diveAt(p: number): number {
 }
 
 /**
- * Arrival progress (0..1 from the entry pose to the overview) at scroll `p`. Ease-OUT only:
- * it leaves the curtain at twice its mean speed and brakes to rest exactly at the end.
+ * Arrival progress (0..1 from the entry pose to the overview) at scroll `p`. Ease-OUT only,
+ * cubic: it leaves the curtain at three times its mean speed and brakes to rest exactly at
+ * the end. Started at the swap, a third of the move ran behind the shut curtain and the
+ * visible part began at a third of the dive's peak speed (desktop, measured on the preview);
+ * now the camera waits at the entry pose until the curtain is mostly open.
  */
 export function arriveAt(p: number): number {
-  const x = Math.min(1, Math.max(0, (timeAt(p) - T_SWAP) / (PASSAGE_MS - T_SWAP)));
-  return 1 - (1 - x) * (1 - x);
+  const x = Math.min(1, Math.max(0, (timeAt(p) - T_ARRIVE) / (PASSAGE_MS - T_ARRIVE)));
+  return 1 - (1 - x) ** 3;
 }

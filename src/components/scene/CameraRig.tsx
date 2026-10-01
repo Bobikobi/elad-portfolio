@@ -254,10 +254,14 @@ function orbitVantage(
 //     stall frame the curtain exists to hide is one of them, so the act IS on screen).
 // The floor cannot be waived: releasing on a clock alone would uncover a frame that has
 // not been drawn, which is the B7 defect with the sign flipped.
-const REVEAL_FRAMES = 8;
+// #82: both acts are resident and warmed now, so the solar act's first frames are plain
+// frames and the hold only has to prove one drew. At 8 frames (and a 0.25s fade) the
+// curtain lagged the envelope so far that the passage clock held the camera still for
+// ~200ms while the curtain was already lifting.
+const REVEAL_FRAMES = 2;
 const REVEAL_MIN_FRAMES = 2;   // readiness floor - drawn frames, never wall-clock
 const REVEAL_HOLD_CAP = 0.4;   // s - past this the floor alone governs
-const REVEAL_FADE = 0.25; // s - was 0.35, the black stretch after the swap was the longest part of the dark
+const REVEAL_FADE = 0.2; // s - was 0.35, then 0.25; at 0.2 the fade keeps pace with the envelope's falloff
 const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
 // GALAXY-REST replaces the old welcome decision. It used to look at y = 0.5 so the disc

@@ -292,8 +292,10 @@ function GalaxyHome() {
         // It also waits while the curtain is shut behind the scroll - the swap's reveal hold -
         // so the arrival plays in view instead of finishing behind the curtain. Bounded, so a
         // curtain that never lifts cannot keep the passage (and the swallowed input) alive.
+        // The margin is half a curtain: the ordinary reveal lags the envelope by up to ~0.4,
+        // and at 0.3 that lag alone stopped the camera while the curtain was lifting (#82).
         const sc = useScene.getState();
-        if (sc.coverage > coverageFor(sc.scrollProgress) + 0.3 && held < HOLD_MAX_MS) held += dt;
+        if (sc.coverage > coverageFor(sc.scrollProgress) + 0.5 && held < HOLD_MAX_MS) held += dt;
         else elapsed += Math.min(dt, STEP_MAX_MS);
         const x = Math.min(1, elapsed / span);
         window.scrollTo({ top: scrollAt(tFrom + dir * span * x) * max, behavior: 'instant' });
