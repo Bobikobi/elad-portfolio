@@ -33,8 +33,8 @@ import {
 /**
  * The single WebGL canvas — fixed, full-bleed, behind the DOM. `dynamic(ssr:false)`
  * at the import site keeps it client-only. CameraRig (sole camera owner) and post FX
- * persist here across the act swap; only the act CONTENT (galaxy vs solar) changes,
- * so GalaxyAct fully unmounts/disposes at the flash while the world feels continuous.
+ * persist here across the act swap. Both acts stay mounted (#82); the swap only flips
+ * which act group is visible, so its frame builds nothing new.
  */
 /** Runs `fn` with every act group shown, then restores each group's own visibility. */
 function withActsShown(scene: THREE.Scene, fn: () => void) {
@@ -62,6 +62,31 @@ function warmDraw(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Cam
 }
 
 /**
+ * Textures the scene holds whose current image has not reached the GPU yet. The maps
+ * stream in after the warm draw (bitmapTexture leaves the upload to first bind), and the
+ * solar ones were all being bound at once on the swap frame: ~120 ms of uploads, measured
+ * on the preview in all four forward runs (#82).
+ */
+function pendingTextures(gl: THREE.WebGLRenderer, scene: THREE.Scene): THREE.Texture[] {
+  const seen = new Set<THREE.Texture>();
+  const take = (v: unknown) => {
+    const t = v as THREE.Texture | null;
+    if (!t?.isTexture || seen.has(t) || t.isRenderTargetTexture || !t.image || t.version === 0) return;
+    seen.add(t);
+  };
+  scene.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (!m) return;
+    for (const mat of Array.isArray(m) ? m : [m]) {
+      for (const v of Object.values(mat)) take(v);
+      const u = (mat as THREE.ShaderMaterial).uniforms;
+      if (u) for (const k in u) take(u[k]?.value);
+    }
+  });
+  return [...seen].filter((t) => (gl.properties.get(t) as { __version?: number }).__version !== t.version);
+}
+
+/**
  * Warm-up + ready signal (T5 — "composer from frame one"). The EffectComposer is
  * already the sole renderer from frame 1 (its priority-1 render disables R3F's
  * auto-render), so every frame is composited. What we add here is a PRECOMPILE on the
@@ -78,6 +103,7 @@ function Warmup() {
   const camera = useThree((s) => s.camera);
   const compiled = useRef(false);
   const frames = useRef(0);
+  const uploads = useRef<THREE.Texture[]>([]);
   // Verification handle (HUD_AVAILABLE gate — stripped from the production bundle). A
   // screenshot can show that something is wrong in the frame but never WHICH object did
   // it; with the live scene graph in hand a harness can bisect by hiding one node at a
@@ -103,9 +129,16 @@ function Warmup() {
     // A compile builds programs but uploads nothing: vertex buffers go to the GPU on an
     // object's first draw. One draw of everything into a scratch target, culling off, so
     // the hidden act's first visible frame is a plain frame. Textures whose images are still
-    // downloading here upload on first use instead.
+    // downloading here are uploaded by the trickle below.
     if (frames.current === 1) warmDraw(gl, scene, camera);
     if (frames.current === 3) useScene.getState().setSceneReady(true);
+    // After that, upload what has arrived since, one texture a frame, so the first frame
+    // that binds them - the swap, a focus - draws without stopping. A rescan every half
+    // second picks up late images and versions bumped by a swap of map.
+    if (frames.current < 3) return;
+    if (frames.current % 30 === 0) uploads.current = pendingTextures(gl, scene);
+    const t = uploads.current.pop();
+    if (t && (gl.properties.get(t) as { __version?: number }).__version !== t.version) gl.initTexture(t);
   });
   return null;
 }
