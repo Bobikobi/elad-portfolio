@@ -85,6 +85,12 @@ def frame_ms(a, b):
     return abs(time_at(b[3]) - time_at(a[3])) if playing else b[0] - a[0]
 turn60s = max((qang(a[5], b[5]) * 16.667 / max(16.667, frame_ms(a, b)) for a, b in zip(dist, dist[1:])
                if a[1] == b[1] and b[2] < 0.99 and t0 <= b[0] <= t1), default=0)
+# The camera's damps run on wall time, so a long wall frame over a short scroll step moves the
+# pose more than the scroll alone accounts for, and the scroll clock then over-reads (phone,
+# 1.83 for a 1.38 deg step over 27ms). Each clock over-reads only by being SHORT, so the step
+# is timed by the longer of the two.
+turn60b = max((qang(a[5], b[5]) * 16.667 / max(16.667, frame_ms(a, b), b[0] - a[0]) for a, b in zip(dist, dist[1:])
+               if a[1] == b[1] and b[2] < 0.99 and t0 <= b[0] <= t1), default=0)
 # Two different things, kept apart: a FRAME over 50ms (the gap between recorder samples - the
 # page did not paint), and a POSE gap over 50ms (painting went on but the camera did not move,
 # e.g. held under the curtain). The first is criterion 1's "no frame > 0.1s"; until 2026-10-01
@@ -100,6 +106,7 @@ out = {
     'max_turn_deg_frame': round(math.degrees(turn), 2),
     'max_turn_deg_per_60fps_frame': round(math.degrees(turn60), 2),
     'max_turn_deg_per_60fps_frame_scroll_clock': round(math.degrees(turn60s), 2),
+    'max_turn_deg_per_60fps_frame_both_clocks': round(math.degrees(turn60b), 2),
     'frames_over_50ms': long_frames, 'pose_gaps_over_50ms': pose_gaps, 'render_fps': round(render_fps, 1),
     'swap_at_ms': round(swap[0] - t0) if swap else None,
 }
