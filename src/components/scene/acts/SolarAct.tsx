@@ -200,6 +200,8 @@ interface PlanetSpec {
   /** Longitude of the ascending node, RADIANS — where this orbit crosses the ecliptic. */
   node?: number;
   tilt?: number;
+  /** Rotation about its own axis, as a multiple of the base spin; negative = retrograde. */
+  spin?: number;
   rings?: boolean;
   moons?: number;
   /** Optional cool multiplier on the body to counter the warm sun (Earth). */
@@ -345,16 +347,16 @@ function Moons({
 // steepest, Jupiter the flattest) but compressed into 1.5-4°, with the nodes scattered so
 // no two orbits share a line of nodes.
 const PLANETS: PlanetSpec[] = [
-  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, phase: 0.6, incl: 4.0, node: 0.35, atmoStrength: 0.12 },
-  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, phase: 3.7, incl: 3.4, node: 2.10, atmo: '#f6e6b0', atmoStrength: 0.6 },
+  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, spin: 0.3, phase: 0.6, incl: 4.0, node: 0.35, atmoStrength: 0.12 },
+  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, spin: -0.1, phase: 3.7, incl: 3.4, node: 2.10, atmo: '#f6e6b0', atmoStrength: 0.6 },
   // Earth gets a gentle cool multiplier to counter the warm sun (reads blue/white,
   // not gold); the close-orbit over-exposure is handled by per-planet ORBIT exposure
   // in CameraRig (inner planets sit so close to the sun the lit disc would otherwise
   // clip to gold regardless of albedo).
   { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, incl: 2.2, node: 4.35, tilt: 0.41, bodyColor: '#cfe0ff', earth: true, atmo: '#a8d0ff', atmoStrength: 0.5 },
-  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, incl: 2.6, node: 0.95, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
-  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, incl: 1.6, node: 3.30, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
-  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, bands: 0.6, atmo: '#f0dcae', atmoStrength: 0.45 },
+  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, spin: 0.97, phase: 5.0, incl: 2.6, node: 0.95, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
+  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.80, speed: 0.0105, spin: 1.6, phase: 2.5, incl: 1.6, node: 3.30, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
+  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.74, speed: 0.0090, spin: 1.5, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, bands: 0.6, atmo: '#f0dcae', atmoStrength: 0.45 },
   // B10: the two outermost orbits are pulled in. On its own this is a small effect — the
   // in-frame share of a full revolution at the resting overview goes 34.4%→35.6% for
   // Uranus and 31.8%→33.4% for Neptune — because what actually pushes an outer body out
@@ -362,8 +364,8 @@ const PLANETS: PlanetSpec[] = [
   // half of every outer orbit passes below the frustum. That is the same reason Jupiter
   // (48.8%) and Saturn (38.6%) leave frame too. Reachability is solved where it lives, in
   // the label driver — see the rim markers in PlanetLabels.
-  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 8.9, size: 0.44, speed: 0.0074, phase: 3.0, incl: 2.0, node: 1.65, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
-  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 9.8, size: 0.42, speed: 0.0062, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
+  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 8.9, size: 0.44, speed: 0.0074, spin: 1.1, phase: 3.0, incl: 2.0, node: 1.65, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
+  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 9.8, size: 0.42, speed: 0.0062, spin: 1.1, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
 ];
 
 const BODY_ALBEDO_MULTIPLIER: Record<string, number> = {
@@ -1015,7 +1017,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     }
     // Mobile: ~4.6 deg/s (a turn per ~80s). 0.3 rad/s swapped continents within seconds of
     // reading; 0.02 read as no spin at all (Elad, 2026-09-29). Desktop keeps its reviewed spin.
-    if (mesh.current) mesh.current.rotation.y += dt * (useScene.getState().tourMode ? 0.08 : 0.3);
+    if (mesh.current) mesh.current.rotation.y += dt * (spec.spin ?? 1) * (useScene.getState().tourMode ? 0.08 : 0.3);
   });
 
   const bind =
