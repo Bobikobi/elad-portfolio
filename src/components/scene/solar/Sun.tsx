@@ -246,7 +246,8 @@ const sunFrag = /* glsl */ `
     vec3 spotA = normalize(vec3(0.42, 0.30, 0.86));
     vec3 spotB = normalize(vec3(-0.30, -0.22, 0.93));
     vec3 wq = pd * 6.0 + vec3(0.0, 0.0, uTime * 0.015);
-    vec3 wv = vec3(noise(wq), noise(wq + vec3(3.7, 1.9, 5.1)), noise(wq + vec3(8.1, 5.3, 2.2))) - 0.5;
+    // Two channels, not three: on the face z points at the camera, so a z warp barely shows.
+    vec3 wv = vec3(noise(wq) - 0.5, noise(wq + vec3(3.7, 1.9, 5.1)) - 0.5, 0.0);
     vec3 sw = swirl(swirl(pd, spotA, 2.6 * exp(-length(pd - spotA) / 0.20)), spotB, 2.6 * exp(-length(pd - spotB) / 0.15));
     vec3 fbq = sw * 36.0 + wv * 6.0;
     float r1 = 1.0 - abs(noise(fbq) * 2.0 - 1.0);
@@ -398,10 +399,7 @@ const sunFrag = /* glsl */ `
     // Per channel, green most and blue DOWN: ACES's input matrix feeds red and green into
     // blue, so a uniform boost measured as a blue-white centre (240,234,227), and even +35%
     // blue landed at 209. Blue has to fall in the input for the output to stay yellow.
-    // #73: the core burns on the ORIGINAL coarse fire scale, not the fine threads above. Its
-    // big patches flaring and fading are what moved the bloom, i.e. the glow around the disc.
-    float fireC = pow(clamp(1.0 - abs(noise(fp * 2.0 + vec3(fq * 3.0, uTime * 1.0)) * 2.0 - 1.0) * 0.9, 0.0, 1.0), 3.0);
-    col *= 1.0 + core * vec3(0.75, 1.05, -0.35) * (0.25 + 0.75 * fireC);
+    col *= 1.0 + core * vec3(0.75, 1.05, -0.35) * (0.25 + 0.75 * fire);
     float fa = ${glslFloat(FIB_AMP)} * fib;
     vec3 fibMul = mix(vec3(0.060, 0.005, 0.001), vec3(1.0), smoothstep(0.25, 1.0, fa + 2.0 * ev));
     col *= mix(vec3(1.0), fibMul, smoothstep(0.20, 0.55, limb) * fibAA);
@@ -769,7 +767,7 @@ function Corona() {
       // of the glow around the disc is the disc's own bloom, so this alone moved the screen by
       // only 2.5-3%; the disc's slow pulse (Sun) uses the same sines and carries the rest.
       const tt = un.uTime.value;
-      un.uGain.value = CORONA_GAIN * (1 + 0.18 * Math.sin(tt * 0.52) + 0.07 * Math.sin(tt * 0.21 + 2.0));
+      un.uGain.value = CORONA_GAIN * (1 + 0.27 * Math.sin(tt * 0.52) + 0.105 * Math.sin(tt * 0.21 + 2.0));
     }
   });
   return (
@@ -833,10 +831,12 @@ export default function Sun() {
       u.uTime.value += dt;
       // Breathe on irregular slow noise + rare flare pulse (spec: sun is alive).
       const t = u.uTime.value;
-      // SUN-ALIVE: +-25% -> a slow +-10% breath. The flicker now lives in local flare-ups in
+      // SUN-ALIVE: +-25% -> a slow +-15% breath. The flicker now lives in local flare-ups in
       // the shader; this only feeds the bloom, which is most of the glow around the disc. Same
       // two sines as the corona's breath (Corona), so disc glow and halo swell together.
-      pulse = 0.10 * Math.sin(t * 0.52) + 0.05 * Math.sin(t * 0.21 + 2.0);
+      // #73: x1.5. The fine surface no longer pulses the bloom the way the coarse fire patches
+      // did, so the halo's motion has to come from the breath itself.
+      pulse = 0.15 * Math.sin(t * 0.52) + 0.075 * Math.sin(t * 0.21 + 2.0);
       u.uPulse.value = pulse;
     }
     // Debug-only: a harness measuring how fast the SURFACE evolves has to stop the sun
