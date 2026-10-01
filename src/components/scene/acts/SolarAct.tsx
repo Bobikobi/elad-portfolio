@@ -923,6 +923,10 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       angle.current = spec.phase;
       lastTourPos.current = null;
       if (hovered) setHovered(false);
+      // The unmount used to clear a tapped selection; a dormant act must too, or the tour's
+      // tooltip (kept on purpose by the label driver) reappears on the next arrival.
+      const st = useScene.getState();
+      if (st.hoveredBody === spec.key) st.setHoveredBody(null);
       if (group.current) {
         orbitPoint(_op, spec.orbit, angle.current, incl, spec.node ?? 0);
         group.current.position.copy(_op);
