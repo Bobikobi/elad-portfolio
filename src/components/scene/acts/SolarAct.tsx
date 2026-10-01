@@ -1,5 +1,5 @@
 'use client';
-import { orrSlot } from '@/lib/orrery';
+import { ORR, orrGeom, orrSlot } from '@/lib/orrery';
 import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useCursor } from '@react-three/drei';
@@ -200,6 +200,8 @@ interface PlanetSpec {
   /** Longitude of the ascending node, RADIANS — where this orbit crosses the ecliptic. */
   node?: number;
   tilt?: number;
+  /** Rotation about its own axis, as a multiple of the base spin; negative = retrograde. */
+  spin?: number;
   rings?: boolean;
   moons?: number;
   /** Optional cool multiplier on the body to counter the warm sun (Earth). */
@@ -345,16 +347,16 @@ function Moons({
 // steepest, Jupiter the flattest) but compressed into 1.5-4°, with the nodes scattered so
 // no two orbits share a line of nodes.
 const PLANETS: PlanetSpec[] = [
-  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, phase: 0.6, incl: 4.0, node: 0.35, atmoStrength: 0.12 },
-  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, phase: 3.7, incl: 3.4, node: 2.10, atmo: '#f6e6b0', atmoStrength: 0.6 },
+  { key: 'mercury', tex: '/textures/mercury.jpg', rim: '#b0a08c', orbit: 1.95, size: 0.16, speed: 0.0205, spin: 0.3, phase: 0.6, incl: 4.0, node: 0.35, atmoStrength: 0.12 },
+  { key: 'venus', tex: '/textures/venus.jpg', rim: '#e8c98a', orbit: 2.55, size: 0.26, speed: 0.0170, spin: -0.1, phase: 3.7, incl: 3.4, node: 2.10, atmo: '#f6e6b0', atmoStrength: 0.6 },
   // Earth gets a gentle cool multiplier to counter the warm sun (reads blue/white,
   // not gold); the close-orbit over-exposure is handled by per-planet ORBIT exposure
   // in CameraRig (inner planets sit so close to the sun the lit disc would otherwise
   // clip to gold regardless of albedo).
   { key: 'earth', tex: '/textures/earth.jpg', rim: '#7dbaff', orbit: 3.35, size: 0.40, speed: 0.0150, phase: 1.7, incl: 2.2, node: 4.35, tilt: 0.41, bodyColor: '#cfe0ff', earth: true, atmo: '#a8d0ff', atmoStrength: 0.5 },
-  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, phase: 5.0, incl: 2.6, node: 0.95, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
-  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.64, speed: 0.0105, phase: 2.5, incl: 1.6, node: 3.30, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
-  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.58, speed: 0.0090, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, bands: 0.6, atmo: '#f0dcae', atmoStrength: 0.45 },
+  { key: 'mars', tex: '/textures/mars.jpg', rim: '#e07a4a', orbit: 4.25, size: 0.30, speed: 0.0128, spin: 0.97, phase: 5.0, incl: 2.6, node: 0.95, tilt: 0.44, haze: 0.12, atmo: '#e0a882', atmoStrength: 0.28 },
+  { key: 'jupiter', tex: '/textures/jupiter.jpg', rim: '#d8b98a', orbit: 6.3, size: 0.80, speed: 0.0105, spin: 1.6, phase: 2.5, incl: 1.6, node: 3.30, moons: 4, flow: 0.012, shear: 0.005, atmo: '#d8e8ff', atmoStrength: 0.5 },
+  { key: 'saturn', tex: '/textures/saturn.jpg', rim: '#e6cf9a', orbit: 8.0, size: 0.74, speed: 0.0090, spin: 1.5, phase: 5.9, incl: 3.0, node: 5.45, tilt: 0.47, rings: true, moons: 8, flow: 0.009, shear: 0.0035, bands: 0.6, atmo: '#f0dcae', atmoStrength: 0.45 },
   // B10: the two outermost orbits are pulled in. On its own this is a small effect — the
   // in-frame share of a full revolution at the resting overview goes 34.4%→35.6% for
   // Uranus and 31.8%→33.4% for Neptune — because what actually pushes an outer body out
@@ -362,8 +364,8 @@ const PLANETS: PlanetSpec[] = [
   // half of every outer orbit passes below the frustum. That is the same reason Jupiter
   // (48.8%) and Saturn (38.6%) leave frame too. Reachability is solved where it lives, in
   // the label driver — see the rim markers in PlanetLabels.
-  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 8.9, size: 0.44, speed: 0.0074, phase: 3.0, incl: 2.0, node: 1.65, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
-  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 9.8, size: 0.42, speed: 0.0062, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
+  { key: 'uranus', tex: '/textures/uranus.jpg', rim: '#9fe0e6', orbit: 8.9, size: 0.44, speed: 0.0074, spin: 1.1, phase: 3.0, incl: 2.0, node: 1.65, tilt: 1.7, flow: 0.005, shear: 0.0015, atmo: '#c8f2f4', atmoStrength: 0.45 },
+  { key: 'neptune', tex: '/textures/neptune.jpg', rim: '#5a78ff', orbit: 9.8, size: 0.42, speed: 0.0062, spin: 1.1, phase: 0.4, incl: 2.9, node: 4.90, flow: 0.008, shear: 0.003, atmo: '#7f9dff', atmoStrength: 0.5 },
 ];
 
 const BODY_ALBEDO_MULTIPLIER: Record<string, number> = {
@@ -660,11 +662,13 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   const router = useRouter();
   const gl = useThree((s) => s.gl);
   const focused = useScene((s) => s.focusedPlanet);
+  const settled = useScene((s) => s.worldSettled);
   const group = useRef<THREE.Group>(null);
   const spinGroup = useRef<THREE.Group>(null);
   const mesh = useRef<THREE.Mesh>(null);
   const ringMesh = useRef<THREE.Mesh>(null);
   const angle = useRef(spec.phase);
+  const lastTourPos = useRef<number | null>(null); // carousel position last frame (null = not in the carousel)
   // A1 hi-res crossfade state (page planets only).
   const hiShader = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
   const hiTex = useRef<THREE.Texture | null>(null);
@@ -893,14 +897,18 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     };
   }, [textureLoad, ringTex, ringGeo, spec.key, spec.size, spec.rings]);
 
-  // A1: lazily upgrade this planet's albedo the moment it becomes the focused world, and
-  // fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
+  // A1: lazily upgrade this planet's albedo once the camera has landed on it as the focused
+  // world, and fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
+  // Not before the landing: an 8K map's upload took two ~150ms frames, and mid-flight that froze
+  // the camera twice and stretched the flights into Earth and Mars by 0.3s (#70). "Settled" latches
+  // while the camera still eases the last few percent, so the upload waits out that tail too.
   useEffect(() => {
     if (!page || focused !== spec.key) { hiTarget.current = 0; return; }
+    if (!settled) return;
     const tier = hiTierFor();
     if (tier === 'base') return; // mobile keeps the 2K base
     let cancelled = false;
-    loadHiRes(spec.key, tier, gl).then((tex) => {
+    const wait = setTimeout(() => loadHiRes(spec.key, tier, gl).then((tex) => {
       if (!tex) return;
       if (cancelled) { tex.dispose(); return; }
       hiTex.current?.dispose();
@@ -908,11 +916,30 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       if (hiShader.current) hiShader.current.uniforms.uHiMap.value = tex;
       hiTarget.current = 1;
       if (DEV) console.log(`[tex] ${spec.key} ${tier} resident - textures=${gl.info.memory.textures}`);
-    });
-    return () => { cancelled = true; hiTarget.current = 0; };
-  }, [focused, page, spec.key, gl]);
+    }), 600);
+    return () => { cancelled = true; clearTimeout(wait); hiTarget.current = 0; };
+  }, [focused, settled, page, spec.key, gl]);
 
   useFrame((state, dt) => {
+    // Dormant while the galaxy is on screen (both acts stay mounted - see SceneRoot): hold the
+    // pose a fresh mount opens with, so every arrival meets the system the same way it did
+    // when this act was built at the swap, and publish it for the camera's arrival solve.
+    if (useScene.getState().act !== 'solar') {
+      angle.current = spec.phase;
+      lastTourPos.current = null;
+      if (hovered) setHovered(false);
+      // The unmount used to clear a tapped selection; a dormant act must too, or the tour's
+      // tooltip (kept on purpose by the label driver) reappears on the next arrival.
+      const st = useScene.getState();
+      if (st.hoveredBody === spec.key) st.setHoveredBody(null);
+      if (group.current) {
+        orbitPoint(_op, spec.orbit, angle.current, incl, spec.node ?? 0);
+        group.current.position.copy(_op);
+        group.current.getWorldPosition(_wp);
+        planetPositions.get(spec.key)?.copy(_wp);
+      }
+      return;
+    }
     // SPARKLE-2: the heliocentric revolution stops while ANY world is focused — not this
     // planet's, any. It is the one motion that has to stop, and it is the only one that does.
     //
@@ -941,8 +968,18 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         const ti = TOUR_SECTIONS.findIndex((x) => x.focus === spec.key);
         if (ti >= 0) {
           angle.current = orrSlot(spec.orbit, ti, st.tourPos);
+        } else if (lastTourPos.current !== null) {
+          // Every other body turns WITH the swipe, by the same angle orrSlot gives the carousel
+          // stars (-SP per stop), on top of its own slow drift - the whole system, sky
+          // included (Constellations), rotates past a still camera (Elad, 2026-09-29).
+          const d = st.tourPos - lastTourPos.current;
+          angle.current -= d * ORR.SP * orrGeom().dir;
+          // A tapped tooltip closes once its body is swiped away: on touch nothing else
+          // would ever close it (Elad, 2026-09-29: Uranus left its window open).
+          if (Math.abs(d) > 1e-3 && st.hoveredBody === spec.key) st.setHoveredBody(null);
         }
-      }
+        lastTourPos.current = st.tourPos;
+      } else lastTourPos.current = null;
     }
     // Atmosphere strength eases toward its idle value, brightening on hover (a fade, not a switch).
     const rimTarget = hovered && page ? atmoStrength * 1.8 : atmoStrength;
@@ -1002,15 +1039,18 @@ function Planet({ spec }: { spec: PlanetSpec }) {
         eclipseRawReport[spec.key] = +target.toFixed(4);
       }
     }
-    // Mobile: ~1 deg/s, so a world's continents hold still while it is read (0.3 rad/s
-    // swapped them within seconds). Desktop keeps its reviewed spin.
-    if (mesh.current) mesh.current.rotation.y += dt * (useScene.getState().tourMode ? 0.02 : 0.3);
+    // Mobile: ~4.6 deg/s (a turn per ~80s). 0.3 rad/s swapped continents within seconds of
+    // reading; 0.02 read as no spin at all (Elad, 2026-09-29). Desktop keeps its reviewed spin.
+    if (mesh.current) mesh.current.rotation.y += dt * (spec.spin ?? 1) * (useScene.getState().tourMode ? 0.08 : 0.3);
   });
 
   const bind =
     page || decorative
       ? {
+          // The raycaster does not skip hidden objects, so a dormant planet (galaxy act on
+          // screen) would still catch the pointer. Unhandled, the event passes on.
           onClick: (e: { stopPropagation: () => void }) => {
+            if (useScene.getState().act !== 'solar') return;
             e.stopPropagation();
             if (page) open();
             // Touch has no hover: a tap on a decorative body toggles its tooltip.
@@ -1025,6 +1065,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
           // enter/leave chatters on a small disc that orbits under a still cursor, and two
           // writers for one piece of state would only fight each other.
           onPointerOver: (e: { stopPropagation: () => void }) => {
+            if (useScene.getState().act !== 'solar') return;
             e.stopPropagation();
             setHovered(true);
           },
@@ -1079,7 +1120,11 @@ export default function SolarAct() {
     // with it — see the note on `angle` in Planet. Leaving this running would have left 0.004
     // rad/s still turning the vantage, which is the same "the parent is still moving" mistake
     // useSkyLock exists to catch. Accumulator, so departure continues rather than re-syncs.
-    if (root.current && !useScene.getState().focusedPlanet) root.current.rotation.y += dt * 0.004;
+    // Dormant (galaxy act on screen): back to the mounted pose, as each Planet does.
+    if (!root.current) return;
+    const st = useScene.getState();
+    if (st.act !== 'solar') root.current.rotation.y = 0;
+    else if (!st.focusedPlanet) root.current.rotation.y += dt * 0.004;
   });
   return (
     <>

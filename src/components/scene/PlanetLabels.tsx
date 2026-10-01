@@ -130,7 +130,25 @@ export function PlanetLabelDriver() {
     const gone = () => { ptr.onScene = false; ptr.onTip = false; };
     document.documentElement.addEventListener('pointerleave', gone, { passive: true });
     window.addEventListener('blur', gone);
+    // Touch: a tapped card stays until the next tap lands somewhere else - background, a
+    // constellation, another body (Elad, 2026-09-29). The body's own tap handler (an R3F
+    // click, which runs before this window-level one) toggles or swaps the card; if this
+    // tap left it untouched, the tap missed it, so the card closes.
+    let downKey: string | null = null, downTouch = false;
+    const down = (e: PointerEvent) => {
+      downTouch = e.pointerType !== 'mouse' && (e.target as Element | null)?.tagName === 'CANVAS';
+      downKey = useScene.getState().hoveredBody;
+    };
+    const click = () => {
+      const s = useScene.getState();
+      if (downTouch && downKey && !s.dragMoved && s.hoveredBody === downKey) s.setHoveredBody(null);
+      downTouch = false;
+    };
+    window.addEventListener('pointerdown', down, { passive: true });
+    window.addEventListener('click', click);
     return () => {
+      window.removeEventListener('pointerdown', down);
+      window.removeEventListener('click', click);
       window.removeEventListener('pointermove', track);
       window.removeEventListener('pointerover', track);
       document.documentElement.removeEventListener('pointerleave', gone);

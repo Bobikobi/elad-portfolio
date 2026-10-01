@@ -116,7 +116,8 @@ export default function SeededStars(props: React.ComponentProps<typeof Stars>) {
         .replace('varying vec3 vColor;', 'varying vec3 vColor;\n      varying float vFade;')
         .replace('gl_FragColor = vec4(vColor, opacity);', 'gl_FragColor = vec4(vColor, opacity * vFade);');
       mat.needsUpdate = true;
-    } else {
+    } else if (!mat?.vertexShader?.includes('float pulse')) {
+      // (An effect re-run finds its own patch already in place - that is not drei changing.)
       console.error('[SeededStars] drei\'s star pulse is not the line we patch - sky left as is');
     }
   }, [radius, depth, count, factor]);

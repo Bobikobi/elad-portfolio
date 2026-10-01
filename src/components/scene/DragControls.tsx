@@ -29,13 +29,12 @@ const THRESHOLD = 5;      // px - separates a rotate-drag from a navigating tap
 // Mobile carousel gesture (GPT review, 2026-09-28): a drag is recognised after 8px when it is
 // clearly horizontal; the star follows the finger 1:1, as far as the finger goes; release lands on
 // the stop nearest where the fling would coast to (at least one stop past 22% of a stop or on a
-// flick, so a fast flick crosses several); the two ends resist over at most 24px, no wrap.
+// flick, so a fast flick crosses several); the carousel loops, so there are no ends (Elad, 2026-09-29).
 const TOUR_THRESHOLD = 8;
 const TOUR_H_RATIO = 1.25;
 const TOUR_COMMIT = 0.22;         // stops
 const TOUR_FLICK_V = 0.45;        // px/ms, measured over the last 80ms
 const TOUR_FLICK_MIN = 12;        // px of total travel before a flick counts
-const TOUR_OVERSCROLL = 24;       // px
 const TOUR_COAST = 0.18;          // s of release velocity added before picking the stop
 // Positive pitch LOWERS the camera (CameraRig.applyOrbit), so the rest elevation sets both ends.
 const clampPitch = (p: number) => {
@@ -107,7 +106,9 @@ export default function DragControls() {
       active = true; dragging = false; horiz = null;
       startX = lastX = e.clientX; startY = lastY = e.clientY; lastT = performance.now();
       vYaw = vPitch = 0;
-      tourAnchor = useScene.getState().tourStop; tourRaw = 0;
+      // tourPos runs on unbounded (the carousel loops), so the drag anchors on the whole stop
+      // nearest where the carousel is now, not on the 0..N-1 index.
+      tourAnchor = Math.round(useScene.getState().tourPos); tourRaw = 0;
       tourPx = orrPxPerStop(tourAnchor, window.innerWidth, window.innerHeight) || 300;
       tourSamples = [{ t: performance.now(), x: e.clientX }];
       setCursor('grabbing');
@@ -130,21 +131,15 @@ export default function DragControls() {
       if (!canDrag()) return;
       // Mobile orrery: the star under the finger follows it 1:1 in screen space (pixels are
       // turned into carousel position by the fixed camera's own projection), across as many
-      // stops as the finger travels; past the first/last stop it gives at most TOUR_OVERSCROLL px.
+      // stops as the finger travels, round and round.
       if (isTour()) {
         const s = useScene.getState();
         const now = performance.now();
-        const N = TOUR_SECTIONS.length;
         // Incremental, with the px-per-stop of the grabbed star where it is NOW - perspective
         // changes it as the star leaves the centre, and 1:1 must hold across several stops.
         const px = orrPxPerStop(tourAnchor, window.innerWidth, window.innerHeight, tourAnchor + tourRaw) || tourPx;
         tourRaw -= (e.clientX - lastX) / px;
-        let pos = tourAnchor + tourRaw;
-        const over = pos < 0 ? pos : pos > N - 1 ? pos - (N - 1) : 0;
-        if (over) {
-          const px = Math.abs(over) * tourPx;
-          pos -= over - Math.sign(over) * (TOUR_OVERSCROLL * (1 - Math.exp(-px / TOUR_OVERSCROLL))) / tourPx;
-        }
+        const pos = tourAnchor + tourRaw;
         tourSamples.push({ t: now, x: e.clientX });
         while (tourSamples.length > 2 && now - tourSamples[0].t > 80) tourSamples.shift();
         const dtS = Math.max(0.001, (now - lastT) / 1000);
@@ -169,7 +164,8 @@ export default function DragControls() {
       if (dragging && useScene.getState().tourDrag) {
         // Release: the stop nearest where the release speed would coast to; past TOUR_COMMIT of
         // a stop, or on a flick (speed over the last 80ms), at least one stop in the drag's
-        // direction; otherwise spring back. Never past either end.
+        // direction; otherwise spring back. At most two stops either way: the spring takes the
+        // short way round, so a stop further than N/2 would be reached backwards.
         const s = useScene.getState();
         const N = TOUR_SECTIONS.length;
         const first = tourSamples[0], last = tourSamples[tourSamples.length - 1];
@@ -179,9 +175,9 @@ export default function DragControls() {
         const coast = flick ? (-flickV * 1000 / tourPx) * TOUR_COAST : 0; // stops
         let stop = Math.round(tourAnchor + tourRaw + coast);
         if (dir && Math.sign(stop - tourAnchor) !== dir) stop = tourAnchor + dir;
-        stop = Math.max(0, Math.min(N - 1, stop));
+        stop = tourAnchor + Math.max(-2, Math.min(2, stop - tourAnchor));
         s.setTourVel(vTour);
-        s.setTourStop(stop);
+        s.setTourStop(((stop % N) + N) % N);
         s.setTourDrag(false);
       }
       if (dragging && !reduce && (Math.abs(vYaw) > 0.05 || Math.abs(vPitch) > 0.05)) inertia();

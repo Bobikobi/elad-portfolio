@@ -1,6 +1,10 @@
 'use client';
 import { create } from 'zustand';
 import type * as THREE from 'three';
+import { TOUR_SECTIONS } from './sections';
+
+/** The mobile carousel opens on Projects (Saturn) (Elad, 2026-09-29). */
+const TOUR_START = TOUR_SECTIONS.findIndex((s) => s.id === 'projects');
 
 export type Act = 'galaxy' | 'solar';
 export type Quality = 'high' | 'low';
@@ -101,8 +105,8 @@ export const useScene = create<SceneState>((set) => ({
   orbitPitch: 0,
   dragMoved: false,
   tourMode: false,
-  tourStop: 0,
-  tourPos: 0,
+  tourStop: TOUR_START,
+  tourPos: TOUR_START,
   tourDrag: false,
   tourVel: 0,
   scrollDriven: false,

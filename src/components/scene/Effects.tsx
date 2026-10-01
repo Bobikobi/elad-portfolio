@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom, Vignette, Noise, GodRays, HueSaturation, SMAA } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -25,7 +25,16 @@ type VignetteLike = { darkness: number; offset: number };
 type HueSatLike = { hue: number; saturation: number };
 /** GodRaysEffect — `godRaysMaterial.weight` is a live setter, so the rays can be faded
  *  in and out without ever rebuilding the effect chain. */
-type GodRaysLike = { godRaysMaterial: { weight: number } };
+type GodRaysLike = {
+  godRaysMaterial: { weight: number };
+  update: (renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget, dt?: number) => void;
+};
+/** BloomEffect's live setters - the ones that change per state without a rebuild. */
+type BloomLike = {
+  intensity: number;
+  luminanceMaterial: { threshold: number; smoothing: number };
+  mipmapBlurPass: { radius: number };
+};
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const smoothstep = (e0: number, e1: number, x: number) => {
@@ -54,15 +63,19 @@ const GALAXY_SAT = 0.08; // A6: the same gentle grade enriches the galaxy arms (
 // So the gate is measured rather than declared: the angle between the camera's forward
 // axis and the direction to the sun, against the frustum's own corner half-angle. Weight
 // fades over [0.9, 1.7] × that half-angle (rays still reach into frame from a source just
-// outside it), and the effect is MOUNTED out to 2.2× — i.e. always well before the weight
-// leaves zero and well after it returns, so a chain rebuild can never be seen. The
-// overview keeps its unconditional mount so that a drag-rotate which swings the sun off
-// the edge fades the rays without recompiling the composer mid-gesture.
+// outside it).
+//
+// #82: the effect stays mounted for the whole session, in both acts. It used to mount and
+// unmount with a hysteresis band so the rebuild happened at zero weight, where it could not
+// be seen - but it could be felt: a mount rebuilds the composer's merged pass and compiles
+// its shaders inside one frame, and the act swap was one of those frames (0.19s measured,
+// 127ms of it compiling). A zero weight costs nothing instead: once a frame has been
+// drawn at weight 0 the effect's buffer is black and its own passes are skipped (see
+// `raysIdle`), so the merged pass only blends in an empty texture.
 const SUN_POS = new THREE.Vector3(0, 0, 0);
 // God-ray weight and its light-budget rationale live in @/lib/photometry.
 const RAY_FADE_IN = 0.9;   // × half-diagonal fov - full weight inside this
 const RAY_FADE_OUT = 1.7;  // × half-diagonal fov - zero weight beyond this
-const RAY_MOUNT = 2.2;     // × half-diagonal fov - mounted out to here (hysteresis below)
 const _fwd = new THREE.Vector3();
 const _toSun = new THREE.Vector3();
 
@@ -86,19 +99,15 @@ const WORLD_GRADE: Record<string, { hue: number; sat: number }> = {
  * the burning sun and lit planet limbs bloom, the sky stays deep and the stars crisp.
  */
 export default function Effects() {
-  const act = useScene((s) => s.act);
   const sunMesh = useScene((s) => s.sunMesh);
   const high = useScene((s) => s.quality) === 'high';
-  const focused = useScene((s) => s.focusedPlanet);
-  const solar = act === 'solar';
   // B5 / the tier LAW: God Rays used to be `high`-only, which is a COMPOSITION difference
   // between tiers, not a cost one — a weak machine saw a different sky. Both tiers get the
   // rays now; only the sample count drops.
   // RULING 2: in the overview the sun is the hero and the rays are unconditional; inside a
-  // world they exist only while the sun is actually near the frame, which in practice means
+  // world they show only while the sun is actually near the frame, which in practice means
   // the flight in and the flight out. See the constants above.
-  const [sunNear, setSunNear] = useState(false);
-  const godRays = solar && !!sunMesh && (!focused || sunNear);
+  const godRays = !!sunMesh;
 
   // Ease the vignette across the swap (T3) so the corners don't flip between solar's
   // deep vignette and the galaxy's mild one at the crossover — that flip (galaxy
@@ -107,6 +116,18 @@ export default function Effects() {
   const vigRef = useRef<VignetteLike | null>(null);
   const hueSatRef = useRef<HueSatLike | null>(null);
   const godRaysRef = useRef<GodRaysLike | null>(null);
+  const bloomRef = useRef<BloomLike | null>(null);
+  // Frames in a row the rays have been drawn at weight 0. From the second one on, the
+  // effect's buffer already holds the black a zero weight draws, so its passes can sleep.
+  const zeroFrames = useRef(0);
+  const raysIdle = useRef(false);
+  const gateRays = (e: GodRaysLike | null) => {
+    godRaysRef.current = e ?? null;
+    if (!e || (e as { __gated?: boolean }).__gated) return;
+    const run = e.update.bind(e);
+    e.update = (renderer, inputBuffer, dt) => { if (!raysIdle.current) run(renderer, inputBuffer, dt); };
+    (e as { __gated?: boolean }).__gated = true;
+  };
 
   /**
    * PASS AUDIT (HUD builds only). The scene is pass-bound, not fill-bound — ~15 fullscreen
@@ -132,7 +153,7 @@ export default function Effects() {
       });
     }, 300); // the layout effect that builds the passes runs after this one
     return () => clearTimeout(id);
-  }, [godRays, solar, focused, high]);
+  }, [godRays, high]);
   const curSat = useRef(OVERVIEW_SAT);
   const curHue = useRef(0);
   const curWeight = useRef(0);
@@ -152,28 +173,40 @@ export default function Effects() {
     );
     const ang = dist < 1e-4 ? 0 : Math.acos(Math.max(-1, Math.min(1, _fwd.dot(_toSun) / dist)));
     const inFrame = 1 - smoothstep(halfDiag * RAY_FADE_IN, halfDiag * RAY_FADE_OUT, ang);
-    // Mount hysteresis: a wide band either side of the fade so the chain is rebuilt only
-    // while the weight is already pinned at zero.
-    if (sol && fp) {
-      if (!sunNear && ang < halfDiag * RAY_MOUNT) setSunNear(true);
-      else if (sunNear && ang > halfDiag * (RAY_MOUNT + 0.5)) setSunNear(false);
-    } else if (sunNear) setSunNear(false);
     const gr = godRaysRef.current;
     if (gr) {
       const target = sol ? GODRAY_WEIGHT * inFrame : 0;
       curWeight.current += (target - curWeight.current) * Math.min(1, dt * 5);
+      // The ease only approaches zero; the sleep below needs it to arrive.
+      if (target === 0 && curWeight.current < 1e-4) curWeight.current = 0;
       gr.godRaysMaterial.weight = curWeight.current;
+      zeroFrames.current = curWeight.current === 0 ? zeroFrames.current + 1 : 0;
+      raysIdle.current = zeroFrames.current >= 2;
     } else {
       curWeight.current = 0;
     }
     if (HUD_AVAILABLE) {
       (window as unknown as { __godrays?: unknown }).__godrays = {
         mounted: !!gr,
+        idle: raysIdle.current,
         weight: +curWeight.current.toFixed(4),
         sunAngleDeg: +((ang * 180) / Math.PI).toFixed(1),
         halfDiagDeg: +((halfDiag * 180) / Math.PI).toFixed(1),
         inFrame: +inFrame.toFixed(3),
       };
+    }
+
+    // Bloom per state, through its live setters - a prop change would rebuild the effect,
+    // and the composer with it, at exactly the act swap and every focus change.
+    const b = bloomRef.current;
+    if (b) {
+      b.intensity = sol ? (fp ? BLOOM_FOCUSED_WORLD_INTENSITY : BLOOM_SOLAR_OVERVIEW_INTENSITY) : BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY;
+      b.luminanceMaterial.threshold = sol ? (fp ? BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD : BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD) : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD;
+      // Never exactly 0: with threshold AND smoothing at 0 the material drops its THRESHOLD
+      // define, and a define flip only takes effect through a rebuild. 1e-4 keeps the define
+      // and passes every pixel brighter than 1e-4 whole - the old "no threshold" galaxy.
+      b.luminanceMaterial.smoothing = Math.max(1e-4, sol ? BLOOM_SOLAR_LUMINANCE_SMOOTHING : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING);
+      b.mipmapBlurPass.radius = sol ? 0.45 : 0.5;
     }
 
     const v = vigRef.current;
@@ -205,7 +238,7 @@ export default function Effects() {
         /* weight starts at 0 and is driven per-frame (RULING 2) — so the frame in which the
            effect mounts is identical to the frame before it, and the rebuild is invisible. */
         <GodRays
-          ref={(e: GodRaysLike | null) => { godRaysRef.current = e ?? null; }}
+          ref={gateRays}
           sun={sunMesh}
           // Explicit rather than relying on the effect's default: the rays are blurred and
           // mip-based, so half resolution is close to free visually and is a quarter of
@@ -234,7 +267,8 @@ export default function Effects() {
           genuinely burning limb blooms. This is a per-STATE change, not per-tier: every
           tier sees the identical values. */}
       <Bloom
-        key={`${solar && focused ? 'world' : solar ? 'overview' : 'galaxy'}-${high ? 'hi' : 'lo'}`}
+        key={high ? 'hi' : 'lo'}
+        ref={(e: BloomLike | null) => { bloomRef.current = e ?? null; }}
         mipmapBlur
         // Half-res base for the same reason as the rays: the blur is a mip chain, so the
         // pass cannot resolve detail this buffer would have carried anyway.
@@ -286,10 +320,12 @@ export default function Effects() {
         //
         // This can only make the halo TIGHTER, which is the direction R2.2 wanted - but the
         // corner luminance is re-measured anyway rather than argued about.
-        intensity={solar ? (focused ? BLOOM_FOCUSED_WORLD_INTENSITY : BLOOM_SOLAR_OVERVIEW_INTENSITY) : BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY}
-        luminanceThreshold={solar ? (focused ? BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD : BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD) : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD}
-        luminanceSmoothing={solar ? BLOOM_SOLAR_LUMINANCE_SMOOTHING : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING}
-        radius={solar ? 0.45 : 0.5}
+        // Mount-time values only (the THRESHOLD define is set here, from a non-zero
+        // smoothing); the per-state numbers are applied every frame through bloomRef.
+        intensity={BLOOM_SOLAR_OVERVIEW_INTENSITY}
+        luminanceThreshold={BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD}
+        luminanceSmoothing={BLOOM_SOLAR_LUMINANCE_SMOOTHING}
+        radius={0.45}
       />
       {/* THE APERTURE + THE TONE MAPPER. Must sit after God Rays and Bloom (they want the
           HDR image) and before the grade, the grain and the vignette (they want a
