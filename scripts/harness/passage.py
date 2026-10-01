@@ -66,6 +66,26 @@ turn = max((qang(a[5], b[5]) for a, b in zip(rec, rec[1:]) if a[1] == b[1] and t
 dist = [r for a, r in zip([None] + rec, rec) if a is None or a[4] != r[4] or a[5] != r[5]]
 turn60 = max((qang(a[5], b[5]) * 16.667 / max(16.667, b[0] - a[0]) for a, b in zip(dist, dist[1:])
               if a[1] == b[1] and t0 <= b[0] <= t1), default=0)
+# The same rate timed by the SCROLL each pose was drawn at. passageProfile.ts plays scroll
+# linearly in time, so while the passage runs the scroll is a clock stamped on the render
+# itself; the recorder's wall stamp is not - after a long frame the first pose of the next one
+# can be seen late, and the catch-up then reads as several frames' turn in one 6ms step.
+# Checked: on regular frames the two clocks agree (median ratio 0.99, desktop, both ways).
+# Outside the play (rest at either end) the wall clock is used. Frames under the full
+# curtain (cov >= 0.99) are skipped: the camera turning there is not on screen.
+CI, CO = 0.85, 0.95
+def time_at(p):
+    if p <= 0: return 0.0
+    if p < CI: return 1200 * p / CI
+    if p < CO: return 1200 + 500 * (p - CI) / (CO - CI)
+    if p < 1: return 1700 + 900 * (p - CO) / (1 - CO)
+    return 2600.0
+def frame_ms(a, b):
+    playing = all(0.016 < r[3] < 0.999 for r in (a, b))
+    return abs(time_at(b[3]) - time_at(a[3])) if playing else b[0] - a[0]
+turn60s = max((qang(a[5], b[5]) * 16.667 / max(16.667, frame_ms(a, b)) for a, b in zip(dist, dist[1:])
+               if a[1] == b[1] and b[2] < 0.99 and t0 <= b[0] <= t1), default=0)
+long_frames = sorted((round(b[0] - a[0]) for a, b in zip(dist, dist[1:]) if t0 <= b[0] <= t1 and b[0] - a[0] > 50), reverse=True)
 render_fps = (len([r for r in dist if t0 <= r[0] <= t1]) - 1) / max(1e-3, (t1 - t0) / 1000)
 out = {
     'tag': os.path.basename(d.rstrip('/')), 'dir': m['DIR'], 'mob': m['MOB'], 'endAct': m['endAct'],
@@ -73,7 +93,9 @@ out = {
     'max_picture_change_visible': round(max(c[0] for c in cuts), 1) if cuts else None,
     'longest_visible_stall_ms': round(stall), 'stall_at(scroll from,to,act)': where,
     'max_turn_deg_frame': round(math.degrees(turn), 2),
-    'max_turn_deg_per_60fps_frame': round(math.degrees(turn60), 2), 'render_fps': round(render_fps, 1),
+    'max_turn_deg_per_60fps_frame': round(math.degrees(turn60), 2),
+    'max_turn_deg_per_60fps_frame_scroll_clock': round(math.degrees(turn60s), 2),
+    'frames_over_50ms': long_frames, 'render_fps': round(render_fps, 1),
     'swap_at_ms': round(swap[0] - t0) if swap else None,
 }
 print(json.dumps(out))

@@ -866,6 +866,9 @@ export default function CameraRig() {
   const motionOff = useRef(motionOffNow);
   useEffect(() => { motionOff.current = motionOffNow; }, [motionOffNow]);
   const prevAct = useRef<string>('galaxy');
+  // Where the camera stood, relative to the dive path, when it left the welcome idle (#82).
+  const fromIdle = useRef(false);
+  const diveOff = useRef(new THREE.Vector3());
   const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
   const swapLatch = useRef(false);  // blocks re-swaps until well clear of the covered window
   const reconcile = useRef(0);      // T7c: 0 idle · 1 covering · 2 revealing (force-played swap)
@@ -1192,6 +1195,7 @@ export default function CameraRig() {
         damp3(cam.position, _tgt, 0.5, dt);
         damp(cam, 'fov', 55, 0.5, dt);
         cam.lookAt(LOOK.x, LOOK.y, LOOK.z);
+        fromIdle.current = true;
       } else {
         // DIVE — a staged S-curve that descends THROUGH the disc plane. It runs right up to the
         // swap and is still accelerating there (#82): it used to finish at scroll 0.865 on an
@@ -1200,14 +1204,19 @@ export default function CameraRig() {
         cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, e);
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);
-        // Pure function of scroll once the dive is under way, so scrolling back retraces the
-        // same frames (damping made the return a lagged, different path). A short damp only
-        // over the first 0.05 of scroll hides the hand-off from the idle drift pose.
-        const diveTau = 0.22 * (1 - clamp01((p - 0.015) / 0.05));
-        damp3(cam.position, _tgt, diveTau, dt);
+        // The idle pose drifts (orbit, depth breathing, pointer, a drag), so the dive starts
+        // wherever the camera stood: that offset from the path is taken once, on leaving the
+        // idle, and folded away over the first third of the dive. It used to be a damp that
+        // ran out after 0.05 of scroll; with the passage now moving at speed from its first
+        // frame that was 70ms, and the camera swung up to 3.3 deg a frame catching up.
+        // Otherwise a pure function of scroll, so scrolling back retraces the same frames.
+        if (fromIdle.current) {
+          fromIdle.current = false;
+          diveOff.current.subVectors(cam.position, _tgt);
+        }
+        cam.position.copy(_tgt).addScaledVector(diveOff.current, 1 - THREE.MathUtils.smoothstep(e, 0, 0.35));
         // FOV opens for speed on the way in, eases back near arrival (deceleration cue).
-        const fov = 55 + 13 * Math.sin(clamp01(e) * Math.PI * 0.85);
-        damp(cam, 'fov', fov, diveTau, dt);
+        cam.fov = 55 + 13 * Math.sin(clamp01(e) * Math.PI * 0.85);
         // Look pitches down→up as the camera crosses the plane, and a small extra pitch
         // bump mid-dive — so the disc sweeps across the frame at an angle, never a flat
         // horizontal band. The core (LOOK_END.x) slides off-side toward the arm.
@@ -1219,11 +1228,14 @@ export default function CameraRig() {
         // Cinematic bank — a roll that tilts the disc diagonally (kills any residual
         // horizontal read). Frequency 0.85π so it stays banked THROUGH the late crossing
         // (a faster wave returned to level right where the disc goes edge-on); a touch of mouse.
-        cam.rotateZ(0.11 * Math.sin(e * Math.PI * 0.85) + px * 0.05);
+        // The pointer's share eases in with the dive: the idle has no roll to hand over.
+        cam.rotateZ(0.11 * Math.sin(e * Math.PI * 0.85) + px * 0.05 * THREE.MathUtils.smoothstep(e, 0, 0.2));
       }
     } else {
       const focused = useScene.getState().focusedPlanet;
       const departure = focused ? clamp01(useScene.getState().departure) : 0;
+      fromIdle.current = false; // a dive entered from here (scrolling up) starts on its path
+      diveOff.current.set(0, 0, 0);
       if (focused) mobileArriveT.current = 0; // T7b: re-establish the tour after a world visit
       // On first entering the solar act, snap to a start pose then fly IN. From the
       // dive we snap FAR for a zoom-in reveal; a deep-link straight to a world starts
