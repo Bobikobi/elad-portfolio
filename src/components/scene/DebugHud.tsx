@@ -523,6 +523,11 @@ export function DebugHudOverlay() {
   useEffect(() => {
     let raf = 0;
     const fmt = (n: number, d = 1) => n.toFixed(d);
+    const perfLine = () => {
+      const p = (window as unknown as { __perf?: { quality: string; dpr: number } }).__perf;
+      const c = document.querySelector('canvas');
+      return `${p ? `${p.quality}  dpr ${fmt(p.dpr, 2)}` : '-'}  buf ${c ? `${c.width}×${c.height}` : '-'}  dev ${fmt(window.devicePixelRatio, 2)}`;
+    };
     const tick = () => {
       const el = ref.current;
       if (el) {
@@ -536,6 +541,8 @@ export function DebugHudOverlay() {
           `HUD ${d.solar ? 'SOLAR' : 'galaxy'}  ${fmt(d.fps, 0)} fps  fov ${fmt(d.fov, 1)}°  ${d.vw}×${d.vh}\n` +
           `swap  scroll ${fmt(d.scroll, 3)}  cov ${fmt(d.cov, 3)}${d.cov > 0.95 ? ' [SWAP-OK]' : ''}\n` +
           `sun disc  ${fmt(d.sunPct, 1)}% h   (${fmt(d.sunPx, 0)} px)  camDist ${fmt(d.camDist, 2)}\n` +
+          // What a real phone actually renders at - the emulator cannot answer this (#73).
+          `render  ${perfLine()}\n` +
           `planets (diameter):\n${planetLines}\n` +
           `corners %lum  TL ${fmt(c[0], 1)}${cornerFlag(c[0])}  TR ${fmt(c[1], 1)}${cornerFlag(c[1])}\n` +
           `              BL ${fmt(c[2], 1)}${cornerFlag(c[2])}  BR ${fmt(c[3], 1)}${cornerFlag(c[3])}\n` +
