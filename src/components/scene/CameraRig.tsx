@@ -955,13 +955,17 @@ function planFlight(
     // shorter flight): one simulation rules it out instead of a sweep (the sweeps cost ~170ms
     // around Saturn, a hitch).
     simulate(aspect, end, look, aim, fov, FLIGHT_MAX);
-    if (sim.close || sim.share > late) return shotScore(FLIGHT_MAX);
+    const atMax = shotScore(FLIGHT_MAX);
+    if (sim.close || sim.share > late) return atMax;
     for (let dur = minDur; dur <= FLIGHT_MAX + 1e-6; dur += 0.05) {
       simulate(aspect, end, look, aim, fov, dur);
       const score = shotScore(dur);
       if (score < best) { best = score; flight.dur = dur; }
       if (score < 1) break;
     }
+    // A `minDur` off the 0.05 grid ends the sweep short of FLIGHT_MAX: keep the shot simulated there
+    // when nothing shorter met every target.
+    if (best >= 1 && atMax < best) { best = atMax; flight.dur = FLIGHT_MAX; }
     return best;
   }
   const N = 40;

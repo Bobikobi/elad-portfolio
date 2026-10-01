@@ -59,3 +59,6 @@ Proven by a probe with the hi-res upgrade off: the two ~150ms frames inside the 
 
 ## 2026-10-01 ⏸ Bound: phone world-to-world dives cannot meet crit 4, and jupiter>saturn sits at the 2.5s edge (#70)
 Phone tour dives between worlds are straight lines whose view must turn ~140 deg at <= 1.4 deg/frame: ~100 frames, more than 40% of any flight under 2.5s. Measured: jupiter>saturn 76%, saturn>mars 54% (before the branch: 78%, 71%). Crit 6 (back to overview) passes. Desktop jupiter>saturn: getting the planet in by 38% at the arrival phase costs 2.31s plan + 0.12-0.17s ring governor = 2.44-2.50s measured over 5 runs. Retry when: the phone tour gets an arc (pull back, then dive) or the criteria change. Model: opus. Link: issue #70.
+
+## 2026-10-01 ✅ The phone tour's overview-to-world dive stays ~1.1s (#70)
+The 1.5-2.5s duration guard covers desktop flights and the phone's world-to-world and back-to-overview legs; the phone tour's straight dive from the overview into a world measures 1.08-1.09s (FLIGHT_DIVE_MIN 0.9 + the eased tail). Elad's call on 2026-10-01: keep it. Retry when: Elad asks for a slower phone dive. Model: opus. Link: PR #84.
