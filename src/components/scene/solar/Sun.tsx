@@ -82,7 +82,19 @@ const NOISE_GLSL = /* glsl */ `
     }
     return vec2(f1, f2);
   }
+
+  // Rotate v about the unit axis k by angle a (Rodrigues).
+  vec3 swirl(vec3 v, vec3 k, float a){
+    float c = cos(a), s = sin(a);
+    return v * c + cross(k, v) * s + k * dot(k, v) * (1.0 - c);
+  }
 `;
+
+const FIRE_SCALE = 3.5;
+const FIB_KEEP = 0.7;
+const FIB_GAIN = 0.8;
+const FIB_MEAN = 0.25;
+const FIB_AMP = 3.0;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
 const sunVert = /* glsl */ `
@@ -210,9 +222,18 @@ const sunFrag = /* glsl */ `
     // cut used 16 and measured 61 -> 52 fps on the reference iGPU.
     vec2 fq = vec2(grain(fp + vec3(0.0, uTime * 0.20, 0.0)),
                    grain(fp + vec3(5.2, 1.3, uTime * 0.17)));
-    vec3 tp = fp * 2.0 + vec3(fq * 3.0, uTime * 0.5);
+    // Fine threads on the face, the original coarse tongues at the rim: the rim's large
+    // flickering patches are what keeps the glow just outside the limb moving.
+    float fs = mix(1.0, ${glslFloat(FIRE_SCALE)}, smoothstep(0.2, 0.5, max(dot(vNormal, vec3(0.0, 0.0, 1.0)), 0.0)));
+    vec3 tp = (fp * 2.0 + vec3(fq * 3.0, 0.0)) * fs + vec3(0.0, 0.0, uTime * 0.75);
     float turb = 0.0, ta = 0.5;
-    for (int i = 0; i < 2; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
+    // #73: an octave finer than ~2 px per feature does not move, it sparkles. Each octave
+    // fades to its mean as its screen footprint shrinks - the rim (foreshortened) and a small
+    // sun on a phone keep only the octaves the pixels can carry.
+    for (int i = 0; i < 2; i++) {
+      float aa = 1.0 - smoothstep(0.5, 1.0, length(fwidth(tp)));
+      turb += ta * mix(0.4, abs(noise(tp) * 2.0 - 1.0), aa); tp *= 2.03; ta *= 0.5;
+    }
     float fire = pow(clamp(1.0 - turb * 1.8, 0.0, 1.0), 3.0);
     // The gaps between threads sit low on the ramp so the threads read against them - with
     // the gaps near the mid stop, the core boost carried everything to the ACES ceiling and
@@ -220,6 +241,21 @@ const sunFrag = /* glsl */ `
     // The linear turb term textures the wide cells between threads (glow falling off away from
     // each thread): without it those cells were flat and a fifth of the face measured <5 std.
     n = 0.05 + n * 0.30 + fire * 0.95 - (1.0 - fq.x) * 0.10 + (0.55 - turb) * 0.45;
+    // SUN-SURFACE (#73): chromospheric fibrils, the "grass" of an H-alpha photograph.
+    vec3 pd = normalize(vPos);
+    vec3 spotA = normalize(vec3(0.42, 0.30, 0.86));
+    vec3 spotB = normalize(vec3(-0.30, -0.22, 0.93));
+    vec3 wq = pd * 6.0 + vec3(0.0, 0.0, uTime * 0.015);
+    vec3 wv = vec3(noise(wq), noise(wq + vec3(3.7, 1.9, 5.1)), noise(wq + vec3(8.1, 5.3, 2.2))) - 0.5;
+    vec3 sw = swirl(swirl(pd, spotA, 2.6 * exp(-length(pd - spotA) / 0.20)), spotB, 2.6 * exp(-length(pd - spotB) / 0.15));
+    vec3 fbq = sw * 36.0 + wv * 6.0;
+    float r1 = 1.0 - abs(noise(fbq) * 2.0 - 1.0);
+    float r2 = 1.0 - abs(noise(fbq * 1.7 + wv * 2.0 + vec3(0.0, uTime * 0.03, 0.0)) * 2.0 - 1.0);
+    // Same footprint fade as the fire octaves: fibrils narrower than a pixel sparkle.
+    float fibAA = 1.0 - smoothstep(0.35, 0.7, length(fwidth(fbq)));
+    float fibAA2 = 1.0 - smoothstep(0.35, 0.7, 1.7 * length(fwidth(fbq)));
+    float fib = mix(${glslFloat(FIB_MEAN)}, pow(r1, 4.0), fibAA) * 0.6 + mix(${glslFloat(FIB_MEAN)}, pow(r2, 4.0), fibAA2) * 0.4;
+    n = n * ${glslFloat(FIB_KEEP)} + ${glslFloat((1 - FIB_KEEP) * 0.5)} + (fib - ${glslFloat(FIB_MEAN)}) * ${glslFloat(FIB_GAIN)};
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
     //
@@ -330,7 +366,6 @@ const sunFrag = /* glsl */ `
     // Penumbra and a darker umbra, irregular edge from the granule field; together well under
     // 1% of the disc. They give the face a scale and an "organised" activity: without them
     // every patch of the surface is equally important, which is what makes it read as a material.
-    vec3 pd = normalize(vPos);
     float spot = 1.0;
     {
       float d1 = length(pd - normalize(vec3(0.42, 0.30, 0.86))) / 0.115;
@@ -363,7 +398,13 @@ const sunFrag = /* glsl */ `
     // Per channel, green most and blue DOWN: ACES's input matrix feeds red and green into
     // blue, so a uniform boost measured as a blue-white centre (240,234,227), and even +35%
     // blue landed at 209. Blue has to fall in the input for the output to stay yellow.
-    col *= 1.0 + core * vec3(0.75, 1.05, -0.35) * (0.25 + 0.75 * fire);
+    // #73: the core burns on the ORIGINAL coarse fire scale, not the fine threads above. Its
+    // big patches flaring and fading are what moved the bloom, i.e. the glow around the disc.
+    float fireC = pow(clamp(1.0 - abs(noise(fp * 2.0 + vec3(fq * 3.0, uTime * 1.0)) * 2.0 - 1.0) * 0.9, 0.0, 1.0), 3.0);
+    col *= 1.0 + core * vec3(0.75, 1.05, -0.35) * (0.25 + 0.75 * fireC);
+    float fa = ${glslFloat(FIB_AMP)} * fib;
+    vec3 fibMul = mix(vec3(0.060, 0.005, 0.001), vec3(1.0), smoothstep(0.25, 1.0, fa + 2.0 * ev));
+    col *= mix(vec3(1.0), fibMul, smoothstep(0.20, 0.55, limb) * fibAA);
     // Measured ceiling: x3 on the core reached only 243 of 255 through ACES, turned it white
     // (blue 232), and its bloom raised the halo 40% and the whole frame 16%. This is the knee.
     gl_FragColor = vec4(col, 1.0);
