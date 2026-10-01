@@ -59,13 +59,24 @@ export function diveAt(p: number): number {
 }
 
 /**
- * Arrival progress (0..1 from the entry pose to the overview) at scroll `p`. Ease-OUT only,
- * cubic: it leaves the curtain at three times its mean speed and brakes to rest exactly at
- * the end. Started at the swap, a third of the move ran behind the shut curtain and the
- * visible part began at a third of the dive's peak speed (desktop, measured on the preview);
- * now the camera waits at the entry pose until the curtain is mostly open.
+ * Arrival progress (0..1 along the line from the entry pose to the overview) at scroll `p`.
+ * `ratio` is the overview's distance from the sun over the entry pose's.
+ *
+ * Ease-OUT only: it leaves the curtain at speed and brakes to rest exactly at the end. Started
+ * at the swap, a third of the move ran behind the shut curtain and the visible part began at a
+ * third of the dive's peak speed (desktop, measured on the preview); so the camera waits at the
+ * entry pose until the curtain is mostly open.
+ *
+ * The distance shrinks geometrically, so the apparent speed follows the ease on every screen.
+ * Moved linearly, the phone's 7.5x zoom (desktop's is 2x) sped up halfway through the arrival
+ * and peaked there at twice the dive's speed. The ease power then sets the opening speed,
+ * power x |ln ratio| per arrival: held near 2.3, the pace the dive enters the curtain at, and
+ * never below a quadratic, the gentlest braking that still lands without a jolt (desktop
+ * gets a cubic, the phone a quadratic).
  */
-export function arriveAt(p: number): number {
+export function arriveAt(p: number, ratio = 1): number {
   const x = Math.min(1, Math.max(0, (timeAt(p) - T_ARRIVE) / (PASSAGE_MS - T_ARRIVE)));
-  return 1 - (1 - x) ** 3;
+  const zoom = Math.abs(Math.log(ratio));
+  const a = 1 - (1 - x) ** Math.min(3, Math.max(2, 2.3 / Math.max(zoom, 1e-3)));
+  return zoom < 1e-3 ? a : (1 - ratio ** a) / (1 - ratio);
 }

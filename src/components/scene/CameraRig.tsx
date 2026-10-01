@@ -1442,8 +1442,8 @@ export default function CameraRig() {
           const diving = store.scrollDriven && arrivedViaDive.current && scrollProgress < 0.999;
           if (diving) {
             // Scroll-driven approach to the fixed pose (T7a rule: settle at max).
-            const arrive = arriveAt(scrollProgress);
             _entry.set(0, 8, 21);
+            const arrive = arriveAt(scrollProgress, _tourPos.length() / _entry.length());
             _tgt.copy(_entry).lerp(_tourPos, arrive);
             flight.on = false;
             damp3(cam.position, _tgt, ARRIVE_TAU, dt);
@@ -1492,8 +1492,8 @@ export default function CameraRig() {
           // exactly at scrollY=max — every position in the tail moves the camera, no
           // inert range. Returns / deep-links (scroll<SWAP_V) fall through to the
           // time-damped reveal below, so they still fly in without a scroll driver.
-          const arrive = arriveAt(scrollProgress);
           _entry.set(0, 8, 21);
+          const arrive = arriveAt(scrollProgress, _ovPos.length() / _entry.length());
           _tgt.copy(_entry).lerp(_ovPos, arrive);
           flight.on = false;
           rigUp.copy(PLANE_N); cam.up.copy(rigUp);
