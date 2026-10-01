@@ -147,6 +147,11 @@ const LOW_RATIO = 0.85;    // below this share of target = scale down
 const HIGH_RATIO = 0.95;   // above this share = room to scale back up
 const BUDGET_PX = 1600 * 900; // a plain laptop's cost at the old flat dpr 1 - see `base` below
 
+// The ratio last set here, for <Canvas dpr>: R3F re-applies that prop on every render of
+// the component holding the Canvas, so a constant there undid this scaler on each act change.
+let lastDpr = 1;
+export const liveDpr = () => lastDpr;
+
 /**
  * Dynamic resolution scaling — the largest win available that is invisible at rest.
  *
@@ -161,6 +166,7 @@ const BUDGET_PX = 1600 * 900; // a plain laptop's cost at the old flat dpr 1 - s
  */
 export function ResolutionScaler() {
   const setDpr = useThree((s) => s.setDpr);
+  const get = useThree((s) => s.get);
   const invalidate = useThree((s) => s.invalidate);
   const quality = useScene((s) => s.quality);
   const pacing = useScene((s) => s.pacing);
@@ -195,8 +201,12 @@ export function ResolutionScaler() {
 
   const apply = (next: number) => {
     const dpr = +(base * next).toFixed(3);
-    if (Math.abs(dpr - applied.current) < 0.01) return;
+    // Compared against the LIVE ratio, not the last one we set: <Canvas dpr> is re-applied on
+    // every SceneRoot render (R3F 9.6.1 configure()), and while it was a constant 1 a phone
+    // that scrolled into the next act drew at 1x while this reported 2 (#73, 2026-10-01).
+    if (Math.abs(dpr - get().viewport.dpr) < 0.01) { applied.current = lastDpr = dpr; return; }
     applied.current = dpr;
+    lastDpr = dpr;
     setDpr(dpr);
     invalidate();
   };
@@ -214,7 +224,7 @@ export function ResolutionScaler() {
       pacing,
       displayHz,
       fps: +fps.toFixed(1),
-      dpr: applied.current,
+      dpr: get().viewport.dpr,
       scale: scale.current,
       base,
       idle,
@@ -250,7 +260,7 @@ export function ResolutionScaler() {
     } else if (fps > target * HIGH_RATIO && scale.current < MAX_SCALE) {
       scale.current = Math.min(MAX_SCALE, +(scale.current + STEP_UP).toFixed(2));
       apply(scale.current);
-    }
+    } else apply(scale.current); // no-op unless the Canvas prop overwrote us since the last eval
     publish(fps, idle);
   });
 
