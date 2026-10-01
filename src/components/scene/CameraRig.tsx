@@ -10,6 +10,7 @@ import { TOUR_SECTIONS } from '@/lib/sections';
 import { RING_OUTER_R } from '@/lib/planetPositions';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect, livePlanetPlane } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
+import { diveAt, arriveAt } from '@/lib/passageProfile';
 import { NEUTRAL_APERTURE, ORBIT_APERTURE } from '@/lib/photometry';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useMotionDisabled } from '@/hooks/useMotionDisabled';
@@ -205,7 +206,6 @@ function orbitVantage(
   out.normalize();
   return best;
 }
-const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
 // --- B7: the arrival, and why the curtain kept being torn open ---------------------------
 // Mounting the solar act is not free. Eight textured planets, a seventeen-thousand-body
@@ -285,6 +285,10 @@ const DIVE_P1 = new THREE.Vector3(3.7, 0.08, 1.5);
 // Look pitches from looking-DOWN at the core (camera above the plane) to level with the disc.
 // Same point as LOOK: the dive must start from exactly where the welcome shot was looking,
 // or the handover at scroll 0.015 jumps the look target.
+// The arrival dolly is a pure function of scroll (passageProfile shapes its speed); this damp
+// only smooths a hand-scrolled driver. At 0.3 it started every arrival from rest and ate the
+// speed the camera crosses the curtain with (#82).
+const ARRIVE_TAU = 0.06;
 const LOOK_START = new THREE.Vector3(0, 1.5, 0);
 const LOOK_END = new THREE.Vector3(4.6, 0.05, -1.5); // level with the camera: it ends inside the disc, looking along it
 const _tmp = new THREE.Vector3();
@@ -1189,11 +1193,10 @@ export default function CameraRig() {
         damp(cam, 'fov', 55, 0.5, dt);
         cam.lookAt(LOOK.x, LOOK.y, LOOK.z);
       } else {
-        // DIVE — a staged S-curve that descends THROUGH the disc plane. Completes by
-        // ~0.85; the veil/swap happens in the last stretch.
-        const t01 = clamp01((p - 0.015) / 0.85);
-        // Gentler than a pure cubic: that one parked the camera for the last 0.15 of the dive.
-        const e = 0.4 * t01 + 0.6 * easeInOutCubic(t01);
+        // DIVE — a staged S-curve that descends THROUGH the disc plane. It runs right up to the
+        // swap and is still accelerating there (#82): it used to finish at scroll 0.865 on an
+        // in-out ease, so the camera stood still in front of the closing curtain.
+        const e = diveAt(p);
         cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, e);
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);
@@ -1208,7 +1211,9 @@ export default function CameraRig() {
         // Look pitches down→up as the camera crosses the plane, and a small extra pitch
         // bump mid-dive — so the disc sweeps across the frame at an angle, never a flat
         // horizontal band. The core (LOOK_END.x) slides off-side toward the arm.
-        _look.copy(LOOK_START).lerp(LOOK_END, easeInOutCubic(e));
+        // Smoothstep, not a cubic in-out: the cubic's steep middle turned the camera 3.3 deg in
+        // a 60fps frame at mid-dive; this one keeps the whole dive under 1 deg (#82).
+        _look.copy(LOOK_START).lerp(LOOK_END, e * e * (3 - 2 * e));
         _look.y += 0.15 * Math.sin(e * Math.PI);
         cam.lookAt(_look.x, _look.y, _look.z);
         // Cinematic bank — a roll that tilts the disc diagonally (kills any residual
@@ -1421,12 +1426,12 @@ export default function CameraRig() {
           const diving = store.scrollDriven && arrivedViaDive.current && scrollProgress < 0.999;
           if (diving) {
             // Scroll-driven approach to the fixed pose (T7a rule: settle at max).
-            const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
+            const arrive = arriveAt(scrollProgress);
             _entry.set(0, 8, 21);
             _tgt.copy(_entry).lerp(_tourPos, arrive);
             flight.on = false;
-            damp3(cam.position, _tgt, 0.3, dt);
-            damp(cam, 'fov', 52 + (ORR.fov - 52) * arrive, 0.3, dt);
+            damp3(cam.position, _tgt, ARRIVE_TAU, dt);
+            damp(cam, 'fov', 52 + (ORR.fov - 52) * arrive, ARRIVE_TAU, dt);
             cam.lookAt(_tourLook.x, _tourLook.y, _tourLook.z);
           } else {
             applyPose(cam, _tourPos, _tourLook, _tourLook, ORR.fov, 0.5, dt, dtNominal.current);
@@ -1471,13 +1476,13 @@ export default function CameraRig() {
           // exactly at scrollY=max — every position in the tail moves the camera, no
           // inert range. Returns / deep-links (scroll<SWAP_V) fall through to the
           // time-damped reveal below, so they still fly in without a scroll driver.
-          const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
+          const arrive = arriveAt(scrollProgress);
           _entry.set(0, 8, 21);
           _tgt.copy(_entry).lerp(_ovPos, arrive);
           flight.on = false;
           rigUp.copy(PLANE_N); cam.up.copy(rigUp);
-          damp3(cam.position, _tgt, 0.3, dt);
-          damp(cam, 'fov', 52 + (ovFov - 52) * arrive, 0.3, dt);
+          damp3(cam.position, _tgt, ARRIVE_TAU, dt);
+          damp(cam, 'fov', 52 + (ovFov - 52) * arrive, ARRIVE_TAU, dt);
           cam.lookAt(_ovLook.x, _ovLook.y, _ovLook.z);
         } else {
           rigUp.copy(PLANE_N); cam.up.copy(rigUp);

@@ -41,6 +41,19 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: W, height: H, deviceScaleFactor: MOB ? 2 : 1, isMobile: MOB, hasTouch: MOB });
   if (BYPASS && /vercel\.app/.test(BASE)) await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': BYPASS });
+  // STALL=1: time the WebGL calls that can block (program link/status, texture uploads) so the
+  // swap frame's cost can be split into compile vs upload vs everything else (JS, React).
+  if (process.env.STALL) await page.evaluateOnNewDocument(() => {
+    window.__gl = { compile: 0, upload: 0, n: 0 };
+    const wrap = (proto, name, key) => {
+      const f = proto[name];
+      proto[name] = function (...a) { const t = performance.now(); try { return f.apply(this, a); } finally { window.__gl[key] += performance.now() - t; window.__gl.n++; } };
+    };
+    for (const P of [WebGL2RenderingContext.prototype]) {
+      for (const n of ['compileShader', 'linkProgram', 'getProgramParameter', 'getShaderParameter', 'getProgramInfoLog', 'getShaderInfoLog', 'useProgram']) wrap(P, n, 'compile');
+      for (const n of ['texImage2D', 'texSubImage2D', 'texStorage2D', 'texImage3D', 'texSubImage3D', 'generateMipmap', 'bufferData', 'compressedTexImage2D']) wrap(P, n, 'upload');
+    }
+  });
   await page.evaluateOnNewDocument(() => {
     window.__rec = [];
     const tick = () => {
@@ -52,6 +65,7 @@ try {
           +(performance.timeOrigin + performance.now()).toFixed(1), s.act, +s.coverage.toFixed(4), +s.scrollProgress.toFixed(4),
           [cm.position.x, cm.position.y, cm.position.z], [cm.quaternion.x, cm.quaternion.y, cm.quaternion.z, cm.quaternion.w],
           +cm.fov.toFixed(2), [+o.x.toFixed(4), +o.y.toFixed(4), +o.z.toFixed(4)],
+          window.__gl ? [+window.__gl.compile.toFixed(1), +window.__gl.upload.toFixed(1)] : null,
         ]);
       }
       requestAnimationFrame(tick);

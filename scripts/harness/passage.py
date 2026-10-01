@@ -60,12 +60,20 @@ for v in live:
         cur0 = None
 swap = next((r for a, r in zip(rec, rec[1:]) if a[1] != r[1]), None)
 turn = max((qang(a[5], b[5]) for a, b in zip(rec, rec[1:]) if a[1] == b[1] and t0 <= b[0] <= t1), default=0)
+# The recorder's rAF and R3F's are not ordered, and a GPU-bound frame repeats the previous
+# pose: then the next sample carries two renders' worth of turn. Turn RATE over distinct
+# poses, scaled to a 60fps frame, is what the criterion means.
+dist = [r for a, r in zip([None] + rec, rec) if a is None or a[4] != r[4] or a[5] != r[5]]
+turn60 = max((qang(a[5], b[5]) * 16.667 / max(16.667, b[0] - a[0]) for a, b in zip(dist, dist[1:])
+              if a[1] == b[1] and t0 <= b[0] <= t1), default=0)
+render_fps = (len([r for r in dist if t0 <= r[0] <= t1]) - 1) / max(1e-3, (t1 - t0) / 1000)
 out = {
     'tag': os.path.basename(d.rstrip('/')), 'dir': m['DIR'], 'mob': m['MOB'], 'endAct': m['endAct'],
     'dur_s': round((t1 - t0) / 1000, 2), 'dark_ms': round(dark), 'max_lum_step': round(max(s[0] for s in steps), 1),
     'max_picture_change_visible': round(max(c[0] for c in cuts), 1) if cuts else None,
     'longest_visible_stall_ms': round(stall), 'stall_at(scroll from,to,act)': where,
     'max_turn_deg_frame': round(math.degrees(turn), 2),
+    'max_turn_deg_per_60fps_frame': round(math.degrees(turn60), 2), 'render_fps': round(render_fps, 1),
     'swap_at_ms': round(swap[0] - t0) if swap else None,
 }
 print(json.dumps(out))

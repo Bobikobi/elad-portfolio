@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/i18n';
 import { useViewMode } from '@/lib/viewModeContext';
 import { useScene } from '@/lib/sceneStore';
 import { SWAP_V, COVER_PLATEAU, COVER_FALLOFF, coverageFor } from '@/lib/diveEnvelope';
+import { scrollAt, timeAt } from '@/lib/passageProfile';
 import { enteredOnAWorld } from '@/lib/entryRoute';
 import { localePath } from '@/lib/sections';
 import About from '@/components/sections/About';
@@ -244,27 +245,15 @@ function GalaxyHome() {
   const [passage, setPassage] = useState(false);
   useEffect(() => {
     if (seenIntro === null) return;
-    // Two legs, each with its own clock: the dive down to the far edge of the curtain, then
-    // the arrival dolly. On one shared clock the arrival - the last twentieth of the driver,
-    // but a long camera move - got a third of a second and ran 2.5x faster than a hand
-    // scroll ever drives it.
-    const DIVE_MS = 1500;
-    const ARRIVE_MS = 900;
-    const EDGE = SWAP_V + COVER_PLATEAU + COVER_FALLOFF; // where the curtain has fully lifted
+    // The passage plays on ONE clock (#82): the scroll is a linear function of time per
+    // segment (passageProfile), and the camera shapes its own speed on top of that - so it
+    // accelerates through the galaxy, crosses the curtain at speed and brakes only as it
+    // lands. The old per-leg eases stopped the camera dead at the curtain and crept after it.
     const QUIET_MS = 260;  // wheel silence that ends the post-arrival swallow
     const SETTLE_MS = 500; // minimum swallow after arrival, whatever the wheel does
     const SWIPE_PX = 12;
     const STEP_MAX_MS = 100;  // 10 fps still plays in real time; only a true stall is clipped
     const HOLD_MAX_MS = 2000;
-    // Per leg: accelerate over the first quarter, cruise, brake over the last quarter. Peak
-    // speed is 1.33x the mean (a sine in-out peaks at 1.57x), and the peak is what sets the
-    // largest camera step of the dive.
-    const RAMP = 0.25;
-    const V = 1 / (1 - RAMP);
-    const ease = (x: number) =>
-      x < RAMP ? (V * x * x) / (2 * RAMP)
-      : x > 1 - RAMP ? 1 - (V * (1 - x) * (1 - x)) / (2 * RAMP)
-      : V * (x - RAMP / 2);
     let raf = 0;
     let playing = false;
     let landedAt = -Infinity;
@@ -287,17 +276,9 @@ function GalaxyHome() {
       const from = window.scrollY / max;
       const to = dir > 0 ? 1 : 0;
       if (Math.abs(to - from) * max < 2) return false; // already at that end: nothing to play
-      // The legs still ahead of `from`, a leg entered part-way getting its share of the time.
-      const legs: [number, number, number][] = [];
-      const route: [number, number, number][] = dir > 0
-        ? [[0, EDGE, DIVE_MS], [EDGE, 1, ARRIVE_MS]]
-        : [[1, EDGE, ARRIVE_MS], [EDGE, 0, DIVE_MS]];
-      for (const [a, b, ms] of route) {
-        const left = (b - from) * dir;
-        if (left <= 0) continue;
-        const start = left < (b - a) * dir ? from : a;
-        legs.push([start, b, (ms * (b - start)) / (b - a)]);
-      }
+      // Entered part-way (a hand-scrolled driver), the passage plays only what is left of it.
+      const tFrom = timeAt(from);
+      const span = Math.abs(timeAt(to) - tFrom);
       playing = true;
       setPassage(true);
       const t0 = performance.now();
@@ -314,12 +295,9 @@ function GalaxyHome() {
         const sc = useScene.getState();
         if (sc.coverage > coverageFor(sc.scrollProgress) + 0.3 && held < HOLD_MAX_MS) held += dt;
         else elapsed += Math.min(dt, STEP_MAX_MS);
-        let t = elapsed, leg = 0;
-        while (leg < legs.length - 1 && t >= legs[leg][2]) t -= legs[leg++][2];
-        const [a, b, ms] = legs[leg];
-        const x = Math.min(1, t / ms);
-        window.scrollTo({ top: (a + (b - a) * ease(x)) * max, behavior: 'instant' });
-        if (x < 1 || leg < legs.length - 1) { raf = requestAnimationFrame(step); return; }
+        const x = Math.min(1, elapsed / span);
+        window.scrollTo({ top: scrollAt(tFrom + dir * span * x) * max, behavior: 'instant' });
+        if (x < 1) { raf = requestAnimationFrame(step); return; }
         playing = false;
         landedAt = performance.now();
         if (to === 0) setPassage(false); // back at the galaxy: the hint may show again
