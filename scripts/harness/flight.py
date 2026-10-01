@@ -17,11 +17,16 @@ for i in range(len(marks)-1):
     turns=[];sp=[];tr=[];dts=[]
     for a,b in zip(fr,fr[1:]):
         dt=(b['t']-a['t'])/1000; dts.append(dt)
-        ang=qang(a['q'],b['q']); tr.append(ang/dt)
+        ang=qang(a['q'],b['q'])
         # per RENDER frame when the page exposes a frame counter (the rig's rAF can straddle a render)
         nf=(b['fl'][4]-a['fl'][4]) if a.get('fl') and len(a['fl'])>4 and b.get('fl') else 1
         turns.append(ang/nf if nf>0 else 0)
-        sp.append(math.dist(a['p'],b['p'])/dt)
+        # Rates over at least ~one frame: a sample a few ms after a long frame carries that frame's
+        # whole move, and read over 3-6ms a resting camera's 0.7 deg/s drift showed as 4-9 deg/s and
+        # stretched the measured duration past the flight (#70).
+        w=fr[max(0,fr.index(b)-2)] if dt<0.010 else a
+        wdt=(b['t']-w['t'])/1000
+        tr.append(qang(w['q'],b['q'])/wdt); sp.append(math.dist(w['p'],b['p'])/wdt)
     peak=max(sp); 
     # movement start/end
     st=next(i for i,(s,r) in enumerate(zip(sp,tr)) if s>0.02*peak or r>2)

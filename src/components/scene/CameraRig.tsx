@@ -630,33 +630,40 @@ function applyOrbit(pos: THREE.Vector3, look: THREE.Vector3, yaw: number, pitch:
  * - The swing bows up out of the ecliptic, by the least lift that keeps the whole path at least
  *   FLIGHT_CLEAR radii from every other body (the sun included). The bodies barely move during
  *   a shot, so the lift is chosen once, at the start, by sampling the path.
- * - The view direction slerps from the start orientation toward destQuat on a trapezoid
- *   profile, and is rate-limited per frame, so no frame turns the camera by more than
- *   FLIGHT_TURN_STEP whatever the geometry or a hitch (only a client under 30fps throughout
- *   keeps the per-second rate instead). The duration is the shortest one whose planned
- *   rotation fits that rate (planFlight), within FLIGHT_MIN..FLIGHT_MAX.
- * - Flight time advances by at most a few of this client's own frames per frame: the route
- *   change mounts a world and stalls one frame for ~160ms, and a flight that advanced by the
- *   wall clock jumped 13 degrees across it. A slow client's frames are all long and keep
- *   their full step, so framing still never depends on the frame rate.
+ * - No frame turns the camera by more than FLIGHT_TURN_STEP, whatever the geometry or a hitch
+ *   (only a client under 30fps throughout keeps the per-second rate instead). Into a world the
+ *   view turns for the planet from the first frame (viewTarget, turnStep), so it is in frame
+ *   early and grows; out to the overview it slerps toward destQuat on a trapezoid profile.
+ * - Each shot is planned before its first frame by flying it at 60fps (simulate): the swing
+ *   timing, the bow round Saturn's rings and the duration (planShot, planFlight) are the first
+ *   that bring the planet into frame within FLIGHT_IN_FRAME, keep the rings' plane RING_CLEAR
+ *   radii away and fit FLIGHT_MAX. Saturn's rings open or close by at most RING_STEP a frame
+ *   (governedPoint), which holds the camera back where it would turn them faster.
+ * - Flight time advances by at most a few of this client's own frames per frame, and by one
+ *   while the view is still turning at its cap: the route change mounts a world and stalls a
+ *   frame for ~160ms, and a flight that advanced by the wall clock jumped 13 degrees across it.
+ *   A slow client's frames are all long and keep their full step, so framing still never
+ *   depends on the frame rate.
  * - The destination is recomputed every frame by the branch that owns it and the path lands
  *   exactly on it at s = 1, so handing back to the ordinary damp is seamless.
  */
 const FLIGHT_TURN_RATE = 84 * DEG2RAD; // rad/s = FLIGHT_TURN_STEP at 60fps
 const FLIGHT_TURN_STEP = 1.4 * DEG2RAD; // rad per frame at 60fps - criterion: <= 1.5 deg
 const FLIGHT_MIN = 1.6;
-const FLIGHT_MAX = 2.45;
+const FLIGHT_MAX = 2.35; // the run measures ~0.1s longer than the plan (criterion: <= 2.5s)
 const FLIGHT_CLEAR = 2.0; // radii
 const FLIGHT_LIFTS = [0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0];
 const SUN_RADIUS = 1.5;
 // Into a world (#70 crit 4): the destination is in frame within the first 40% of the flight.
 // The view turns toward it from the first frame, at the full rate after FLIGHT_RAMP, and settles
-// onto a moving heading with FLIGHT_SETTLE's lag. Planned against 38% (the plan matched the measured share within 1%).
-const FLIGHT_IN_FRAME = 0.38;
+// onto a moving heading with FLIGHT_SETTLE's lag. Planned against 33%: the run drifts a few
+// percent from the plan (frame timing), and 38% landed at 41%.
+const FLIGHT_IN_FRAME = 0.33;
+const FLIGHT_IN_FRAME_MAX = 0.38; // past the margin but inside the criterion: second best
 const FLIGHT_RAMP = 0.25; // s from rest to the full turn rate
 const FLIGHT_SETTLE = 0.08; // s, time constant of the view's approach to its heading
 const FLIGHT_DIVE_MIN = 0.9; // mobile tour dive, when the turn allows it
-const FLIGHT_BACK_DIRECT = 1.6; // mobile tour back to the orrery (#70 crit 6: >= 1.5s)
+const FLIGHT_BACK_DIRECT = 1.7; // mobile tour back to the orrery (#70 crit 6: >= 1.5s; the eased tail reads ~0.1s short)
 // When the swing round the destination happens (share of the flight). The bearing to the target
 // turns with the swing, so a swing that runs the other way from the view's own turn keeps the
 // target out of frame; waiting lets the view find it first, but a late swing is a fast one, and
@@ -664,11 +671,15 @@ const FLIGHT_BACK_DIRECT = 1.6; // mobile tour back to the orrery (#70 crit 6: >
 const SWINGS: ReadonlyArray<readonly [number, number]> = [[0, 0.8], [0.15, 0.85], [0.3, 0.9], [0, 0.4], [0, 0.55], [0.08, 0.7], [0.05, 1]];
 // Saturn's rings (#70 crit 5): the path may cut the ring plane only RING_CLEAR radii or more from
 // the planet, and the rings may open or close by at most RING_STEP a frame - held per frame by
-// governedPoint. Leaving Saturn for a world, the swing bows round the destination's far side by
-// the least of RING_VIAS (weights of that side against the plain swing) that clears the plane.
-const RING_CLEAR = 6.6;
+// governedPoint. Leaving Saturn for a world, the swing bows round the destination's far side
+// and/or out of the ring plane on the camera's side, by the first of RING_VIAS (weights of each
+// against the plain swing) that clears the plane.
+const RING_CLEAR = 6.2;
 const RING_STEP = 0.9 * DEG2RAD;
-const RING_VIAS = [0, 2, 4, 6];
+const RING_VIAS: ReadonlyArray<readonly [number, number]> = [ // [far side, ring normal]
+  [0, 0], [2, 0], [4, 0], [6, 0], [0, 1], [0, 2], [0, 3], [2, 1], [2, 2], [4, 2], [4, 4],
+];
+const CRANE_VIAS = [0, 0.1, 0.2, 0.3, 0.45]; // out to the overview: bow along the ring normal, share of the span
 const flight = {
   on: false,
   el: 0,
@@ -688,6 +699,7 @@ const flight = {
   fromQ: new THREE.Quaternion(),
   fromFov: 45,
   lastAim: new THREE.Vector3(),
+  turnBound: true, // into a world: last frame's turn was held to the cap (see applyPose)
 };
 // Mobile dive: the side of the planet the camera approached from (planet -> camera, unit),
 // captured when the dive starts. The world pose then stands on THAT side instead of the
@@ -715,9 +727,6 @@ const _origin = new THREE.Vector3();
 const ringGov: Gov = { e: 0, el: 0, s: 0 }; // the flying shot's governed progress and ring elevation
 const simGov: Gov = { e: 0, el: 0, s: 0 }; // the same, for the planner's simulation
 const sim = { share: 0, over: 0, close: false, crossR: Infinity };
-const planLog: unknown[] = []; // DEBUG #70
-const dbgEnd = new THREE.Vector3(), dbgLook = new THREE.Vector3(), dbgAim = new THREE.Vector3(); let dbgFov = 0; let dbgDrift: number[] = [];
-let dbgTrace: unknown[] | null = null; const dbgV = new THREE.Vector3(), dbgW = new THREE.Vector3();
 let debugFrames = 0; // render frames, for the flight rig (?hud=1 builds only)
 const smoother = (x: number) => x * x * x * (x * (x * 6 - 15) + 10);
 /** Trapezoid velocity: 20% ease in, constant middle, 20% ease out. Peak slope 1.25. */
@@ -751,6 +760,7 @@ function startFlight(cam: THREE.PerspectiveCamera, leaving: string | null, going
     tourApproachFor = going;
   }
   flight.dur = 0; // sized on the first frame, once the destination pose is known
+  flight.turnBound = true;
 }
 
 /** The shot's governed progress at `s` with nothing holding it back: into a world the swing round
@@ -769,8 +779,10 @@ function flightPoint(out: THREE.Vector3, aim: THREE.Vector3, end: THREE.Vector3,
   if (!flight.going) {
     // Out to the overview: a straight crane back and up. Circling the look point here would
     // add the whole swing to the turn (~200 degrees instead of ~110) and stretch the shot.
-    const span = flight.fromPos.distanceTo(end);
-    return out.copy(flight.fromPos).lerp(end, e).addScaledVector(UP, lift * span * Math.sin(Math.PI * e));
+    // Leaving Saturn the crane bows out along the ring normal on the camera's side, so the line
+    // cuts the ring plane later, farther out (flight.via, a share of the span).
+    const span = flight.fromPos.distanceTo(end), bow = span * Math.sin(Math.PI * e);
+    return out.copy(flight.fromPos).lerp(end, e).addScaledVector(UP, lift * bow).addScaledVector(flight.viaDir, flight.via * bow);
   }
   _fDir0.copy(flight.fromPos).sub(aim);
   const r0 = _fDir0.length();
@@ -847,16 +859,14 @@ function chooseLift(aim: THREE.Vector3, end: THREE.Vector3) {
 }
 
 /**
- * Where the view is heading at progress `s`: the shot's final orientation (from the end pose),
- * handing over to "look at the target from here" as the camera arrives. Keeping the live look
- * all the way makes a camera that passes the target sweep round it (Saturn -> overview passes
- * the sun: ~200 degrees of turn for a 110-degree change). A planet hands over sooner, so it
- * comes into frame and grows; the overview is a wide shot and holds the final heading longer.
+ * Out to the overview, where the view is heading at progress `s`: the shot's final orientation
+ * (from the end pose), handing over to "look at the target from here" as the camera arrives.
+ * Keeping the live look all the way makes a camera that passes the target sweep round it
+ * (Saturn -> overview passes the sun: ~200 degrees of turn for a 110-degree change).
  */
 function destQuat(out: THREE.Quaternion, camPos: THREE.Vector3, end: THREE.Vector3, look: THREE.Vector3, s: number) {
   lookQuat(out, end, look);
-  const w = flight.going ? smoother(Math.min(1, s / 0.7)) : smoother(s);
-  return out.slerp(lookQuat(_fQ, camPos, look), w);
+  return out.slerp(lookQuat(_fQ, camPos, look), smoother(s));
 }
 
 /** Into a world, the view heads for the planet and hands over to the pose's look point on landing. */
@@ -865,15 +875,18 @@ function viewTarget(out: THREE.Quaternion, camPos: THREE.Vector3, aim: THREE.Vec
   return lookQuat(out, camPos, _fLook);
 }
 
-/** One frame of the view's turn: ramped in from rest, capped per frame, settling with a short lag. */
+/** One frame of the view's turn: ramped in from rest, capped per frame, settling with a short lag.
+ *  True when the cap, not the settle, set the step - the view is behind its heading. */
 function turnStep(q: THREE.Quaternion, target: THREE.Quaternion, el: number, step: number, cap: number) {
   const ang = q.angleTo(target);
-  q.rotateTowards(target, Math.min(cap * Math.min(1, el / FLIGHT_RAMP), ang * (1 - Math.exp(-step / FLIGHT_SETTLE))));
+  const lim = cap * Math.min(1, el / FLIGHT_RAMP), settle = ang * (1 - Math.exp(-step / FLIGHT_SETTLE));
+  q.rotateTowards(target, Math.min(lim, settle));
+  return lim < settle;
 }
 
 /**
  * Fly the planned shot at 60fps for a `dur`-second flight. `share`: the part of the flight before
- * the destination's disc reaches the frame (into a world). `over`: the seconds the shot runs past
+ * the destination's disc reaches the frame for good (into a world). `over`: the seconds the shot runs past
  * `dur` while a held-back swing catches up and the view settles. `close`: the path cuts the ring
  * plane inside RING_CLEAR radii.
  */
@@ -887,7 +900,7 @@ function simulate(aspect: number, end: THREE.Vector3, look: THREE.Vector3, aim: 
   simGov.el = flight.ringKey ? ringElev(flight.fromPos) : 0;
   sim.close = false;
   sim.crossR = Infinity;
-  let first = -1, i = 1;
+  let out = 0, i = 1;
   _sQ.copy(flight.fromQ);
   let t = 0;
   for (; i <= n + 90; i++) {
@@ -898,31 +911,27 @@ function simulate(aspect: number, end: THREE.Vector3, look: THREE.Vector3, aim: 
     if (flight.ringKey && prev * simGov.el < 0) {
       const d = _fP.distanceTo(planetPositions.get(flight.ringKey) as THREE.Vector3) / R;
       sim.crossR = Math.min(sim.crossR, d);
-      if (i === -1) planLog.push(['x', i, n, +d.toFixed(2)]);
       if (d < RING_CLEAR) sim.close = true;
     }
     if (flight.going) {
       turnStep(_sQ, viewTarget(_fDest, _fP, aim, look, s), t, dt, FLIGHT_TURN_RATE * dt);
-      if (dbgTrace && i % 8 === 1) { dbgV.set(0, 0, -1).applyQuaternion(_sQ); dbgTrace.push([i - 1, +(dbgV.angleTo(dbgW.copy(aim).sub(_fP)) / DEG2RAD).toFixed(1)]); }
-      if (first < 0) {
-        const tv = Math.tan(((flight.fromFov + (fov - flight.fromFov) * smoother(s)) * DEG2RAD) / 2);
-        _fV.copy(aim).sub(_fP).applyQuaternion(_tmpQ.copy(_sQ).invert());
-        const z = -_fV.z;
-        if (z > 0 && Math.abs(_fV.y) < tv * z + r && Math.abs(_fV.x) < tv * aspect * z + r) first = i;
-      }
+      const tv = Math.tan(((flight.fromFov + (fov - flight.fromFov) * smoother(s)) * DEG2RAD) / 2);
+      _fV.copy(aim).sub(_fP).applyQuaternion(_tmpQ.copy(_sQ).invert());
+      const z = -_fV.z;
+      if (!(z > 0 && Math.abs(_fV.y) < tv * z + r && Math.abs(_fV.x) < tv * aspect * z + r)) out = i;
     }
     if (s >= 1 && simGov.e >= 1 - 1e-4 && (!flight.going || _sQ.angleTo(_fDest) < 0.002)) break;
   }
   sim.over = (Math.max(i, n) - n) * dt;
-  sim.share = first < 0 ? 1 : first / Math.max(i, n);
+  sim.share = Math.min(1, (out + 1) / Math.max(i, n));
   return sim;
 }
 
 /** Lower is better; under 1 meets every target: rings, destination in frame, FLIGHT_MAX overall. */
 function shotScore(dur: number) {
   const total = dur + sim.over;
-  return (sim.close ? 1000 : 0) + (flight.going && sim.share > FLIGHT_IN_FRAME ? 10 + sim.share : 0) +
-    Math.max(0, total - FLIGHT_MAX) * 20 + total * 0.01;
+  return (sim.close ? 1000 + (RING_CLEAR - sim.crossR) * 100 : 0) + (!flight.going || sim.share <= FLIGHT_IN_FRAME ? 0 : sim.share <= FLIGHT_IN_FRAME_MAX ? 2 + sim.share : 10 + sim.share) +
+    Math.max(0, total - FLIGHT_MAX) * 100 + total * 0.01; // 0.02s over costs what 33-38% in frame does
 }
 
 /**
@@ -934,11 +943,19 @@ function shotScore(dur: number) {
  * needs more than FLIGHT_TURN_RATE, found by sampling the planned orientation along the path - the
  * path itself swings the view, so the start-to-end angle alone underestimates the turn.
  */
-function planFlight(aspect: number, end: THREE.Vector3, look: THREE.Vector3, aim: THREE.Vector3, fov: number, minDur: number) {
+function planFlight(
+  aspect: number, end: THREE.Vector3, look: THREE.Vector3, aim: THREE.Vector3, fov: number, minDur: number, late = FLIGHT_IN_FRAME
+) {
   if (flight.going) {
     let best = Infinity;
     flight.dur = FLIGHT_MAX;
     flight.turn = 1;
+    // A path that cuts the rings close, or brings the planet in later than `late`, at the longest
+    // duration does at every shorter one too (the turn takes the same time, a larger share of a
+    // shorter flight): one simulation rules it out instead of a sweep (the sweeps cost ~170ms
+    // around Saturn, a hitch).
+    simulate(aspect, end, look, aim, fov, FLIGHT_MAX);
+    if (sim.close || sim.share > late) return shotScore(FLIGHT_MAX);
     for (let dur = minDur; dur <= FLIGHT_MAX + 1e-6; dur += 0.05) {
       simulate(aspect, end, look, aim, fov, dur);
       const score = shotScore(dur);
@@ -977,34 +994,46 @@ function planShot(aspect: number, end: THREE.Vector3, look: THREE.Vector3, aim: 
   const base = Math.max(FLIGHT_MIN, Math.min(FLIGHT_MAX, 1.2 + span * 0.06));
   const bow = !!flight.going && !!flight.ringKey && flight.ringKey === flight.leaving;
   const arr = !!flight.going && !!flight.ringKey && flight.ringKey === flight.going;
+  const crane = !flight.going && !!flight.ringKey && flight.ringKey === flight.leaving;
   const nn = planetRingNormal.get(flight.ringKey as string);
-  if (bow) flight.viaDir.copy(aim).sub(planetPositions.get(flight.ringKey as string) as THREE.Vector3).normalize();
+  const side = flight.ringKey ? Math.sign(ringElev(flight.fromPos)) || 1 : 1;
+  const far = new THREE.Vector3();
+  if (bow) far.copy(aim).sub(planetPositions.get(flight.ringKey as string) as THREE.Vector3).normalize();
+  if (crane && nn) flight.viaDir.copy(nn).multiplyScalar(side);
   let best = Infinity, pick = SWINGS[0], via = 0, lift = 0, dur = FLIGHT_MAX, turn = 1;
   const vd = new THREE.Vector3();
   search: for (const sw of flight.going ? SWINGS : SWINGS.slice(0, 1)) {
-    for (const v0 of bow ? RING_VIAS : arr ? [0, 1, 2, -1, -2] : [0]) {
-      const v = Math.abs(v0);
+    for (const v0 of bow ? RING_VIAS.keys() : arr ? [0, 1, 2, -1, -2] : crane ? CRANE_VIAS : [0]) {
+      let v = Math.abs(v0);
       if (arr && nn) flight.viaDir.copy(nn).multiplyScalar(Math.sign(v0) || 1);
+      if (bow) {
+        const [wf, wn] = RING_VIAS[v0];
+        flight.viaDir.copy(far).multiplyScalar(wf);
+        if (nn) flight.viaDir.addScaledVector(nn, wn * side);
+        v = flight.viaDir.length();
+        if (v > 0) flight.viaDir.divideScalar(v);
+      }
       [flight.swingFrom, flight.swingTo] = sw;
       flight.via = v;
       flight.lift = chooseLift(aim, end);
       const score = planFlight(aspect, end, look, aim, fov, base);
-      planLog.push(['shot', sw[0], sw[1], v0, +sim.share.toFixed(3), +flight.dur.toFixed(2), +sim.over.toFixed(2), +sim.crossR.toFixed(2), +score.toFixed(2)]);
       if (score < best) { best = score; pick = sw; via = v; vd.copy(flight.viaDir); lift = flight.lift; dur = flight.dur; turn = flight.turn; }
       if (best < 1) break search;
     }
   }
   [flight.swingFrom, flight.swingTo] = pick;
+  // No candidate met the 33% margin: sweep only the best one for the shortest duration inside 38%.
+  if (flight.going && best >= 1 && best < 1000) {
+    flight.via = via;
+    flight.viaDir.copy(vd);
+    flight.lift = lift;
+    if (planFlight(aspect, end, look, aim, fov, base, FLIGHT_IN_FRAME_MAX) < best) dur = flight.dur;
+  }
   flight.via = via;
   flight.viaDir.copy(vd);
   flight.lift = lift;
   flight.dur = dur;
   flight.turn = turn;
-  planLog.push(['pick', pick[0], via, lift, +dur.toFixed(2), flight.leaving, flight.going]);
-  dbgTrace = [];
-  simulate(aspect, end, look, aim, fov, dur);
-  planLog.push(['trace', ...dbgTrace]); dbgTrace = null;
-  planLog.push(['re', +sim.share.toFixed(3), +sim.over.toFixed(2), +sim.crossR.toFixed(2), flight.viaDir.toArray().map((x) => +x.toFixed(2))]);
 }
 
 /**
@@ -1034,23 +1063,20 @@ function applyPose(
       if (flight.going) planFlight(cam.aspect, pos, look, aim, fov, FLIGHT_DIVE_MIN);
       else flight.dur = FLIGHT_BACK_DIRECT;
     } else {
-      const t0 = performance.now();
       planShot(cam.aspect, pos, look, aim, fov);
-      planLog.push(['ms', +(performance.now() - t0).toFixed(1)]);
     }
-    planLog.push(['start', +cam.quaternion.angleTo(flight.fromQ).toFixed(4), +cam.position.distanceTo(flight.fromPos).toFixed(4)]);
-    dbgEnd.copy(pos); dbgLook.copy(look); dbgAim.copy(aim); dbgFov = fov; dbgDrift = [0, 0, 0, 0];
     ringGov.e = 0;
     ringGov.s = 0;
     ringGov.el = flight.ringKey ? ringElev(flight.fromPos) : 0;
   }
-  const step = Math.min(dt, Math.max(2.5 * nominal, 1 / 40));
+  // Into a world, while the view is still turning at its cap the clock advances by at most one of
+  // this client's frames: a hitch (the world mounting, ~150ms) would otherwise carry the camera
+  // 2.5 frames along the path while the view turns one, and the destination comes in late (#70).
+  const step = Math.min(dt, flight.going && flight.turnBound ? nominal : Math.max(2.5 * nominal, 1 / 40));
   flight.el += step;
   // A client that is slow throughout (under 30fps) keeps the per-second rate; any other client
   // gets a hard per-frame cap, so a hitch or a heavy world never turns faster than one step.
   // The rings' opening is capped the same way.
-  dbgDrift = [Math.max(dbgDrift[0], pos.distanceTo(dbgEnd)), Math.max(dbgDrift[1], look.distanceTo(dbgLook)), Math.max(dbgDrift[2], aim.distanceTo(dbgAim)), Math.max(dbgDrift[3], Math.abs(fov - dbgFov))];
-  if (false) { planLog.push(['drift', ...dbgDrift.map((x) => +x.toFixed(3)), +cam.aspect.toFixed(3)]); dbgDrift.push(1); }
   const slow = nominal > 1 / 30 ? nominal * 60 : 1;
   const s = governedPoint(cam.position, aim, pos, Math.min(1, flight.el / flight.dur), ringGov, RING_STEP * slow);
   flight.el = Math.min(flight.el, Math.max(s * flight.dur, flight.el - step));
@@ -1063,7 +1089,7 @@ function applyPose(
   // Into a world: the view turns for the planet from the first frame, so it is in frame early and
   // grows, and hands over to the pose's own look point as the camera lands - no final turn.
   if (flight.going) {
-    turnStep(cam.quaternion, viewTarget(_fDest, cam.position, aim, look, s), flight.el, step, maxStep);
+    flight.turnBound = turnStep(cam.quaternion, viewTarget(_fDest, cam.position, aim, look, s), flight.el, step, maxStep);
     if (landed && cam.quaternion.angleTo(_fDest) < 0.002) flight.on = false;
     return;
   }
@@ -1771,7 +1797,7 @@ export default function CameraRig() {
     if (HUD_AVAILABLE) {
       debugFrames++;
       (window as unknown as { __flight?: unknown }).__flight = {
-        fr: debugFrames, planLog, on: flight.on, el: flight.el, dur: flight.dur, turn: flight.turn, act, bodies: planetPositions, radii: planetRadii,
+        fr: debugFrames, on: flight.on, el: flight.el, dur: flight.dur, turn: flight.turn, act, bodies: planetPositions, radii: planetRadii,
       };
     }
   });

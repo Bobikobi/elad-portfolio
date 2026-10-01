@@ -22,7 +22,7 @@ const ev=async(e)=>(await c.send('Runtime.evaluate',{expression:e,returnByValue:
 const marks=[];
 // Each mark also carries the bodies' world positions, so the analysis can tell how far the view
 // has to turn before the destination can be in frame at all (#70).
-const mark=async(label)=>{marks.push({label,t:await ev('performance.now()'),bodies:await ev("window.__flight?Object.fromEntries([...window.__flight.bodies].map(([k,v])=>[k,[v.x,v.y,v.z]])):null"),plan:await ev("window.__flight&&window.__flight.planLog?window.__flight.planLog.splice(0):null")});};
+const mark=async(label)=>{marks.push({label,t:await ev('performance.now()'),bodies:await ev("window.__flight?Object.fromEntries([...window.__flight.bodies].map(([k,v])=>[k,[v.x,v.y,v.z]])):null")});};
 const nav=async(slug)=>ev(`(()=>{const a=[...document.querySelectorAll('a')].find(a=>new RegExp('/${slug}$').test(a.getAttribute('href')||''));if(a){a.click();return true}return false})()`);
 const back=async()=>ev(`(()=>{const a=document.querySelector('[data-world-back]');if(a){a.click();return true}return false})()`);
 const pill=async(k)=>ev(`(()=>{const a=document.querySelector('[data-planet-label="${k}"]');if(a){a.click();return true}return false})()`);

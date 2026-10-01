@@ -662,6 +662,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   const router = useRouter();
   const gl = useThree((s) => s.gl);
   const focused = useScene((s) => s.focusedPlanet);
+  const settled = useScene((s) => s.worldSettled);
   const group = useRef<THREE.Group>(null);
   const spinGroup = useRef<THREE.Group>(null);
   const mesh = useRef<THREE.Mesh>(null);
@@ -896,14 +897,18 @@ function Planet({ spec }: { spec: PlanetSpec }) {
     };
   }, [textureLoad, ringTex, ringGeo, spec.key, spec.size, spec.rings]);
 
-  // A1: lazily upgrade this planet's albedo the moment it becomes the focused world, and
-  // fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
+  // A1: lazily upgrade this planet's albedo once the camera has landed on it as the focused
+  // world, and fade+dispose it on leave (the crossfade + dispose run in the frame loop below).
+  // Not before the landing: an 8K map's upload took two ~150ms frames, and mid-flight that froze
+  // the camera twice and stretched the flights into Earth and Mars by 0.3s (#70). "Settled" latches
+  // while the camera still eases the last few percent, so the upload waits out that tail too.
   useEffect(() => {
     if (!page || focused !== spec.key) { hiTarget.current = 0; return; }
+    if (!settled) return;
     const tier = hiTierFor();
     if (tier === 'base') return; // mobile keeps the 2K base
     let cancelled = false;
-    loadHiRes(spec.key, tier, gl).then((tex) => {
+    const wait = setTimeout(() => loadHiRes(spec.key, tier, gl).then((tex) => {
       if (!tex) return;
       if (cancelled) { tex.dispose(); return; }
       hiTex.current?.dispose();
@@ -911,9 +916,9 @@ function Planet({ spec }: { spec: PlanetSpec }) {
       if (hiShader.current) hiShader.current.uniforms.uHiMap.value = tex;
       hiTarget.current = 1;
       if (DEV) console.log(`[tex] ${spec.key} ${tier} resident - textures=${gl.info.memory.textures}`);
-    });
-    return () => { cancelled = true; hiTarget.current = 0; };
-  }, [focused, page, spec.key, gl]);
+    }), 600);
+    return () => { cancelled = true; clearTimeout(wait); hiTarget.current = 0; };
+  }, [focused, settled, page, spec.key, gl]);
 
   useFrame((state, dt) => {
     // Dormant while the galaxy is on screen (both acts stay mounted - see SceneRoot): hold the
