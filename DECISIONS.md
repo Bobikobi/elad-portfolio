@@ -101,7 +101,7 @@ name the model; later entries do.
 ## 2026-07-29 ❌ Compressing Uranus/Neptune orbits to keep them in frame
 - Result: 34.4% → 35.6% - barely moved.
 - Why (proven): the overview camera sits inside the system.
-- Instead: an off-frame world leaves a hoverable rim marker (`reachable()`).
+- Instead: an off-frame world left a hoverable rim marker (`reachable()`). ⏸ Superseded 2026-09-27: Elad removed the marker (an unlabeled dot pinned in a corner read as a bug). Now the pointer reaches a body only while part of its disc is in frame, and the keyboard keeps a visually hidden button per body (`PlanetLabels.tsx`). Do not bring the rim marker back.
 - Retry when: the overview camera moves outside the system (a composition change).
 
 ## 2026-07-29 ❌ Side-effect-only `import` to capture the entry route
