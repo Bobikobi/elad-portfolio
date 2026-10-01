@@ -916,6 +916,21 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   }, [focused, page, spec.key, gl]);
 
   useFrame((state, dt) => {
+    // Dormant while the galaxy is on screen (both acts stay mounted - see SceneRoot): hold the
+    // pose a fresh mount opens with, so every arrival meets the system the same way it did
+    // when this act was built at the swap, and publish it for the camera's arrival solve.
+    if (useScene.getState().act !== 'solar') {
+      angle.current = spec.phase;
+      lastTourPos.current = null;
+      if (hovered) setHovered(false);
+      if (group.current) {
+        orbitPoint(_op, spec.orbit, angle.current, incl, spec.node ?? 0);
+        group.current.position.copy(_op);
+        group.current.getWorldPosition(_wp);
+        planetPositions.get(spec.key)?.copy(_wp);
+      }
+      return;
+    }
     // SPARKLE-2: the heliocentric revolution stops while ANY world is focused — not this
     // planet's, any. It is the one motion that has to stop, and it is the only one that does.
     //
@@ -1023,7 +1038,10 @@ function Planet({ spec }: { spec: PlanetSpec }) {
   const bind =
     page || decorative
       ? {
+          // The raycaster does not skip hidden objects, so a dormant planet (galaxy act on
+          // screen) would still catch the pointer. Unhandled, the event passes on.
           onClick: (e: { stopPropagation: () => void }) => {
+            if (useScene.getState().act !== 'solar') return;
             e.stopPropagation();
             if (page) open();
             // Touch has no hover: a tap on a decorative body toggles its tooltip.
@@ -1038,6 +1056,7 @@ function Planet({ spec }: { spec: PlanetSpec }) {
           // enter/leave chatters on a small disc that orbits under a still cursor, and two
           // writers for one piece of state would only fight each other.
           onPointerOver: (e: { stopPropagation: () => void }) => {
+            if (useScene.getState().act !== 'solar') return;
             e.stopPropagation();
             setHovered(true);
           },
@@ -1092,7 +1111,11 @@ export default function SolarAct() {
     // with it — see the note on `angle` in Planet. Leaving this running would have left 0.004
     // rad/s still turning the vantage, which is the same "the parent is still moving" mistake
     // useSkyLock exists to catch. Accumulator, so departure continues rather than re-syncs.
-    if (root.current && !useScene.getState().focusedPlanet) root.current.rotation.y += dt * 0.004;
+    // Dormant (galaxy act on screen): back to the mounted pose, as each Planet does.
+    if (!root.current) return;
+    const st = useScene.getState();
+    if (st.act !== 'solar') root.current.rotation.y = 0;
+    else if (!st.focusedPlanet) root.current.rotation.y += dt * 0.004;
   });
   return (
     <>

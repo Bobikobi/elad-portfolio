@@ -36,6 +36,31 @@ import {
  * persist here across the act swap; only the act CONTENT (galaxy vs solar) changes,
  * so GalaxyAct fully unmounts/disposes at the flash while the world feels continuous.
  */
+/** Runs `fn` with every act group shown, then restores each group's own visibility. */
+function withActsShown(scene: THREE.Scene, fn: () => void) {
+  const acts = scene.children.filter((o) => o.name.startsWith('act:'));
+  const was = acts.map((o) => o.visible);
+  acts.forEach((o) => { o.visible = true; });
+  try { fn(); } finally { acts.forEach((o, i) => { o.visible = was[i]; }); }
+}
+
+function warmDraw(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
+  const target = new THREE.WebGLRenderTarget(64, 64, { type: THREE.HalfFloatType });
+  const culled: THREE.Object3D[] = [];
+  scene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; culled.push(o); } });
+  const prev = gl.getRenderTarget();
+  try {
+    withActsShown(scene, () => {
+      gl.setRenderTarget(target);
+      gl.render(scene, camera);
+    });
+  } finally {
+    gl.setRenderTarget(prev);
+    culled.forEach((o) => { o.frustumCulled = true; });
+    target.dispose();
+  }
+}
+
 /**
  * Warm-up + ready signal (T5 — "composer from frame one"). The EffectComposer is
  * already the sole renderer from frame 1 (its priority-1 render disables R3F's
@@ -66,11 +91,20 @@ function Warmup() {
     // full of scintillating stars costs this single assignment.
     sparkleClock.value = state.clock.elapsedTime;
     if (!compiled.current) {
+      // Twice: as the first frame will draw, then with every act shown, so the act that is
+      // not on screen gets the programs it will be drawn with - its lights counted, which
+      // three only collects from VISIBLE objects. Both run behind the loader.
       gl.compile(scene, camera);
+      withActsShown(scene, () => gl.compile(scene, camera));
       compiled.current = true;
       return;
     }
     frames.current += 1;
+    // A compile builds programs but uploads nothing: vertex buffers go to the GPU on an
+    // object's first draw. One draw of everything into a scratch target, culling off, so
+    // the hidden act's first visible frame is a plain frame. Textures whose images are still
+    // downloading here upload on first use instead.
+    if (frames.current === 1) warmDraw(gl, scene, camera);
     if (frames.current === 3) useScene.getState().setSceneReady(true);
   });
   return null;
@@ -146,8 +180,19 @@ export default function SceneRoot() {
               exactly its old strength; the swap happens behind DiveFade's black. */}
           <Nebula intensity={act === 'solar' ? 0.5 : 1} anchor={act === 'solar' ? 1 : 0} />
         </TourSky>
-        {act === 'galaxy' ? <GalaxyAct /> : <SolarAct />}
-        {act === 'solar' && <Constellations />}
+        {/* Both acts stay mounted and the swap only flips which one is drawn (#82). Mounting
+            the solar act at the swap cost a 0.1-0.5s frozen frame right at the curtain - React
+            building it, then every shader compiling on its first draw - and remounting the
+            galaxy on the way back cost the same. Warmup compiles and uploads both behind the
+            loader. Each act's per-frame work checks `act` where it would otherwise change the
+            next entry (SolarAct's orbits restart from their phases, as on a fresh mount). */}
+        <group name="act:galaxy" visible={act === 'galaxy'}>
+          <GalaxyAct />
+        </group>
+        <group name="act:solar" visible={act === 'solar'}>
+          <SolarAct />
+          <Constellations />
+        </group>
         {/* In-world swap curtain - persists across the act swap, covers the seam. */}
         <SwapMask />
         <Effects />
