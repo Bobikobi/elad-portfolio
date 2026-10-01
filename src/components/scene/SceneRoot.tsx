@@ -16,7 +16,7 @@ import TourDots from './TourDots';
 import Constellations, { ConstellationLabel } from './Constellations';
 import PlanetLabelsOverlay, { PlanetLabelDriver } from './PlanetLabels';
 import QualityGovernor from './QualityGovernor';
-import { FramePacer, ResolutionScaler } from './PerfPacer';
+import { FramePacer, ResolutionScaler, liveDpr } from './PerfPacer';
 import GradientSky from './galaxy/GradientSky';
 import Nebula from './galaxy/Nebula';
 import HeroStars from './galaxy/HeroStars';
@@ -94,7 +94,9 @@ export default function SceneRoot() {
         // Opening at 1.5 spent the most expensive seconds of the whole session — compiles,
         // uploads, first draws — on 2.25x the fragments, on exactly the machines that
         // cannot afford it. It rises within a few seconds wherever there is headroom.
-        dpr={1}
+        // Later renders pass the scaler's current ratio back: R3F re-applies this prop on
+        // every render, and a constant 1 here dropped a phone to 1x on each act change.
+        dpr={liveDpr()}
         camera={{ position: [0, 2.6, 9], fov: 55, near: 0.1, far: 200 }}
         shadows={false}
         onCreated={({ gl, clock }) => {

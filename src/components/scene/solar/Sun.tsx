@@ -82,17 +82,41 @@ const NOISE_GLSL = /* glsl */ `
     }
     return vec2(f1, f2);
   }
+
+  // Rotate v about the unit axis k by angle a (Rodrigues).
+  vec3 swirl(vec3 v, vec3 k, float a){
+    float c = cos(a), s = sin(a);
+    return v * c + cross(k, v) * s + k * dot(k, v) * (1.0 - c);
+  }
 `;
+
+const FIRE_SCALE = 3.5;
+const FIB_KEEP = 0.7;
+const FIB_GAIN = 0.8;
+const FIB_MEAN = 0.25;
+const FIB_AMP = 3.0;
+const FIB_FINE = 2.2;
+/** How far the limb profile reaches, as the normal's angle (deg) at which limb hits 0 when the
+ *  silhouette is reached. ~82 was the old desktop value (the silhouette's own angle); 100
+ *  copies the edge Elad picked on the phone - see limb in sunFrag. */
+const LIMB_REACH = 100;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
 const sunVert = /* glsl */ `
   uniform float uTime;
   varying vec3 vPos;
   varying vec3 vNormal;
+  varying vec3 vToCam;
+  varying float vK;
   ${NOISE_GLSL}
   void main() {
     vPos = position;
     vNormal = normalize(normalMatrix * normal);
+    // View-space direction from the sun's centre to the camera, and R/d, the cosine of the
+    // silhouette's angle from that axis; see limb in the fragment shader.
+    vec3 c = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vToCam = normalize(-c);
+    vK = length((modelViewMatrix * vec4(position, 0.0)).xyz) / length(c);
     // P7: 0.12 -> 0.03. This vertex wobble was the last fast clock in the sun and it was
     // the one actually driving the surface's decorrelation - it displaces EVERY vertex
     // radially, not just the silhouette, so the whole texture swims in screen space while
@@ -118,6 +142,8 @@ const sunFrag = /* glsl */ `
   uniform float uPulse;
   varying vec3 vPos;
   varying vec3 vNormal;
+  varying vec3 vToCam;
+  varying float vK;
   ${NOISE_GLSL}
   void main() {
     // SUN-2, and this is the change that decides whether it reads as a star at all.
@@ -210,9 +236,18 @@ const sunFrag = /* glsl */ `
     // cut used 16 and measured 61 -> 52 fps on the reference iGPU.
     vec2 fq = vec2(grain(fp + vec3(0.0, uTime * 0.20, 0.0)),
                    grain(fp + vec3(5.2, 1.3, uTime * 0.17)));
-    vec3 tp = fp * 2.0 + vec3(fq * 3.0, uTime * 0.5);
+    // Fine threads on the face, the original coarse tongues at the rim: the rim's large
+    // flickering patches are what keeps the glow just outside the limb moving.
+    float fs = mix(1.0, ${glslFloat(FIRE_SCALE)}, smoothstep(0.2, 0.5, max(dot(vNormal, vec3(0.0, 0.0, 1.0)), 0.0)));
+    vec3 tp = (fp * 2.0 + vec3(fq * 3.0, 0.0)) * fs + vec3(0.0, 0.0, uTime * 0.75);
     float turb = 0.0, ta = 0.5;
-    for (int i = 0; i < 2; i++) { turb += ta * abs(noise(tp) * 2.0 - 1.0); tp *= 2.03; ta *= 0.5; }
+    // #73: an octave finer than ~2 px per feature does not move, it sparkles. Each octave
+    // fades to its mean as its screen footprint shrinks - the rim (foreshortened) and a small
+    // sun on a phone keep only the octaves the pixels can carry.
+    for (int i = 0; i < 2; i++) {
+      float aa = 1.0 - smoothstep(0.5, 1.0, length(fwidth(tp)));
+      turb += ta * mix(0.4, abs(noise(tp) * 2.0 - 1.0), aa); tp *= 2.03; ta *= 0.5;
+    }
     float fire = pow(clamp(1.0 - turb * 1.8, 0.0, 1.0), 3.0);
     // The gaps between threads sit low on the ramp so the threads read against them - with
     // the gaps near the mid stop, the core boost carried everything to the ACES ceiling and
@@ -220,6 +255,35 @@ const sunFrag = /* glsl */ `
     // The linear turb term textures the wide cells between threads (glow falling off away from
     // each thread): without it those cells were flat and a fifth of the face measured <5 std.
     n = 0.05 + n * 0.30 + fire * 0.95 - (1.0 - fq.x) * 0.10 + (0.55 - turb) * 0.45;
+    // SUN-SURFACE (#73): chromospheric fibrils, the "grass" of an H-alpha photograph.
+    vec3 pd = normalize(vPos);
+    vec3 spotA = normalize(vec3(0.42, 0.30, 0.86));
+    vec3 spotB = normalize(vec3(-0.30, -0.22, 0.93));
+    vec3 wq = pd * 6.0 + vec3(0.0, 0.0, uTime * 0.015);
+    // Two channels, not three: on the face z points at the camera, so a z warp barely shows.
+    vec3 wv = vec3(noise(wq) - 0.5, noise(wq + vec3(3.7, 1.9, 5.1)) - 0.5, 0.0);
+    vec3 sw = swirl(swirl(pd, spotA, 2.6 * exp(-length(pd - spotA) / 0.20)), spotB, 2.6 * exp(-length(pd - spotB) / 0.15));
+    vec3 fbq = sw * 36.0 + wv * 6.0;
+    float r1 = 1.0 - abs(noise(fbq) * 2.0 - 1.0);
+    float r2 = 1.0 - abs(noise(fbq * 1.7 + wv * 2.0 + vec3(0.0, uTime * 0.03, 0.0)) * 2.0 - 1.0);
+    // Same footprint fade as the fire octaves: fibrils narrower than a pixel sparkle.
+    float fw = length(fwidth(fbq));
+    float fibAA = 1.0 - smoothstep(0.35, 0.7, fw);
+    float fibAA2 = 1.0 - smoothstep(0.35, 0.7, 1.7 * fw);
+    float fib = mix(${glslFloat(FIB_MEAN)}, pow(r1, 4.0), fibAA) * 0.6 + mix(${glslFloat(FIB_MEAN)}, pow(r2, 4.0), fibAA2) * 0.4;
+    // Where the pixels can carry it, the whole stack moves up an octave: r2 leads and a finer
+    // r3 follows. A phone draws the sun at ~2x the render pixels of a laptop, and with the sun
+    // filling its screen the 36-scale fibrils read as fat blotches there (Elad, 2026-10-01).
+    // Gated by footprint, not tier: a phone's fw is ~0.1-0.2, a laptop's 0.3+, so fibAA3 is 0
+    // on a laptop and nothing changes there. r3 keeps its own fade like the octaves above.
+    float fibAA3 = 1.0 - smoothstep(0.17, 0.27, fw);
+    if (fibAA3 > 0.0) {
+      float r3 = 1.0 - abs(noise(fbq * ${glslFloat(FIB_FINE)} + wv * 3.0 + vec3(0.0, uTime * 0.05, 0.0)) * 2.0 - 1.0);
+      float fibAA4 = 1.0 - smoothstep(0.35, 0.7, ${glslFloat(FIB_FINE)} * fw);
+      float fibFine = mix(${glslFloat(FIB_MEAN)}, pow(r2, 4.0), fibAA2) * 0.6 + mix(${glslFloat(FIB_MEAN)}, pow(r3, 4.0), fibAA4) * 0.4;
+      fib = mix(fib, fibFine, fibAA3);
+    }
+    n = n * ${glslFloat(FIB_KEEP)} + ${glslFloat((1 - FIB_KEEP) * 0.5)} + (fib - ${glslFloat(FIB_MEAN)}) * ${glslFloat(FIB_GAIN)};
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
     //
@@ -298,7 +362,12 @@ const sunFrag = /* glsl */ `
     // rendered limb measured 1.006x the centre's luminance, i.e. no sphericity at all. At
     // 0.6 the darkening is spread across the disc, which is the term that makes a flat
     // circle read as a ball.
-    float ndv = max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0);
+    // Measured against the sun-to-camera axis, not the view axis (0,0,1). The two agree only
+    // while the sun sits mid-screen. Off-axis the view axis reshaded the sun as the camera
+    // turned: the mobile tour (camera 2R away, turned from the sun) read ndv -0.2..0.1 on the
+    // sliver left at the screen edge - the darkest, red, fibril-free limb ("that side looks
+    // sparse", Elad 2026-10-01).
+    float ndv = clamp(dot(vNormal, vToCam), 0.0, 1.0);
     // SUN-3: exponent 0.6 -> 1.0, floor 0.26 -> 0.32.
     //
     // The earlier note here blamed Bloom for the darkening "arriving as 6%". It was not
@@ -317,7 +386,20 @@ const sunFrag = /* glsl */ `
     // 1.0 down to 0.141 and no further. Reading it as the orthographic sqrt(1 - r^2) makes
     // the predicted limb far darker than the renderer's, and that error spent a round
     // looking like a mystery term somewhere in the post chain.
-    float limb = pow(ndv, 1.0);
+    //
+    // 2026-10-01: limb is no longer ndv itself. ndv = cos(angle), and the silhouette sits at
+    // angle acos(R/d), about 82 deg from the sun view - so the darkening, the rim colour and
+    // the fibril fade were all packed into the outer 15% of the radius, where foreshortened
+    // fibrils go sub-pixel and shimmer. Elad picked the phone's edge over the laptop's: the
+    // phone saw the sun below mid-screen, and the old view-axis ndv swung its top limb about
+    // 19 deg wider. limb now runs cos(t * LIMB_REACH), t = the fraction of the way to the
+    // silhouette, so every edge gets that band: fibrils fade over 0.73-0.91R instead of
+    // 0.85-0.99R. Up close (the tour, R/d 0.5) the screen holds a sliver of the disc, and
+    // a band sized for the whole ball would fill it; there the reach eases back to the
+    // silhouette's own angle, i.e. limb = ndv.
+    float phiT = acos(clamp(vK, 0.0, 0.999));
+    float reach = mix(${glslFloat((LIMB_REACH * Math.PI) / 180)}, phiT, smoothstep(0.30, 0.45, vK));
+    float limb = cos(min(acos(ndv) / phiT * reach, 1.5708));
     // Exposure rationale lives with SUN_EMISSIVE_EXPOSURE in photometry.ts.
     // glslFloat, not toFixed: see its comment - one guarantees the decimal point, the
     // other also rounds the value away.
@@ -330,7 +412,6 @@ const sunFrag = /* glsl */ `
     // Penumbra and a darker umbra, irregular edge from the granule field; together well under
     // 1% of the disc. They give the face a scale and an "organised" activity: without them
     // every patch of the surface is equally important, which is what makes it read as a material.
-    vec3 pd = normalize(vPos);
     float spot = 1.0;
     {
       float d1 = length(pd - normalize(vec3(0.42, 0.30, 0.86))) / 0.115;
@@ -364,6 +445,9 @@ const sunFrag = /* glsl */ `
     // blue, so a uniform boost measured as a blue-white centre (240,234,227), and even +35%
     // blue landed at 209. Blue has to fall in the input for the output to stay yellow.
     col *= 1.0 + core * vec3(0.75, 1.05, -0.35) * (0.25 + 0.75 * fire);
+    float fa = ${glslFloat(FIB_AMP)} * fib;
+    vec3 fibMul = mix(vec3(0.060, 0.005, 0.001), vec3(1.0), smoothstep(0.25, 1.0, fa + 2.0 * ev));
+    col *= mix(vec3(1.0), fibMul, smoothstep(0.20, 0.55, limb) * fibAA);
     // Measured ceiling: x3 on the core reached only 243 of 255 through ACES, turned it white
     // (blue 232), and its bloom raised the halo 40% and the whole frame 16%. This is the knee.
     gl_FragColor = vec4(col, 1.0);
@@ -728,7 +812,7 @@ function Corona() {
       // of the glow around the disc is the disc's own bloom, so this alone moved the screen by
       // only 2.5-3%; the disc's slow pulse (Sun) uses the same sines and carries the rest.
       const tt = un.uTime.value;
-      un.uGain.value = CORONA_GAIN * (1 + 0.18 * Math.sin(tt * 0.52) + 0.07 * Math.sin(tt * 0.21 + 2.0));
+      un.uGain.value = CORONA_GAIN * (1 + 0.27 * Math.sin(tt * 0.52) + 0.105 * Math.sin(tt * 0.21 + 2.0));
     }
   });
   return (
@@ -792,10 +876,12 @@ export default function Sun() {
       u.uTime.value += dt;
       // Breathe on irregular slow noise + rare flare pulse (spec: sun is alive).
       const t = u.uTime.value;
-      // SUN-ALIVE: +-25% -> a slow +-10% breath. The flicker now lives in local flare-ups in
+      // SUN-ALIVE: +-25% -> a slow +-15% breath. The flicker now lives in local flare-ups in
       // the shader; this only feeds the bloom, which is most of the glow around the disc. Same
       // two sines as the corona's breath (Corona), so disc glow and halo swell together.
-      pulse = 0.10 * Math.sin(t * 0.52) + 0.05 * Math.sin(t * 0.21 + 2.0);
+      // #73: x1.5. The fine surface no longer pulses the bloom the way the coarse fire patches
+      // did, so the halo's motion has to come from the breath itself.
+      pulse = 0.15 * Math.sin(t * 0.52) + 0.075 * Math.sin(t * 0.21 + 2.0);
       u.uPulse.value = pulse;
     }
     // Debug-only: a harness measuring how fast the SURFACE evolves has to stop the sun
