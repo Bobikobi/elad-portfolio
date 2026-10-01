@@ -54,3 +54,15 @@ for i in range(len(marks)-1):
     cl=min((dR(f,k),k) for f in mv for k in others if dR(f,k))
     out['min_clear_R']=(round(cl[0],2),cl[1])
     print(json.dumps(out))
+# Saturn's rings (#70): the camera's elevation over the ring plane, seen from Saturn. A flight
+# that swings the rings from open to edge-on quickly, or cuts through the plane close in, is the
+# "abrupt" pass.
+for i in range(len(marks)-1):
+    lab=marks[i]['label']
+    if 'saturn' not in lab: continue
+    fr=[f for f in rec if marks[i]['t']<=f['t']<marks[i+1]['t'] and f.get('rg')]
+    if len(fr)<10: continue
+    el=[f['rg'][0] for f in fr]
+    rate=max(abs(b-a) for a,b in zip(el,el[1:]))
+    cross=[(round(fr[k+1]['rg'][1]/0.74,2)) for k in range(len(el)-1) if el[k]*el[k+1]<0]
+    print(json.dumps({'ring':lab,'elev_start':round(el[0],1),'elev_end':round(el[-1],1),'max_elev_change_deg_frame':round(rate,2),'plane_crossings_at_R':cross}))

@@ -10,6 +10,7 @@ import { TOUR_SECTIONS } from '@/lib/sections';
 import { RING_OUTER_R } from '@/lib/planetPositions';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect, livePlanetPlane } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
+import { diveAt, arriveAt } from '@/lib/passageProfile';
 import { NEUTRAL_APERTURE, ORBIT_APERTURE } from '@/lib/photometry';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useMotionDisabled } from '@/hooks/useMotionDisabled';
@@ -205,7 +206,6 @@ function orbitVantage(
   out.normalize();
   return best;
 }
-const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
 // --- B7: the arrival, and why the curtain kept being torn open ---------------------------
 // Mounting the solar act is not free. Eight textured planets, a seventeen-thousand-body
@@ -254,10 +254,14 @@ const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2
 //     stall frame the curtain exists to hide is one of them, so the act IS on screen).
 // The floor cannot be waived: releasing on a clock alone would uncover a frame that has
 // not been drawn, which is the B7 defect with the sign flipped.
-const REVEAL_FRAMES = 8;
+// #82: both acts are resident and warmed now, so the solar act's first frames are plain
+// frames and the hold only has to prove one drew. At 8 frames (and a 0.25s fade) the
+// curtain lagged the envelope so far that the passage clock held the camera still for
+// ~200ms while the curtain was already lifting.
+const REVEAL_FRAMES = 2;
 const REVEAL_MIN_FRAMES = 2;   // readiness floor - drawn frames, never wall-clock
 const REVEAL_HOLD_CAP = 0.4;   // s - past this the floor alone governs
-const REVEAL_FADE = 0.25; // s - was 0.35, the black stretch after the swap was the longest part of the dark
+const REVEAL_FADE = 0.2; // s - was 0.35, then 0.25; at 0.2 the fade keeps pace with the envelope's falloff
 const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRing)
 
 // GALAXY-REST replaces the old welcome decision. It used to look at y = 0.5 so the disc
@@ -285,6 +289,10 @@ const DIVE_P1 = new THREE.Vector3(3.7, 0.08, 1.5);
 // Look pitches from looking-DOWN at the core (camera above the plane) to level with the disc.
 // Same point as LOOK: the dive must start from exactly where the welcome shot was looking,
 // or the handover at scroll 0.015 jumps the look target.
+// The arrival dolly is a pure function of scroll (passageProfile shapes its speed); this damp
+// only smooths a hand-scrolled driver. At 0.3 it started every arrival from rest and ate the
+// speed the camera crosses the curtain with (#82).
+const ARRIVE_TAU = 0.06;
 const LOOK_START = new THREE.Vector3(0, 1.5, 0);
 const LOOK_END = new THREE.Vector3(4.6, 0.05, -1.5); // level with the camera: it ends inside the disc, looking along it
 const _tmp = new THREE.Vector3();
@@ -862,11 +870,15 @@ export default function CameraRig() {
   const motionOff = useRef(motionOffNow);
   useEffect(() => { motionOff.current = motionOffNow; }, [motionOffNow]);
   const prevAct = useRef<string>('galaxy');
+  // Where the camera stood, relative to the dive path, when it left the welcome idle (#82).
+  const fromIdle = useRef(false);
+  const diveOff = useRef(new THREE.Vector3());
   const pGate = useRef(0);          // damped dive gate (frame-rate independent) → coverage + swap
   const swapLatch = useRef(false);  // blocks re-swaps until well clear of the covered window
   const reconcile = useRef(0);      // T7c: 0 idle · 1 covering · 2 revealing (force-played swap)
   const recCov = useRef(0);         // T7c: hand-driven coverage during a reconcile
   const prevScroll = useRef(-1);    // T7c: previous-frame scroll → velocity (detect "at rest")
+  const restFor = useRef(0);        // T7c: seconds the scroll has stayed at rest
   const arrivedViaDive = useRef(false); // T7a: true only on the fresh galaxy→solar dive, so the
                                         // arrival dolly is scroll-driven (settle lands at scrollY=max)
   const mobileArriveT = useRef(0);      // T7b: clock time the establishing shot settled (0 = not yet)
@@ -1054,7 +1066,17 @@ export default function CameraRig() {
     } else if (!store.focusedPlanet) {
       // Scroll velocity (per second) → "at rest" detection for the T7c reconcile.
       const vel = prevScroll.current < 0 ? 1 : Math.abs(scrollProgress - prevScroll.current) / Math.max(dt, 1e-4);
+      // A visit resting in the overview with no dive behind it (a returning visitor, a
+      // reconciled swap) held the overview until the curtain when scrolled up (#82); leaving
+      // the bottom plays the arrival backwards, as it does after a dive.
+      if (act === 'solar' && store.scrollDriven && reconcile.current === 0 && prevScroll.current >= 0.999 && scrollProgress < 0.999) {
+        arrivedViaDive.current = true;
+      }
       prevScroll.current = scrollProgress;
+      // At rest means STAYING at rest: the played passage crosses the curtain at only ~0.2/s,
+      // and one short scroll step there read under the threshold, reconciled a normal dive
+      // and dropped its scroll-driven arrival (#82, 1 run in ~30 on the preview).
+      restFor.current = vel < 0.05 ? restFor.current + dt : 0;
       const scrollSide: Act = scrollProgress >= SWAP_V ? 'solar' : 'galaxy';
 
       if (reconcile.current === 0) {
@@ -1110,7 +1132,7 @@ export default function CameraRig() {
         if (
           store.scrollDriven &&
           scrollSide !== act &&
-          vel < 0.05 &&
+          restFor.current >= 0.2 &&
           Math.abs(g - scrollProgress) < 0.06
         ) {
           reconcile.current = 1;
@@ -1188,37 +1210,47 @@ export default function CameraRig() {
         damp3(cam.position, _tgt, 0.5, dt);
         damp(cam, 'fov', 55, 0.5, dt);
         cam.lookAt(LOOK.x, LOOK.y, LOOK.z);
+        fromIdle.current = true;
       } else {
-        // DIVE — a staged S-curve that descends THROUGH the disc plane. Completes by
-        // ~0.85; the veil/swap happens in the last stretch.
-        const t01 = clamp01((p - 0.015) / 0.85);
-        // Gentler than a pure cubic: that one parked the camera for the last 0.15 of the dive.
-        const e = 0.4 * t01 + 0.6 * easeInOutCubic(t01);
+        // DIVE — a staged S-curve that descends THROUGH the disc plane. It runs right up to the
+        // swap and is still accelerating there (#82): it used to finish at scroll 0.865 on an
+        // in-out ease, so the camera stood still in front of the closing curtain.
+        const e = diveAt(p);
         cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, e);
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);
-        // Pure function of scroll once the dive is under way, so scrolling back retraces the
-        // same frames (damping made the return a lagged, different path). A short damp only
-        // over the first 0.05 of scroll hides the hand-off from the idle drift pose.
-        const diveTau = 0.22 * (1 - clamp01((p - 0.015) / 0.05));
-        damp3(cam.position, _tgt, diveTau, dt);
+        // The idle pose drifts (orbit, depth breathing, pointer, a drag), so the dive starts
+        // wherever the camera stood: that offset from the path is taken once, on leaving the
+        // idle, and folded away over the first third of the dive. It used to be a damp that
+        // ran out after 0.05 of scroll; with the passage now moving at speed from its first
+        // frame that was 70ms, and the camera swung up to 3.3 deg a frame catching up.
+        // Otherwise a pure function of scroll, so scrolling back retraces the same frames.
+        if (fromIdle.current) {
+          fromIdle.current = false;
+          diveOff.current.subVectors(cam.position, _tgt);
+        }
+        cam.position.copy(_tgt).addScaledVector(diveOff.current, 1 - THREE.MathUtils.smoothstep(e, 0, 0.35));
         // FOV opens for speed on the way in, eases back near arrival (deceleration cue).
-        const fov = 55 + 13 * Math.sin(clamp01(e) * Math.PI * 0.85);
-        damp(cam, 'fov', fov, diveTau, dt);
+        cam.fov = 55 + 13 * Math.sin(clamp01(e) * Math.PI * 0.85);
         // Look pitches down→up as the camera crosses the plane, and a small extra pitch
         // bump mid-dive — so the disc sweeps across the frame at an angle, never a flat
         // horizontal band. The core (LOOK_END.x) slides off-side toward the arm.
-        _look.copy(LOOK_START).lerp(LOOK_END, easeInOutCubic(e));
+        // Smoothstep, not a cubic in-out: the cubic's steep middle turned the camera 3.3 deg in
+        // a 60fps frame at mid-dive; this one keeps the whole dive under 1 deg (#82).
+        _look.copy(LOOK_START).lerp(LOOK_END, e * e * (3 - 2 * e));
         _look.y += 0.15 * Math.sin(e * Math.PI);
         cam.lookAt(_look.x, _look.y, _look.z);
         // Cinematic bank — a roll that tilts the disc diagonally (kills any residual
         // horizontal read). Frequency 0.85π so it stays banked THROUGH the late crossing
         // (a faster wave returned to level right where the disc goes edge-on); a touch of mouse.
-        cam.rotateZ(0.11 * Math.sin(e * Math.PI * 0.85) + px * 0.05);
+        // The pointer's share eases in with the dive: the idle has no roll to hand over.
+        cam.rotateZ(0.11 * Math.sin(e * Math.PI * 0.85) + px * 0.05 * THREE.MathUtils.smoothstep(e, 0, 0.2));
       }
     } else {
       const focused = useScene.getState().focusedPlanet;
       const departure = focused ? clamp01(useScene.getState().departure) : 0;
+      fromIdle.current = false; // a dive entered from here (scrolling up) starts on its path
+      diveOff.current.set(0, 0, 0);
       if (focused) mobileArriveT.current = 0; // T7b: re-establish the tour after a world visit
       // On first entering the solar act, snap to a start pose then fly IN. From the
       // dive we snap FAR for a zoom-in reveal; a deep-link straight to a world starts
@@ -1421,12 +1453,12 @@ export default function CameraRig() {
           const diving = store.scrollDriven && arrivedViaDive.current && scrollProgress < 0.999;
           if (diving) {
             // Scroll-driven approach to the fixed pose (T7a rule: settle at max).
-            const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
             _entry.set(0, 8, 21);
+            const arrive = arriveAt(scrollProgress, _tourPos.length() / _entry.length());
             _tgt.copy(_entry).lerp(_tourPos, arrive);
             flight.on = false;
-            damp3(cam.position, _tgt, 0.3, dt);
-            damp(cam, 'fov', 52 + (ORR.fov - 52) * arrive, 0.3, dt);
+            damp3(cam.position, _tgt, ARRIVE_TAU, dt);
+            damp(cam, 'fov', 52 + (ORR.fov - 52) * arrive, ARRIVE_TAU, dt);
             cam.lookAt(_tourLook.x, _tourLook.y, _tourLook.z);
           } else {
             applyPose(cam, _tourPos, _tourLook, _tourLook, ORR.fov, 0.5, dt, dtNominal.current);
@@ -1471,13 +1503,13 @@ export default function CameraRig() {
           // exactly at scrollY=max — every position in the tail moves the camera, no
           // inert range. Returns / deep-links (scroll<SWAP_V) fall through to the
           // time-damped reveal below, so they still fly in without a scroll driver.
-          const arrive = easeInOutCubic(clamp01((scrollProgress - SWAP_V) / (1 - SWAP_V)));
           _entry.set(0, 8, 21);
+          const arrive = arriveAt(scrollProgress, _ovPos.length() / _entry.length());
           _tgt.copy(_entry).lerp(_ovPos, arrive);
           flight.on = false;
           rigUp.copy(PLANE_N); cam.up.copy(rigUp);
-          damp3(cam.position, _tgt, 0.3, dt);
-          damp(cam, 'fov', 52 + (ovFov - 52) * arrive, 0.3, dt);
+          damp3(cam.position, _tgt, ARRIVE_TAU, dt);
+          damp(cam, 'fov', 52 + (ovFov - 52) * arrive, ARRIVE_TAU, dt);
           cam.lookAt(_ovLook.x, _ovLook.y, _ovLook.z);
         } else {
           rigUp.copy(PLANE_N); cam.up.copy(rigUp);
