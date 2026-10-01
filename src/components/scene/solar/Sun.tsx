@@ -96,16 +96,27 @@ const FIB_GAIN = 0.8;
 const FIB_MEAN = 0.25;
 const FIB_AMP = 3.0;
 const FIB_FINE = 2.2;
+/** How far the limb profile reaches, as the normal's angle (deg) at which limb hits 0 when the
+ *  silhouette is reached. ~82 was the old desktop value (the silhouette's own angle); 100
+ *  copies the edge Elad picked on the phone - see limb in sunFrag. */
+const LIMB_REACH = 100;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
 const sunVert = /* glsl */ `
   uniform float uTime;
   varying vec3 vPos;
   varying vec3 vNormal;
+  varying vec3 vToCam;
+  varying float vK;
   ${NOISE_GLSL}
   void main() {
     vPos = position;
     vNormal = normalize(normalMatrix * normal);
+    // View-space direction from the sun's centre to the camera, and R/d, the cosine of the
+    // silhouette's angle from that axis; see limb in the fragment shader.
+    vec3 c = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vToCam = normalize(-c);
+    vK = length((modelViewMatrix * vec4(position, 0.0)).xyz) / length(c);
     // P7: 0.12 -> 0.03. This vertex wobble was the last fast clock in the sun and it was
     // the one actually driving the surface's decorrelation - it displaces EVERY vertex
     // radially, not just the silhouette, so the whole texture swims in screen space while
@@ -131,6 +142,8 @@ const sunFrag = /* glsl */ `
   uniform float uPulse;
   varying vec3 vPos;
   varying vec3 vNormal;
+  varying vec3 vToCam;
+  varying float vK;
   ${NOISE_GLSL}
   void main() {
     // SUN-2, and this is the change that decides whether it reads as a star at all.
@@ -349,7 +362,12 @@ const sunFrag = /* glsl */ `
     // rendered limb measured 1.006x the centre's luminance, i.e. no sphericity at all. At
     // 0.6 the darkening is spread across the disc, which is the term that makes a flat
     // circle read as a ball.
-    float ndv = max(dot(vNormal, vec3(0.0,0.0,1.0)), 0.0);
+    // Measured against the sun-to-camera axis, not the view axis (0,0,1). The two agree only
+    // while the sun sits mid-screen. Off-axis the view axis reshaded the sun as the camera
+    // turned: the mobile tour (camera 2R away, turned from the sun) read ndv -0.2..0.1 on the
+    // sliver left at the screen edge - the darkest, red, fibril-free limb ("that side looks
+    // sparse", Elad 2026-10-01).
+    float ndv = clamp(dot(vNormal, vToCam), 0.0, 1.0);
     // SUN-3: exponent 0.6 -> 1.0, floor 0.26 -> 0.32.
     //
     // The earlier note here blamed Bloom for the darkening "arriving as 6%". It was not
@@ -368,7 +386,20 @@ const sunFrag = /* glsl */ `
     // 1.0 down to 0.141 and no further. Reading it as the orthographic sqrt(1 - r^2) makes
     // the predicted limb far darker than the renderer's, and that error spent a round
     // looking like a mystery term somewhere in the post chain.
-    float limb = pow(ndv, 1.0);
+    //
+    // 2026-10-01: limb is no longer ndv itself. ndv = cos(angle), and the silhouette sits at
+    // angle acos(R/d), about 82 deg from the sun view - so the darkening, the rim colour and
+    // the fibril fade were all packed into the outer 15% of the radius, where foreshortened
+    // fibrils go sub-pixel and shimmer. Elad picked the phone's edge over the laptop's: the
+    // phone saw the sun below mid-screen, and the old view-axis ndv swung its top limb about
+    // 19 deg wider. limb now runs cos(t * LIMB_REACH), t = the fraction of the way to the
+    // silhouette, so every edge gets that band: fibrils fade over 0.73-0.91R instead of
+    // 0.85-0.99R. Up close (the tour, R/d 0.5) the screen holds a sliver of the disc, and
+    // a band sized for the whole ball would fill it; there the reach eases back to the
+    // silhouette's own angle, i.e. limb = ndv.
+    float phiT = acos(clamp(vK, 0.0, 0.999));
+    float reach = mix(${glslFloat((LIMB_REACH * Math.PI) / 180)}, phiT, smoothstep(0.30, 0.45, vK));
+    float limb = cos(min(acos(ndv) / phiT * reach, 1.5708));
     // Exposure rationale lives with SUN_EMISSIVE_EXPOSURE in photometry.ts.
     // glslFloat, not toFixed: see its comment - one guarantees the decimal point, the
     // other also rounds the value away.
