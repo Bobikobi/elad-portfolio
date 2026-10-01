@@ -878,6 +878,7 @@ export default function CameraRig() {
   const reconcile = useRef(0);      // T7c: 0 idle · 1 covering · 2 revealing (force-played swap)
   const recCov = useRef(0);         // T7c: hand-driven coverage during a reconcile
   const prevScroll = useRef(-1);    // T7c: previous-frame scroll → velocity (detect "at rest")
+  const restFor = useRef(0);        // T7c: seconds the scroll has stayed at rest
   const arrivedViaDive = useRef(false); // T7a: true only on the fresh galaxy→solar dive, so the
                                         // arrival dolly is scroll-driven (settle lands at scrollY=max)
   const mobileArriveT = useRef(0);      // T7b: clock time the establishing shot settled (0 = not yet)
@@ -1072,6 +1073,10 @@ export default function CameraRig() {
         arrivedViaDive.current = true;
       }
       prevScroll.current = scrollProgress;
+      // At rest means STAYING at rest: the played passage crosses the curtain at only ~0.2/s,
+      // and one short scroll step there read under the threshold, reconciled a normal dive
+      // and dropped its scroll-driven arrival (#82, 1 run in ~30 on the preview).
+      restFor.current = vel < 0.05 ? restFor.current + dt : 0;
       const scrollSide: Act = scrollProgress >= SWAP_V ? 'solar' : 'galaxy';
 
       if (reconcile.current === 0) {
@@ -1127,7 +1132,7 @@ export default function CameraRig() {
         if (
           store.scrollDriven &&
           scrollSide !== act &&
-          vel < 0.05 &&
+          restFor.current >= 0.2 &&
           Math.abs(g - scrollProgress) < 0.06
         ) {
           reconcile.current = 1;
