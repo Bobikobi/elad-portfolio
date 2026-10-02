@@ -57,6 +57,8 @@ next-env.d.ts
 !/scripts/harness/
 # the sky assets in public/sky/ are baked by this, so it ships with them
 !/scripts/bake-sky.py
+# and the galaxy disc in public/images/galaxy/ by this
+!/scripts/bake-galaxy-disc.py
 PRIVATE_REPO_LIMITATION_AND_NEXT_STEP.md
 *.cer
 *.p12
@@ -75,6 +77,8 @@ security-reports/
 /_*.sh
 /_*.png
 /_*.json
+# per-task working files (source downloads, probes); what must outlive the task is committed
+/.scratch/
 
 # local visual-verification chrome profile (never commit)
 .automation-profile/
