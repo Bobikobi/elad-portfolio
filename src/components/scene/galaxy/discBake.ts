@@ -231,7 +231,7 @@ export const bakeFragment = /* glsl */ `
     return smoothstep(B.z, B.z + 0.08, rho) * (1.0 - smoothstep(B.w - 0.2, B.w, rho));
   }
 
-  // Star clusters: compact blobs on a jittered grid, most faint and a few bright.
+  // Star clusters: compact blobs on a jittered grid, one a cell, a few bright and most faint.
   float speckle(vec2 p, float seed) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -240,9 +240,9 @@ export const bakeFragment = /* glsl */ `
       vec2 c = vec2(float(k % 3 - 1), float(k / 3 - 1));
       vec3 h = hash33(vec3(i + c, seed));
       vec2 o = c + h.xy - f;
-      float r = 0.16 + 0.2 * h.z;
-      float amp = pow(hash13(vec3(i + c, seed + 7.0)), 5.0);
-      s += amp * exp(-dot(o, o) / (r * r));
+      float r = 0.12 + 0.18 * h.z;
+      float a = hash13(vec3(i + c, seed + 7.0));
+      s += a * a * exp(-dot(o, o) / (r * r));
     }
     return s;
   }
@@ -260,10 +260,11 @@ export const bakeFragment = /* glsl */ `
     float theta = atan(q.y, q.x);
     float s = log(rho);
 
-    // ---- Arms: an asymmetric profile per arm, sharp on the inner (concave) edge where the dust
-    // lane sits and soft on the outer one; continuous inside, broken into segments outside.
+    // ---- Arms. Each is a profile across its spine, sharp on the inner (concave) edge where the
+    // lane sits and soft on the outer one. The spine wanders, the brightness changes along it,
+    // and outside it breaks into segments.
     float armSum = 0.0;
-    float lane = 0.0;
+    float tauArm = 0.0;
     float pink = 0.0;
     float blue = 0.0;
     for (int i = 0; i < uNArms; i++) {
@@ -271,28 +272,55 @@ export const bakeFragment = /* glsl */ `
       if (env <= 0.0) continue;
       vec4 C = uArmC[i];
       float b = armWind(i, rho);
-      float d = rho * wrapPi(theta - armTheta(i, rho)) * inversesqrt(1.0 + b * b);
-      float w = C.y * (0.35 + rho);
-      if (abs(d) > 5.0 * w) continue;
-      float wIn = 0.6 * w;
-      float x = d > 0.0 ? d / wIn : d / (1.3 * w);
-      float prof = exp(-0.5 * x * x);
+      float g = inversesqrt(1.0 + b * b);
+      float d = rho * wrapPi(theta - armTheta(i, rho)) * g;
+      float w = C.y * (0.35 + 1.4 * rho);
+      if (abs(d) > 6.0 * w) continue;
       float fi = float(i);
+      float dd = d - 0.35 * w * gnoise(vec3(s * 4.0, fi * 2.7, 11.0 + uSeed));
+      float wIn = 0.55 * w;
+      float x = dd > 0.0 ? dd / wIn : dd / (1.35 * w);
+      float prof = exp(-0.5 * x * x);
       float brk = fbm(vec3(s * 3.2, fi * 7.3 + 40.0 + uSeed, 0.5), 2);
       float frag = mix(1.0, smoothstep(-0.3, 0.2, brk), smoothstep(0.45, 0.7, rho));
-      armSum += C.x * env * prof * frag;
+      float vary = 0.7 + 0.6 * smoothstep(-0.5, 0.5, gnoise(vec3(s * 2.2, fi * 1.9, 60.0 + uSeed)));
+      armSum += C.x * env * prof * frag * vary;
 
-      // The lane: a thin core on the inner edge, wandering and broken along its length.
-      float lc = (1.0 + 0.4 * gnoise(vec3(s * 8.0, fi * 5.1, 3.0 + uSeed))) * wIn;
-      float lw = 0.003 + 0.005 * rho;
-      float lt = (d - lc) / lw;
-      if (abs(lt) < 4.0) {
-        float gaps = smoothstep(-0.35, 0.2, gnoise(vec3(s * 7.0, fi * 3.3, 80.0 + uSeed)) + 0.15);
-        lane += C.z * env * exp(-0.5 * lt * lt) * gaps;
+      // The lane: thin, on the inner edge, continuous but changing depth, with a fainter
+      // companion just inside it.
+      float lc = wIn * (1.0 + 0.35 * gnoise(vec3(s * 9.0, fi * 5.1, 3.0 + uSeed)));
+      float lw = 0.0016 + 0.0034 * rho;
+      float depth = 0.35 + 0.65 * smoothstep(-0.5, 0.5, gnoise(vec3(s * 6.0, fi * 3.3, 80.0 + uSeed)));
+      float lt = (dd - lc) / lw;
+      float lt2 = (dd - lc - 0.45 * wIn) / (0.7 * lw);
+      float lanes = exp(-0.5 * lt * lt) + 0.5 * exp(-0.5 * lt2 * lt2) * smoothstep(-0.2, 0.4, gnoise(vec3(s * 5.0, fi * 4.4, 90.0 + uSeed)));
+      tauArm += 1.3 * C.z * env * depth * lanes;
+
+      // Feathers: dust spurs that leave the lane every so often and cross the arm toward its outer
+      // side at a much steeper pitch (45 degrees off the arm), fading out in the gap beyond.
+      float across = lc - dd;
+      if (across > 0.0 && across < 3.5 * w) {
+        float FL = 0.07;
+        float sr = s - across * g / rho;
+        float k0 = floor(sr / FL);
+        for (int dk = -1; dk <= 1 + uZero; dk++) {
+          float k = k0 + float(dk);
+          vec3 h = hash33(vec3(k, fi * 13.0 + 5.0, uSeed + 21.0));
+          if (h.x > 0.5) continue;
+          float root = (k + 0.2 + 0.6 * h.y) * FL;
+          float len = (0.8 + 2.4 * h.z) * w;
+          // Each leans its own way and wanders, so they read as torn dust, not combed strokes.
+          float lean = 0.6 + 1.0 * fract(h.x * 7.13);
+          float dist = 0.707 * (sr + across * g / rho * (1.0 - lean) - root) * rho / g;
+          dist += 0.6 * lw * gnoise(vec3(across / lw * 0.35, k, 31.0 + uSeed));
+          float fw = lw * (0.5 + 0.9 * fract(h.y * 5.7));
+          float taper = 1.0 - smoothstep(0.5, 1.0, across / len);
+          tauArm += 0.9 * C.z * env * taper * exp(-0.5 * (dist * dist) / (fw * fw));
+        }
       }
 
-      // Star-forming complexes on the inner edge: lobes of glowing hydrogen and the young blue
-      // clusters that lit them. Most are small; a few in the outer arms are giants.
+      // Star-forming complexes just outside the lane: lobes of glowing hydrogen and the young
+      // blue clusters that lit them. Most are small; a few in the outer arms are giants.
       if (prof < 0.01 || frag < 0.05) continue;
       float L = 0.035;
       float k0 = floor(s / L);
@@ -303,72 +331,70 @@ export const bakeFragment = /* glsl */ `
         float rk = exp((k + h.y) * L);
         float envk = armEnv(i, rk);
         float bk = armWind(i, rk);
-        float wk = C.y * (0.35 + rk);
+        float wk = C.y * (0.35 + 1.4 * rk);
         float dko = (h.z * 1.4 - 0.5) * 0.6 * wk;
         float thk = armTheta(i, rk) + dko * sqrt(1.0 + bk * bk) / rk;
         vec2 pk = rk * vec2(cos(thk), sin(thk));
         vec3 h2 = hash33(vec3(k, fi * 17.0 + 9.0, uSeed + 5.0));
         float giant = step(0.88, h2.x) * smoothstep(0.4, 0.55, rk);
-        float size = mix(0.0018 + 0.003 * h2.y, 0.004 + 0.003 * h2.y, giant);
+        float size = mix(0.0018 + 0.003 * h2.y, 0.004 + 0.004 * h2.y, giant);
         float spread = mix(2.5, 6.0, giant);
-        float amp = envk * frag * mix(0.25 + 0.8 * h2.z * h2.z, 0.9, giant);
+        float amp = envk * frag * mix(0.2 + 0.6 * h2.z * h2.z, 0.9, giant);
         for (int l = 0; l < 4 + uZero; l++) {
           vec3 h3 = hash33(vec3(k * 4.0 + float(l), fi + 41.0, uSeed + 11.0));
           vec2 off = (h3.xy - 0.5) * size * spread;
           float r = size * (0.5 + 0.5 * h3.z);
           vec2 dq = q - pk - off;
-          float g = amp * (0.4 + 0.6 * h3.z) * exp(-dot(dq, dq) / (r * r));
-          if (l < 2) pink += g;
-          else blue += g;
+          float gk = amp * (0.4 + 0.6 * h3.z) * exp(-dot(dq, dq) / (r * r));
+          if (l == 0) pink += gk;
+          else blue += gk;
         }
       }
     }
 
-    // ---- Light. Two populations. The old disc is warm, exponential and short, and lights the
-    // inner disc evenly. The young population lives in the arms and falls off slowly, so the
-    // outer arms stay bright while the light between them drops away - the contrast M101 shows,
-    // 3:1 at a fifth of the radius and 20:1 at two thirds.
-    vec3 cBulge = vec3(1.0, 0.78, 0.56);
-    vec3 cOld = vec3(1.0, 0.85, 0.68);
-    vec3 cYoung = vec3(0.66, 0.78, 1.0);
-    vec3 cClus = vec3(0.60, 0.78, 1.0);
-    vec3 cHII = vec3(1.0, 0.45, 0.62);
+    // ---- Light. Two populations. The old disc is warm, short and smooth but mottled; the young
+    // one lives in the arms, made of clusters, and falls off slowly so the outer arms stay bright
+    // while the light between them drops away (M101: 3:1 at a fifth of the radius, 20:1 at two
+    // thirds).
+    vec3 cBulge = vec3(1.0, 0.72, 0.46);
+    vec3 cOld = vec3(1.0, 0.8, 0.6);
+    vec3 cYoung = vec3(0.76, 0.84, 1.0);
+    vec3 cClus = vec3(0.5, 0.7, 1.0);
+    vec3 cHII = vec3(1.0, 0.42, 0.58);
 
-    float bulge = 1.0 * exp(-rho / 0.016);
-    float old = exp(-rho / 0.14) * (0.85 + 0.3 * (0.5 + 0.5 * fbm(vec3(q * 6.0, 7.0 + uSeed), 3)));
-    float young = 0.55 * exp(-rho / 0.5);
-    float floorY = mix(0.5, 0.03, smoothstep(0.15, 0.65, rho));
-    // Arms are made of clusters: a continuous base and blobs at three sizes on top of it.
-    float clumps = speckle(q * 140.0, 1.0 + uSeed) + 0.8 * speckle(q * 70.0, 2.0 + uSeed) + 0.6 * speckle(q * 36.0, 3.0 + uSeed);
+    float bulge = 0.9 * exp(-rho / 0.025);
+    float mott = 0.5 + 0.5 * fbm(vec3(q * 9.0, 7.0 + uSeed), 3);
+    float old = 0.5 * exp(-rho / 0.15) * (0.7 + 0.6 * mott);
+    float young = 0.5 * exp(-rho / 0.75);
+    float floorY = mix(0.14, 0.1, smoothstep(0.15, 0.7, rho));
+    // Clusters gather into complexes: dense in places along an arm, sparse in others.
+    float complexes = smoothstep(-0.15, 0.55, fbm(vec3(q * 22.0, 30.0 + uSeed), 2));
+    float clus = (speckle(q * 150.0, 1.0 + uSeed) + 0.7 * speckle(q * 75.0, 2.0 + uSeed) + 0.35 * speckle(q * 38.0, 3.0 + uSeed)) * (0.25 + 1.5 * complexes);
     float arm = min(armSum, 1.6);
-    vec3 youngCol = mix(vec3(0.95, 0.9, 0.86), cYoung, smoothstep(0.1, 0.4, rho));
-    vec3 light = cBulge * bulge + cOld * old * (0.8 + 0.4 * arm)
-               + youngCol * young * (floorY + 1.6 * arm * (0.4 + 0.9 * clumps));
-    // Grain of unresolved stars.
-    light *= 0.85 + 0.3 * (0.5 + 0.5 * gnoise(vec3(q * 320.0, 3.0 + uSeed)));
+    vec3 youngCol = mix(vec3(0.92, 0.9, 0.88), cYoung, smoothstep(0.08, 0.35, rho));
+    vec3 light = cBulge * bulge + cOld * old * (0.85 + 0.3 * arm)
+               + youngCol * young * (floorY + 0.7 * arm) + cClus * young * arm * 1.4 * clus;
+    // Unresolved stars: a fine grain over everything.
+    light *= 0.75 + 0.6 * speckle(q * 420.0, 9.0 + uSeed);
 
-    // ---- Dust. Thin lanes on the arms' inner edges, and through the bright inner disc a network
-    // of veins that follows the spiral but wanders and branches, as M101's does.
-    float tau = 2.2 * lane;
-    // The network comes in patches: dense in places, nearly clear in others.
-    float patchy = smoothstep(-0.25, 0.45, fbm(logPolar(theta, s, 1.8, 2.5, 2.5, 140.0 + uSeed), 3));
-    float inner = smoothstep(0.02, 0.07, rho) * (1.0 - smoothstep(0.35, 0.7, rho));
-    vec3 pv = logPolar(theta, s, 2.2, 7.0, 5.0, 20.0 + uSeed);
-    pv += 0.7 * vec3(gnoise(pv * 0.5 + 3.1), gnoise(pv * 0.5 + 7.7), gnoise(pv * 0.5 + 1.3));
-    tau += 1.8 * veins(pv, 9.0) * patchy * inner;
-    // A second, more open family crossing the first, so the filaments branch and join.
-    vec3 pw = logPolar(theta, s, 1.1, 9.0, 4.0, 33.0 + uSeed);
-    pw += 0.6 * vec3(gnoise(pw * 0.6 + 2.2), gnoise(pw * 0.6 + 5.5), 0.0);
-    tau += 0.9 * veins(pw, 11.0) * (0.3 + 0.7 * patchy) * inner;
-    // Spurs: dust leaving the arms across the gaps at a steeper pitch.
-    float spur = veins(logPolar(theta, s, 0.8, 10.0, 3.0, 50.0 + uSeed), 12.0);
-    tau += 0.8 * spur * smoothstep(0.05, 0.3, armSum) * (1.0 - smoothstep(0.7, 0.95, rho));
-    // Reddening: blue is taken out faster than red, so lanes are brown, not black.
-    vec3 T = exp(-tau * vec3(0.8, 1.0, 1.3));
+    // ---- Dust. The arm lanes and feathers, and through the inner disc a network of thin
+    // filaments that follows the spiral loosely, branches and joins, and comes in patches.
+    vec3 pn = logPolar(theta, s, 2.0, 4.5, 6.0, 20.0 + uSeed);
+    pn += 0.5 * vec3(gnoise(pn * 0.7 + 3.1), gnoise(pn * 0.7 + 7.7), gnoise(pn * 0.7 + 1.3));
+    float net = pow(max(1.0 - abs(gnoise(pn)), 0.0), 6.0) + 0.6 * pow(max(1.0 - abs(gnoise(pn * 2.1 + 5.0)), 0.0), 8.0);
+    float cut = smoothstep(-0.1, 0.35, fbm(logPolar(theta, s, 2.0, 2.2, 3.0, 140.0 + uSeed), 2));
+    // ...and each filament is cut into short pieces, so the network reads as cracked, not combed.
+    cut *= smoothstep(-0.25, 0.3, gnoise(pn * 1.3 + vec3(50.0, 0.0, uSeed)));
+    float inner = smoothstep(0.03, 0.08, rho) * (1.0 - smoothstep(0.3, 0.65, rho));
+    float tau = tauArm + 0.9 * net * cut * inner;
+    // Optical depth saturates: lanes are brown and translucent, never holes.
+    tau = 1.8 * (1.0 - exp(-tau / 1.8));
+    // Reddening: blue is taken out faster than red.
+    vec3 T = exp(-tau * vec3(0.7, 1.0, 1.45));
 
     light *= T;
     // Knots sit partly in front of the dust that made them.
-    light += (cHII * pink * 0.8 + cClus * blue * 0.9) * mix(vec3(1.0), T, 0.5);
+    light += (cHII * pink * 0.7 + cClus * blue * 0.9) * mix(vec3(1.0), T, 0.5);
 
     // An irregular rim, and nothing at all at the texture's edge.
     float rimR = 0.95 + 0.06 * gnoise(vec3(cos(theta) * 1.6, sin(theta) * 1.6, 4.0 + uSeed));
