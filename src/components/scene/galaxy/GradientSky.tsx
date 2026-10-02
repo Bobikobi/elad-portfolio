@@ -29,21 +29,13 @@ const frag = /* glsl */ `
     vec3 dir = normalize(vPos);
     float h = dir.y * 0.5 + 0.5;                      // 0 bottom .. 1 top
     float breathe = 0.5 + 0.5 * sin(uTime * 0.07);    // slow, few-percent drift
-    // Galaxy: a rich dark indigo dome. Solar: a MUCH deeper, less-violet void so the
-    // system sits in dark space — the old bright violet dome, saturated by the grade and
-    // cropped by the vignette, read as a "lavender oval" washing the whole frame (F1).
-    // WAVE-END SWEEP. The dome's TOP was carrying the galaxy act's corner floor. The
-    // gradient runs from bottomG at the horizon to topG overhead, and the two differ
-    // by nearly 3×; the welcome pose looks ACROSS the disc so its corners sample the dim
-    // bottom, while the dive pitches through the plane and its corners swing up into the
-    // bright top. Measured: corners 15.6% at scroll 0.35 against 24.8% at 0.5, on the same
-    // sky. That is not a grade decision, it is a gradient nobody had looked at from both
-    // ends. Bisecting the mid-dive frame put the dome first, ahead of the veils: hiding it
-    // alone took three of the four corners from 13-21% to 6-11%.
-    // The top comes down ~30% so the two poses read as one sky. The hue is untouched —
-    // it was never the colour that was wrong, only how much of it there is overhead.
-    vec3 bottomG = vec3(0.020, 0.027, 0.078);
-    vec3 topG    = mix(vec3(0.026, 0.024, 0.066), vec3(0.038, 0.032, 0.086), breathe);
+    // The owner found the purple/indigo background too extreme (2026-10-02). The galaxy is
+    // now a photograph of M101, and a photographed galaxy belongs on a near-black, almost
+    // neutral sky with only a slight cool cast. These scene-linear values display near
+    // (8,10,13) at the bottom and (10,13,17) at the top after the site's ACES tone map.
+    // Old indigo record: bottom (0.020,0.027,0.078), top endpoints (0.026,0.024,0.066) and (0.038,0.032,0.086).
+    vec3 bottomG = vec3(0.0099, 0.0115, 0.0141);
+    vec3 topG    = mix(vec3(0.0108, 0.0131, 0.0165), vec3(0.0119, 0.0145, 0.0183), breathe);
     vec3 bottomS = vec3(0.010, 0.013, 0.030);
     vec3 topS    = mix(vec3(0.016, 0.018, 0.040), vec3(0.024, 0.024, 0.052), breathe);
     vec3 bottom = mix(bottomG, bottomS, uSolar);

@@ -93,9 +93,10 @@ function pendingTextures(gl: THREE.WebGLRenderer, scene: THREE.Scene): THREE.Tex
  * first frame — `gl.compile` builds every mounted scene material's program up front
  * (galaxy point cloud, dive field, veils, sky, swap mask) instead of letting them
  * compile lazily as each is first drawn, which would hitch/pop AFTER the loader lifts.
- * The composer's own effect-pass shaders compile on its first render, so we then wait a
- * couple more composited frames before signalling ready — the revealed frame is fully
- * post-processed, warm, and hitch-free (no dim-then-bloom pop-in).
+ * The composer's own effect-pass shaders compile on its first render. From the third
+ * composited frame onward, readiness also waits for the photographed disc to reach the
+ * GPU, unless another act is already showing or the wall-time ceiling expires. The first
+ * revealed galaxy frame therefore contains the disc and is fully post-processed and warm.
  */
 function Warmup() {
   const gl = useThree((s) => s.gl);
@@ -103,6 +104,8 @@ function Warmup() {
   const camera = useThree((s) => s.camera);
   const compiled = useRef(false);
   const frames = useRef(0);
+  const compiledAt = useRef<number | null>(null);
+  const readySignalled = useRef(false);
   const uploads = useRef<THREE.Texture[]>([]);
   // Verification handle (HUD_AVAILABLE gate — stripped from the production bundle). A
   // screenshot can show that something is wrong in the frame but never WHICH object did
@@ -120,6 +123,7 @@ function Warmup() {
       // Twice: as the first frame will draw, then with every act shown, so the act that is
       // not on screen gets the programs it will be drawn with - its lights counted, which
       // three only collects from VISIBLE objects. Both run behind the loader.
+      compiledAt.current = performance.now();
       gl.compile(scene, camera);
       withActsShown(scene, () => gl.compile(scene, camera));
       compiled.current = true;
@@ -131,10 +135,23 @@ function Warmup() {
     // the hidden act's first visible frame is a plain frame. Textures whose images are still
     // downloading here are uploaded by the trickle below.
     if (frames.current === 1) warmDraw(gl, scene, camera);
-    if (frames.current === 3) useScene.getState().setSceneReady(true);
-    // After that, upload what has arrived since, one texture a frame, so the first frame
-    // that binds them - the swap, a focus - draws without stopping. A rescan every half
-    // second picks up late images and versions bumped by a swap of map.
+    // From the third post-compile frame onward, reveal once the photographed disc is on the
+    // GPU so the first revealed galaxy frame contains it. Another landing act skips that wait,
+    // and 2500 ms of wall time is the ceiling because the DOM loader lifts at 3000 ms from page
+    // start anyway. performance.now() remains real wall time when ?fixedStep freezes the clock.
+    const sceneState = useScene.getState();
+    const discWaitExpired = compiledAt.current !== null && performance.now() - compiledAt.current > 2500;
+    if (
+      !readySignalled.current
+      && frames.current >= 3
+      && (sceneState.galaxyDiscReady || sceneState.act !== 'galaxy' || discWaitExpired)
+    ) {
+      readySignalled.current = true;
+      sceneState.setSceneReady(true);
+    }
+    // Independently of that reveal gate, start uploading arrived textures on exactly the
+    // third post-compile frame, one texture a frame, so a swap or focus draws without stopping.
+    // A rescan every half second picks up late images and versions bumped by a map swap.
     if (frames.current < 3) return;
     if (frames.current % 30 === 0) uploads.current = pendingTextures(gl, scene);
     const t = uploads.current.pop();
@@ -201,9 +218,8 @@ export default function SceneRoot() {
         <TourSky>
           <HeroStars />
           {/* Shared sky persists across BOTH acts (cohesion spec: one rich universe).
-              In the solar act the veils drop to a faint backdrop so they read as distant
-              nebulosity, not the milky haze that used to wash the poster frame - corners
-              stay <10% brightness but never empty (stars + a nebula touch everywhere). */}
+              In the solar act the veils remain a distant backdrop, not the milky haze that
+              used to wash the poster frame - corners stay <10% brightness but never empty. */}
           {/* B4: 0.28 left the solar sky effectively empty, which is most of why the worlds
               read as faded. The veils are a BACKDROP, not a rumour of one. */}
           {/* GALAXY-REST: `anchor` is the gold "galaxy we dived out of". It belongs to the solar
@@ -211,7 +227,9 @@ export default function SceneRoot() {
               hanging half off the left border, and it is what the edge measurement was reading
               there all along - 10.3 of the left band's 10.3, in master as well. Solar keeps it at
               exactly its old strength; the swap happens behind DiveFade's black. */}
-          <Nebula intensity={act === 'solar' ? 0.5 : 1} anchor={act === 'solar' ? 1 : 0} />
+          {/* The owner found the coloured background too strong (2026-10-02); the galaxy act
+              now sits under a neutral charcoal sky and keeps the nebula only as a faint trace. */}
+          <Nebula intensity={act === 'solar' ? 0.5 : 0.2} anchor={act === 'solar' ? 1 : 0} />
         </TourSky>
         {/* Both acts stay mounted and the swap only flips which one is drawn (#82). Mounting
             the solar act at the swap cost a 0.1-0.5s frozen frame right at the curtain - React

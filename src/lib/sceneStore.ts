@@ -70,8 +70,14 @@ interface SceneState {
   hoveredBody: string | null;
   /** Sun mesh — set by the Sun component, read by Effects as the God Rays source. */
   sunMesh: THREE.Mesh | null;
-  /** True once the WebGL scene has rendered its first frame (hides the loader). */
+  /** True once the scene has drawn its warm-up frames and, when the galaxy act is showing,
+   *  its disc photograph is on the GPU or 2.5 s have passed (Warmup in SceneRoot). Hides
+   *  the loader. */
   sceneReady: boolean;
+  /** Set by the galaxy act once its disc photograph has decoded and been uploaded to the
+   *  GPU (or failed to load); the loader waits for it so the first revealed frame has the
+   *  galaxy in it. */
+  galaxyDiscReady: boolean;
   setAct: (act: Act) => void;
   setScrollProgress: (p: number) => void;
   setCoverage: (v: number) => void;
@@ -92,6 +98,7 @@ interface SceneState {
   setHoveredBody: (k: string | null) => void;
   setSunMesh: (m: THREE.Mesh | null) => void;
   setSceneReady: (v: boolean) => void;
+  setGalaxyDiscReady: (v: boolean) => void;
 }
 
 export const useScene = create<SceneState>((set) => ({
@@ -120,6 +127,7 @@ export const useScene = create<SceneState>((set) => ({
   hoveredBody: null,
   sunMesh: null,
   sceneReady: false,
+  galaxyDiscReady: false,
   setAct: (act) => set({ act }),
   setScrollProgress: (scrollProgress) => set({ scrollProgress }),
   setCoverage: (coverage) => set({ coverage }),
@@ -142,4 +150,5 @@ export const useScene = create<SceneState>((set) => ({
   setHoveredBody: (hoveredBody) => set({ hoveredBody }),
   setSunMesh: (sunMesh) => set({ sunMesh }),
   setSceneReady: (sceneReady) => set({ sceneReady }),
+  setGalaxyDiscReady: (galaxyDiscReady) => set({ galaxyDiscReady }),
 }));

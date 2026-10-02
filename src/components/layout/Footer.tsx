@@ -64,6 +64,15 @@ export default function Footer() {
           </a>
           <span className="mx-1.5 opacity-40">·</span>
           <a
+            href="https://esahubble.org/images/heic0602a/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-[var(--color-text-secondary)] transition-colors"
+          >
+            Galaxy image: M101, ESA & NASA (Hubble), with CFHT and NOAO data - CC BY 4.0, modified
+          </a>
+          <span className="mx-1.5 opacity-40">·</span>
+          <a
             href="https://images.nasa.gov/"
             target="_blank"
             rel="noopener noreferrer"
