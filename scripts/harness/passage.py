@@ -77,9 +77,9 @@ CI, CO = 0.85, 0.95
 def time_at(p):
     if p <= 0: return 0.0
     if p < CI: return 1200 * p / CI
-    if p < CO: return 1200 + 500 * (p - CI) / (CO - CI)
-    if p < 1: return 1700 + 900 * (p - CO) / (1 - CO)
-    return 2600.0
+    if p < CO: return 1200 + 1100 * (p - CI) / (CO - CI)
+    if p < 1: return 2300 + 900 * (p - CO) / (1 - CO)
+    return 3200.0
 def frame_ms(a, b):
     playing = all(0.016 < r[3] < 0.999 for r in (a, b))
     return abs(time_at(b[3]) - time_at(a[3])) if playing else b[0] - a[0]
