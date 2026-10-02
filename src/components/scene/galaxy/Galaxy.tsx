@@ -60,7 +60,14 @@ const PARAMS = {
   dustDepth: 1.0, // how much light a dust filament takes
   resolvedShare: 0.25,
   resolvedGain: 2.6,
+  // Owner, 2026-10-02: black lanes read as a dark object pasted on the sky. Lanes are a deep
+  // indigo of the sky's hue (the sky itself, #23275B, flattened the lanes: fine 3.19, lane 4.67).
+  dustColor: '#0D0F33',
   dustLayer: 1.15, // how much of what lies behind a filament the dark layer takes; above 1 the filament core goes fully dark
+  // Dust only in silhouette against arm light (share of the brightest binned light): between
+  // the arms and past the rim the sky shows through. Disc darker than the sky 42.8% -> 10.2%.
+  dustLitFrom: 0.03,
+  dustLitTo: 0.15,
   warmColor: '#FFA24A', // the old population: yellow at the core, cream out to the inner arms
   hiiColor: '#FF5FA8',
   warmReach: 0.64, // share of the radius where the inner disc has turned blue
@@ -112,14 +119,43 @@ function dustKeep(x: number, z: number): number {
  * behind it the way real dust does.
  */
 const DUST_TEX = 512;
-function dustTexture(): THREE.DataTexture {
+const LIGHT_GRID = 128;
+/**
+ * `light` is the disc's starlight binned on a LIGHT_GRID square over the same [-R, R] plane.
+ * Dust shows only in silhouette against it: over the sky between the arms the layer drew a dark
+ * lens round the whole galaxy, a black shape that read as pasted on the indigo sky (owner,
+ * 2026-10-02: "the black around it looks separate from space - the colour gaps").
+ */
+function dustTexture(light: Float32Array): THREE.DataTexture {
   const R = PARAMS.radius;
+  const n = LIGHT_GRID;
+  // Two box-blur passes each way (radius 2 cells, ~0.2 units): the arm, not each point.
+  let a: Float32Array = light, b: Float32Array = new Float32Array(n * n);
+  for (let pass = 0; pass < 4; pass++) {
+    const horiz = pass % 2 === 0;
+    for (let j = 0; j < n; j++)
+      for (let i = 0; i < n; i++) {
+        let sum = 0, w = 0;
+        for (let k = -2; k <= 2; k++) {
+          const ii = horiz ? i + k : i, jj = horiz ? j : j + k;
+          if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+          sum += a[jj * n + ii]; w++;
+        }
+        b[j * n + i] = sum / w;
+      }
+    [a, b] = [b, a];
+  }
+  const lit = Array.from(a).filter((v) => v > 0).sort((x, y) => x - y);
+  const top = lit[Math.floor(lit.length * 0.95)] || 1;
   const data = new Uint8Array(DUST_TEX * DUST_TEX);
   for (let j = 0; j < DUST_TEX; j++) {
     const z = ((j + 0.5) / DUST_TEX) * 2 * R - R;
+    const gj = Math.min(n - 1, Math.floor(((j + 0.5) / DUST_TEX) * n));
     for (let i = 0; i < DUST_TEX; i++) {
       const x = ((i + 0.5) / DUST_TEX) * 2 * R - R;
-      data[j * DUST_TEX + i] = Math.round((1 - dustKeep(x, z)) * 255);
+      const gi = Math.min(n - 1, Math.floor(((i + 0.5) / DUST_TEX) * n));
+      const gate = smoothstep(PARAMS.dustLitFrom, PARAMS.dustLitTo, a[gj * n + gi] / top);
+      data[j * DUST_TEX + i] = Math.round((1 - dustKeep(x, z)) * gate * 255);
     }
   }
   const tex = new THREE.DataTexture(data, DUST_TEX, DUST_TEX, THREE.RedFormat, THREE.UnsignedByteType);
@@ -144,6 +180,7 @@ const dustFragment = /* glsl */ `
   uniform float uRadius;
   uniform float uDepth;
   uniform float uFade;
+  uniform vec3 uSky;
   varying vec2 vXZ;
   varying vec3 vWorld;
   void main() {
@@ -153,7 +190,7 @@ const dustFragment = /* glsl */ `
     // the lens, so the dive never flies into a dark sheet.
     float a = d * uDepth * smoothstep(0.06, 0.2, t) * (1.0 - smoothstep(0.62, 0.95, t));
     a *= smoothstep(0.8, 2.5, distance(cameraPosition, vWorld)) * uFade;
-    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+    gl_FragColor = vec4(uSky, a);
   }
 `;
 
@@ -168,6 +205,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
     const scales = new Float32Array(count);
     const randomness = new Float32Array(count * 3);
     const dims = new Float32Array(count);
+    const light = new Float32Array(LIGHT_GRID * LIGHT_GRID);
 
     const core = new THREE.Color(PARAMS.coreColor);
     const mid = new THREE.Color(PARAMS.midColor);
@@ -272,6 +310,11 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
       const rim = 1 - smoothstep(PARAMS.rimStart, PARAMS.rimEnd, t);
       const pDim = diffuse ? PARAMS.diffuseDim : PARAMS.discDim;
       dims[i] = bulge ? PARAMS.bulgeGain : laneKeep * rim * pDim * dustKeep(x, z) * (resolved ? PARAMS.resolvedGain : 1);
+      if (!bulge) {
+        const gi = Math.floor(((x + PARAMS.radius) / (2 * PARAMS.radius)) * LIGHT_GRID);
+        const gj = Math.floor(((z + PARAMS.radius) / (2 * PARAMS.radius)) * LIGHT_GRID);
+        if (gi >= 0 && gj >= 0 && gi < LIGHT_GRID && gj < LIGHT_GRID) light[gj * LIGHT_GRID + gi] += laneKeep * rim * pDim;
+      }
     }
 
     const geo = new THREE.BufferGeometry();
@@ -280,7 +323,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
     geo.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
     geo.setAttribute('aRandomness', new THREE.BufferAttribute(randomness, 3));
     geo.setAttribute('aDim', new THREE.BufferAttribute(dims, 1));
-    return geo;
+    return { geo, dustTex: dustTexture(light) };
   }, [count]);
 
   const uniforms = useMemo(
@@ -297,8 +340,8 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
   const dust = useMemo(() => {
     const geo = new THREE.PlaneGeometry(2 * PARAMS.radius, 2 * PARAMS.radius);
     geo.rotateX(-Math.PI / 2);
-    return { geo, uniforms: { uDust: { value: dustTexture() }, uRadius: { value: PARAMS.radius }, uDepth: { value: PARAMS.dustLayer }, uFade: { value: 1 } } };
-  }, []);
+    return { geo, uniforms: { uDust: { value: geometry.dustTex }, uRadius: { value: PARAMS.radius }, uDepth: { value: PARAMS.dustLayer }, uFade: { value: 1 }, uSky: { value: new THREE.Color(PARAMS.dustColor) } } };
+  }, [geometry]);
 
   useFrame(({ camera }, dt) => {
     if (!matRef.current) return;
@@ -317,7 +360,7 @@ export default function Galaxy({ count = 200000 }: GalaxyProps) {
   // Points never raycast (perf trap); frustumCulled off so the custom-geometry
   // bounding sphere can't cull the galaxy at steep dive angles.
   return (
-    <points geometry={geometry} raycast={() => null} frustumCulled={false}>
+    <points geometry={geometry.geo} raycast={() => null} frustumCulled={false}>
       <shaderMaterial
         ref={matRef}
         vertexShader={galaxyVertexShader}
