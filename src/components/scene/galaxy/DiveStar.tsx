@@ -43,14 +43,16 @@ const fragment = /* glsl */ `
   void main() {
     vec2 p = (vUv - 0.5) * 2.0;   // RADIUS at 0.5, the quad's edge at 1
     float r = length(p);
-    // A point-like core (a fifth of the halo) inside a halo the size of the curtain's warm
-    // centre at the moment that centre starts to show, so one hands over to the other.
-    float core = exp(-r * r / 0.01);
+    // A saturated near-white core, as a bright star burns out a Hubble exposure, inside an
+    // amber halo the size of the curtain's warm centre at the moment that centre starts to
+    // show, so one hands over to the other.
+    float core = min(1.0, 1.4 * exp(-r * r / 0.008));
     float halo = exp(-r * r / 0.25) * 0.3 + exp(-r / 0.2) * 0.15;
-    // Four thin spikes, fading along their length.
-    float spikes = (exp(-abs(p.y) / 0.008) + exp(-abs(p.x) / 0.008)) * exp(-r / 0.3) * 0.3;
+    // Four thin spikes, fading along their length - the telescope's signature on every bright
+    // star in the photograph.
+    float spikes = (exp(-abs(p.y) / 0.005) + exp(-abs(p.x) / 0.005)) * exp(-r / 0.45) * 0.5;
     float edge = 1.0 - smoothstep(0.8, 1.0, r);
-    vec3 col = lin(vec3(1.0, 0.86, 0.62)) * core + lin(vec3(1.0, 0.72, 0.42)) * (halo + spikes);
+    vec3 col = lin(vec3(1.0, 0.95, 0.86)) * core + lin(vec3(1.0, 0.72, 0.42)) * halo + lin(vec3(1.0, 0.85, 0.66)) * spikes;
     gl_FragColor = vec4(col * edge * uOpacity, 1.0);
   }
 `;
