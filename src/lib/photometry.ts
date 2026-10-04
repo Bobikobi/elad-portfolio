@@ -117,3 +117,11 @@ export const BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD = 0.33;
 export const BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD = 0;
 export const BLOOM_SOLAR_LUMINANCE_SMOOTHING = 0.22;
 export const BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING = 0;
+// The galaxy act at rest. The disc is a photograph run back through the ACES fit
+// (galaxy/shaders.ts); measured on the 512 readback, 2026-10-04: arms at median 0.06-0.15 of
+// linear light (99th percentile 0.22-0.48), the core at median 2.5, and 0.25% of the disc above
+// 0.8 - the core and the brightest knots. So 0.8 blooms those and nothing else; at 0 every arm
+// carries a halo of its own and the picture goes to haze. The dive blends from these to the
+// act's 0 above.
+export const BLOOM_GALAXY_REST_LUMINANCE_THRESHOLD = 0.8;
+export const BLOOM_GALAXY_REST_LUMINANCE_SMOOTHING = 0.3;

@@ -1,9 +1,23 @@
 'use client';
-import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { galaxyVertexShader, galaxyFragmentShader } from './shaders';
+import { discVertexShader, discFragmentShader, starVertexShader, starFragmentShader } from './shaders';
 import { makeRng, SEED } from '@/lib/rng';
+import { loadBitmapTexture, type BitmapTextureLoad } from '@/lib/bitmapTexture';
+import { useScene } from '@/lib/sceneStore';
+import { HUD_AVAILABLE } from '../DebugHud';
+
+/**
+ * The galaxy act's disc: the Hubble photograph of M101 (ESA/Hubble heic0602, CC BY 4.0,
+ * credited in the footer) laid on the disc plane, and a star field drawn from that same
+ * photograph that takes its light over as the dive goes down. Owner, 2026-10-02, shown real
+ * galaxies next to the procedural one: "I liked the direction". The procedural cloud and its
+ * dust layer are kept at tag `attempt/2026-10-galaxy-procedural-bake`.
+ *
+ * Both layers turn together in one group, which stream 2 of #82 also puts the dive's
+ * destination star in (`galaxyFrame.spin`).
+ */
 
 /** Same curve as GLSL smoothstep, on the CPU side. */
 const smoothstep = (a: number, b: number, x: number) => {
@@ -11,376 +25,484 @@ const smoothstep = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-interface GalaxyProps {
-  count?: number;
-}
+const DISC_URL = '/images/galaxy/m101-disc-2048.webp';
+// High tier only. 2048 texels over the disc come to about one per pixel at 2 units of height,
+// where the photo still carries most of the dive's light.
+const DISC_URL_HIGH = '/images/galaxy/m101-disc-4096.webp';
+// The star field is sampled from a MAP x MAP readback: a cell is 0.025 units, finer than an
+// arm's width and coarse enough to sample in about a second at the frame budget below.
+const MAP = 512;
+// Every tier samples the same 200k list; the low tier draws its first 40k. Tiers scale cost,
+// never composition (DECISIONS 2026-07, the tier law).
+const STARS_MAX = 200000;
+const STARS_LOW = 40000;
+// Stars land with probability Y^0.55 and each carries Y^0.45, so light per area still goes as
+// Y (no brightness squared) while the faint outer disc the dive enters keeps enough stars to
+// read as a field instead of a few sparks.
+const GAMMA = 0.55;
+// The stars' nominal share of the disc's light at rest, criterion M2 (5 +- 2% on screen). The
+// photo foreshortens with the view (about 0.5 at the welcome elevation) and points do not, so
+// the screen share runs above this. 0.026 was the geometric estimate and measured 7.1% (frame
+// sums of ?gx=0,1 against ?gx=1,0, sky taken off, 2026-10-04); scaled down to land near 5.
+const REST_STARS = 0.019;
+// rad/s: a turn every ten minutes, felt rather than watched.
+const SPIN = 0.01;
+// The turn eases to a stop at half a radian (time constant 50 s), so the dive's late path,
+// which is laid in this frame (stream 2), never meets a galaxy turned further than was flown.
+const SPIN_MAX = 0.5;
+// World units: below half a pixel everywhere except the last unit of the dive, where a star
+// passing the lens grows to the shader's size cap.
+const STAR_SIGMA = 0.0015;
+// Linear luminance of one star's brightest pixel. ACES displays 1.6 at about 230 of 255, so a
+// single star never clips white and blooms.
+const STAR_PEAK = 1.6;
+// Camera height over the disc across which the stars take the light over (k = 0 above, 1 below).
+// The welcome shot sits at 4.6; the dive is under 2.5 from its middle on.
+const HANDOVER: [number, number] = [0.5, 2.5];
+// A disc that arrives after the loader has lifted fades in over this, instead of popping.
+const LOAD_FADE_S = 0.6;
+// The 4096's GPU upload is one frame of 80-180 ms here (three production loads, 2026-10-04),
+// and that frame used to land 70-90 ms after the reveal, in the middle of the loader's fade.
+// It now waits for the welcome view to be still: this long after the reveal, with no scroll
+// for HI_IDLE_S. At rest the scene moves well under a pixel in 180 ms, so the frozen frame
+// cannot be seen; mid-dive it would be. A visitor who dives first keeps the 2048 until back
+// at rest.
+const HI_AFTER_REVEAL_S = 1.0;
+const HI_IDLE_S = 0.5;
+// Sampling runs inside the frame; 4 ms of a 16.7 ms frame leaves the render its time.
+const SAMPLE_BUDGET_MS = 4;
+// A star's colour is the photo's chromaticity, normalised to luminance 1. Dim cells are noisy
+// and their ratio can run to 10+ in one channel; past 3 it is mixed toward white, which keeps
+// its luminance at 1 and its hue.
+const CHROMA_MAX = 3;
+// 15% of stars are pulled half-way toward a hot blue-white and 15% toward an old amber, so the
+// field has individual stars of distinct colour and not only the photo's average tint.
+const NUDGE_SHARE = 0.15;
+const NUDGE_MIX = 0.5;
 
-// Design system: ivory core → cosmic-blue mid → galaxy-indigo arm edges.
-//
-// GALAXY-REST: four tightly-wound branches read as concentric rings, not arms (measured: the
-// four-fold angular component m4 = 0.18). Two broad arms with a quarter of the winding read as
-// arms, and the per-point angular spread below is what makes them broad and irregular instead
-// of four thin wires. The core is ivory rather than gold because it is the only warm thing left
-// in the frame and gold at this density smeared across 41% of the picture.
-// GALAXY-REST round 3: the owner, twice, "the galaxy is too small, spread it wider". The
-// projected disc was never the problem - a circle at radius 4 already spans 1550 px of a
-// 1440 px frame. What made it read as a small blob in the middle was the RIM FADE: it
-// started at 0.48 of the radius and was complete at 0.88, so half the disc's radius carried
-// no light and the visible galaxy ended around 0.68 of it. The fade starts later and runs to
-// the very rim now, the radius grows with it, and the radial law pushes points outward so
-// the larger disc is not paid for by thinning the arms.
-const PARAMS = {
-  radius: 6.3,
-  rimStart: 0.62, // share of the radius where the cloud begins to dissolve
-  rimEnd: 1.0,
-  radialPower: 0.72, // < 1 pushes points outward; at 0.9 the outer arms went thin as the disc grew
-  branches: 2,
-  spin: 0.42,
-  randomness: 0.22,
-  randomnessPower: 2.8,
-  armSpread: 0.42, // radians of angular scatter at the rim: broad arms, not wires
-  bulgeShare: 0.14, // points drawn into the compact core instead of the disc
-  bulgeRadius: 0.85,
-  laneOffset: 0.36, // where the dust lane runs across the arm, as a share of the arm's half-width
-  laneWidth: 0.22,
-  laneDepth: 0.9, // how much of a point's light the lane takes
-  discDim: 0.56, // arms read grey-blue instead of white, and stop merging into the core
-  bulgeGain: 2.1, // the core is the one thing allowed to saturate
-  coreColor: '#FFF4E2', // ivory
-  midColor: '#4D8DFF', // --cosmic-blue
-  edgeColor: '#6D5AE6', // --galaxy-indigo
-  // #82 stage 2 - richness from structure, not light. Three more populations share the disc's
-  // budget: a diffuse disc between the arms, star clusters strung along them, and an old warm
-  // inner disc; dust filaments then take light out of all of it.
-  diffuseShare: 0.1, // disc points spread around the whole disc, not on an arm
-  diffuseDim: 0.3,
-  knotShare: 0.14, // disc points gathered into clusters along the arms
-  knots: 140,
-  knotSize: 0.13,
-  dustDepth: 1.0, // how much light a dust filament takes
-  resolvedShare: 0.25,
-  resolvedGain: 2.6,
-  // Owner, 2026-10-02: black lanes read as a dark object pasted on the sky. Lanes are a deep
-  // indigo of the sky's hue (the sky itself, #23275B, flattened the lanes: fine 3.19, lane 4.67).
-  dustColor: '#0D0F33',
-  dustLayer: 1.15, // how much of what lies behind a filament the dark layer takes; above 1 the filament core goes fully dark
-  // Dust only in silhouette against arm light (share of the brightest binned light): between
-  // the arms and past the rim the sky shows through. Disc darker than the sky 42.8% -> 10.2%.
-  dustLitFrom: 0.03,
-  dustLitTo: 0.15,
-  warmColor: '#FFA24A', // the old population: yellow at the core, cream out to the inner arms
-  hiiColor: '#FF5FA8',
-  warmReach: 0.64, // share of the radius where the inner disc has turned blue
+const lum = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+const unitLum = (r: number, g: number, b: number): [number, number, number] => {
+  const y = lum(r, g, b);
+  return [r / y, g / y, b / y];
 };
-
-/** Seeded 2D value noise on the integer lattice, 0..1, periodic in x with period `px`. */
-function hash2(x: number, y: number): number {
-  const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-  return h - Math.floor(h);
-}
-function noise2(x: number, y: number, px: number): number {
-  const ix = Math.floor(x), iy = Math.floor(y);
-  const fx = x - ix, fy = y - iy;
-  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
-  const x0 = ((ix % px) + px) % px, x1 = (x0 + 1) % px;
-  const a = hash2(x0, iy), b = hash2(x1, iy), c = hash2(x0, iy + 1), d = hash2(x1, iy + 1);
-  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
-}
+const BLUE_WHITE = unitLum(0.52, 0.64, 1.0);
+const AMBER = unitLum(1.0, 0.52, 0.21);
 
 /**
- * How much light the dust leaves at disc position (x, z). The noise lives in the arms' own
- * frame - the angle less the winding, so a constant coordinate runs along an arm - with fewer
- * cells along the radius than around it, which stretches every filament along the arms the way
- * the dust in a real disc is sheared. Ridged, so it makes threads with gaps rather than a
- * blotchy dim, and mottled by a third noise so no thread is the same depth along its length.
- * The cells repeat a whole number of times around the disc, so there is no seam.
- * Tried first: isotropic cells about a unit across in the unwound plane - the threads curled
- * into closed loops and read as ink marbling instead of dust.
+ * HUD builds only. `?gx=photo,stars` scales the two layers (M2 measures `?gx=1,0` against
+ * `?gx=0,1`); `?spin=` is the turn in rad/s; `?gr=` is the disc radius. Malformed values throw,
+ * so a measurement can never silently run on the shipped constants.
  */
-function dustKeep(x: number, z: number): number {
-  const r = Math.hypot(x, z);
-  const turn = (Math.atan2(z, x) - r * PARAMS.spin) / (Math.PI * 2);
-  const a = turn - Math.floor(turn);
-  const ridge = (n: number) => 1 - Math.abs(2 * n - 1);
-  const big = ridge(noise2(a * 26, r * 0.75 + 3, 26));
-  const fine = ridge(noise2(a * 64, r * 1.9 + 11, 64));
-  const hair = ridge(noise2(a * 120, r * 3.4 + 41, 120));
-  const mottle = noise2(a * 40, r * 1.4 + 29, 40);
-  const d = Math.max(smoothstep(0.42, 0.84, big), 0.85 * smoothstep(0.62, 0.93, fine), 0.6 * smoothstep(0.7, 0.95, hair)) * (0.45 + 0.55 * mottle);
-  return 1 - PARAMS.dustDepth * d;
-}
-
-/**
- * The dust as a texture over the disc plane, the same `dustKeep` map the points are thinned by.
- * Additive points can only leave light out, and leaving it out of an arm that many points
- * overlap barely shows (#82 stage 2 measured the lanes at 4% of the galaxy either way); the
- * sky glow under the disc is not the cloud's to remove at all. So the filaments are also drawn
- * as a dark layer, normal-blended after the cloud, which takes light out of whatever lies
- * behind it the way real dust does.
- */
-const DUST_TEX = 512;
-const LIGHT_GRID = 128;
-/**
- * `light` is the disc's starlight binned on a LIGHT_GRID square over the same [-R, R] plane.
- * Dust shows only in silhouette against it: over the sky between the arms the layer drew a dark
- * lens round the whole galaxy, a black shape that read as pasted on the indigo sky (owner,
- * 2026-10-02: "the black around it looks separate from space - the colour gaps").
- */
-function dustTexture(light: Float32Array): THREE.DataTexture {
-  const R = PARAMS.radius;
-  const n = LIGHT_GRID;
-  // Two box-blur passes each way (radius 2 cells, ~0.2 units): the arm, not each point.
-  let a: Float32Array = light, b: Float32Array = new Float32Array(n * n);
-  for (let pass = 0; pass < 4; pass++) {
-    const horiz = pass % 2 === 0;
-    for (let j = 0; j < n; j++)
-      for (let i = 0; i < n; i++) {
-        let sum = 0, w = 0;
-        for (let k = -2; k <= 2; k++) {
-          const ii = horiz ? i + k : i, jj = horiz ? j : j + k;
-          if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
-          sum += a[jj * n + ii]; w++;
-        }
-        b[j * n + i] = sum / w;
-      }
-    [a, b] = [b, a];
+const hudParam = (name: string): string | null =>
+  HUD_AVAILABLE && typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get(name) : null;
+const GX: [number, number] = (() => {
+  const v = hudParam('gx');
+  if (!v) return [1, 1];
+  const n = v.split(',').map(Number);
+  if (n.length !== 2 || n.some((x) => !Number.isFinite(x) || x < 0)) {
+    throw new Error(`Galaxy: ?gx must be photo,stars with both >= 0 - got "${v}"`);
   }
-  const lit = Array.from(a).filter((v) => v > 0).sort((x, y) => x - y);
-  const top = lit[Math.floor(lit.length * 0.95)] || 1;
-  const data = new Uint8Array(DUST_TEX * DUST_TEX);
-  for (let j = 0; j < DUST_TEX; j++) {
-    const z = ((j + 0.5) / DUST_TEX) * 2 * R - R;
-    const gj = Math.min(n - 1, Math.floor(((j + 0.5) / DUST_TEX) * n));
-    for (let i = 0; i < DUST_TEX; i++) {
-      const x = ((i + 0.5) / DUST_TEX) * 2 * R - R;
-      const gi = Math.min(n - 1, Math.floor(((i + 0.5) / DUST_TEX) * n));
-      const gate = smoothstep(PARAMS.dustLitFrom, PARAMS.dustLitTo, a[gj * n + gi] / top);
-      data[j * DUST_TEX + i] = Math.round((1 - dustKeep(x, z)) * gate * 255);
+  return [n[0], n[1]];
+})();
+// The disc's radius. The welcome framing's bottom edge cuts the plane about 4 units in front of
+// the centre, and the photograph stays bright out to its rim, so any radius much past 4 runs a
+// bright wall off the bottom of the frame - the procedural disc it replaced (6.3) dissolved from
+// 0.62 of its radius for the same reason. Measured 2026-10-04, worst of three rest poses, light
+// in the bottom 40 px: 6.3 -> 40.0, 5.0 -> 15.2, 4.4 -> 4.7 (master 28.7, bar 6). 5.0 is the
+// largest that is no worse than master; 4.4 meets the bar but leaves the galaxy small, so the
+// size is the owner's call, and `?gr=` lets him compare.
+const R = (() => {
+  const v = hudParam('gr');
+  if (v === null) return 5.0;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`Galaxy: ?gr must be a radius > 0 - got "${v}"`);
+  return n;
+})();
+const SPIN_RATE = (() => {
+  const v = hudParam('spin');
+  if (v === null) return SPIN;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`Galaxy: ?spin must be a rate >= 0 in rad/s - got "${v}"`);
+  return n;
+})();
+
+// The forward ACES fit's matrices (ExposureToneMap.acesFilmic), inverted. Matrix3.set takes
+// rows; the GLSL there lists the same matrices by column.
+const MIN_INV = new THREE.Matrix3()
+  .set(0.59719, 0.35458, 0.04823, 0.076, 0.90834, 0.01566, 0.0284, 0.13383, 0.83777)
+  .invert();
+const MOUT_INV = new THREE.Matrix3()
+  .set(1.60475, -0.53108, -0.07367, -0.10208, 1.10813, -0.00605, -0.00327, -0.07276, 1.07602)
+  .invert();
+
+/** The JS twin of `invACES` in shaders.ts - change the two together. */
+const invRRT = (y: number) => {
+  const A = 1 - 0.983729 * y;
+  const B = 0.0245786 - 0.432951 * y;
+  const C = -(0.000090537 + 0.238081 * y);
+  return (-B + Math.sqrt(Math.max(B * B - 4 * A * C, 0))) / (2 * A);
+};
+const TOE = invRRT(0);
+function invAces(r: number, g: number, b: number, out: number[]) {
+  const o = MOUT_INV.elements; // column-major: (M v)_i = sum_j e[j*3+i] v_j
+  const m = MIN_INV.elements;
+  r = Math.min(r, 0.97);
+  g = Math.min(g, 0.97);
+  b = Math.min(b, 0.97);
+  const clamp = (v: number) => Math.min(0.99, Math.max(0, v));
+  const x0 = invRRT(clamp(o[0] * r + o[3] * g + o[6] * b));
+  const x1 = invRRT(clamp(o[1] * r + o[4] * g + o[7] * b));
+  const x2 = invRRT(clamp(o[2] * r + o[5] * g + o[8] * b));
+  out[0] = Math.max(m[0] * x0 + m[3] * x1 + m[6] * x2 - TOE, 0) * 0.6;
+  out[1] = Math.max(m[1] * x0 + m[4] * x1 + m[7] * x2 - TOE, 0) * 0.6;
+  out[2] = Math.max(m[2] * x0 + m[5] * x1 + m[8] * x2 - TOE, 0) * 0.6;
+}
+
+interface Field {
+  positions: Float32Array;
+  colors: Float32Array;
+  scales: Float32Array;
+  /** Summed luminance of the first STARS_LOW stars and of all of them. */
+  rawLow: number;
+  rawAll: number;
+  /** The photo's light in the units the disc draws it: summed Y times a cell's area. */
+  flux: number;
+}
+
+/**
+ * The photo at MAP x MAP, decoded again from the file rather than read back from the texture:
+ * the texture's bitmap was flipped at decode, and an HTMLImageElement fallback is not, so the
+ * texture's own image has two orientations. This one has the file's: row 0 is the top.
+ */
+async function readDisc(): Promise<Uint8ClampedArray | null> {
+  try {
+    const response = await fetch(DISC_URL);
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    const blob = await response.blob();
+    let src: ImageBitmap | HTMLImageElement;
+    if (typeof createImageBitmap === 'function') {
+      src = await createImageBitmap(blob, {
+        resizeWidth: MAP,
+        resizeHeight: MAP,
+        resizeQuality: 'high',
+        premultiplyAlpha: 'none',
+        colorSpaceConversion: 'none',
+      });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      URL.revokeObjectURL(url);
+      src = image;
     }
+    const canvas = document.createElement('canvas');
+    canvas.width = MAP;
+    canvas.height = MAP;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('no 2d context');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0, MAP, MAP);
+    if ('close' in src) src.close();
+    return ctx.getImageData(0, 0, MAP, MAP).data;
+  } catch (error: unknown) {
+    console.error('[Galaxy] Star field readback failed; the photo is drawn alone', error);
+    return null;
   }
-  const tex = new THREE.DataTexture(data, DUST_TEX, DUST_TEX, THREE.RedFormat, THREE.UnsignedByteType);
-  tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearFilter;
-  tex.needsUpdate = true;
-  return tex;
 }
 
-const dustVertex = /* glsl */ `
-  varying vec2 vXZ;
-  varying vec3 vWorld;
-  void main() {
-    vXZ = position.xz;
-    vec4 w = modelMatrix * vec4(position, 1.0);
-    vWorld = w.xyz;
-    gl_Position = projectionMatrix * viewMatrix * w;
+/**
+ * Samples the star field from the readback, yielding often enough that the frame loop can run
+ * it inside SAMPLE_BUDGET_MS a frame. Seeded, so every load and every tier get the same stars.
+ * Returns null for a black image, which has no light to place stars by.
+ */
+function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
+  const cell = (2 * R) / MAP;
+  const lut = new Float32Array(256);
+  for (let v = 0; v < 256; v++) {
+    const c = v / 255;
+    lut[v] = c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   }
-`;
-const dustFragment = /* glsl */ `
-  uniform sampler2D uDust;
-  uniform float uRadius;
-  uniform float uDepth;
-  uniform float uFade;
-  uniform vec3 uSky;
-  varying vec2 vXZ;
-  varying vec3 vWorld;
-  void main() {
-    float d = texture2D(uDust, vXZ / (2.0 * uRadius) + 0.5).r;
-    float t = length(vXZ) / uRadius;
-    // None in the bulge's heart or past the rim, where there is no disc to carry it; gone near
-    // the lens, so the dive never flies into a dark sheet.
-    float a = d * uDepth * smoothstep(0.06, 0.2, t) * (1.0 - smoothstep(0.62, 0.95, t));
-    a *= smoothstep(0.8, 2.5, distance(cameraPosition, vWorld)) * uFade;
-    gl_FragColor = vec4(uSky, a);
+  const rgb = [0, 0, 0];
+  const lightAt = new Float32Array(MAP * MAP);
+  const cdf = new Float64Array(MAP * MAP);
+  let flux = 0;
+  let acc = 0;
+  for (let j = 0; j < MAP; j++) {
+    for (let i = 0; i < MAP; i++) {
+      const p = j * MAP + i;
+      invAces(lut[px[p * 4]], lut[px[p * 4 + 1]], lut[px[p * 4 + 2]], rgb);
+      const y = lum(rgb[0], rgb[1], rgb[2]);
+      lightAt[p] = y;
+      flux += y;
+      acc += y ** GAMMA;
+      cdf[p] = acc;
+    }
+    if (j % 8 === 7) yield;
   }
-`;
+  if (!(acc > 0)) return null;
 
-/** Procedural spiral galaxy as a single additive point cloud, spun in the vertex shader. */
-export default function Galaxy({ count = 200000 }: GalaxyProps) {
-  const matRef = useRef<THREE.ShaderMaterial>(null);
-  const pixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 1.5) : 1;
+  const rnd = makeRng(SEED.galaxy);
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+  const positions = new Float32Array(STARS_MAX * 3);
+  const colors = new Float32Array(STARS_MAX * 3);
+  const scales = new Float32Array(STARS_MAX);
+  let rawLow = 0;
+  let rawAll = 0;
+  for (let s = 0; s < STARS_MAX; s++) {
+    // The first cell whose running sum passes u. Strictly greater, so a cell of zero light,
+    // whose sum equals its neighbour's, is never picked.
+    const u = rnd() * acc;
+    let lo = 0;
+    let hi = MAP * MAP - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (cdf[mid] > u) hi = mid;
+      else lo = mid + 1;
+    }
+    const i = lo % MAP;
+    const j = (lo - i) / MAP;
+    // Canvas row j is file row j, which the disc lays at world -z (PlaneGeometry turned -90deg
+    // about x puts the texture's top at -z); column i runs along +x.
+    const x = -R + (i + rnd()) * cell;
+    const z = -R + (j + rnd()) * cell;
+    const r = Math.hypot(x, z);
+    positions[s * 3] = x;
+    // A thin disc (0.03) thickening into a bulge of 0.35 at the centre.
+    positions[s * 3 + 1] = gauss() * (0.03 + 0.35 * Math.exp(-((r / 0.9) ** 2)));
+    positions[s * 3 + 2] = z;
 
-  const geometry = useMemo(() => {
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const scales = new Float32Array(count);
-    const randomness = new Float32Array(count * 3);
-    const dims = new Float32Array(count);
-    const light = new Float32Array(LIGHT_GRID * LIGHT_GRID);
+    // Lognormal grain with a mean of 1 (E[exp(0.8 n)] = exp(0.32)): a field of unequal stars.
+    const y = lightAt[lo];
+    const raw = y ** (1 - GAMMA) * Math.exp(0.8 * gauss() - 0.32);
+    invAces(lut[px[lo * 4]], lut[px[lo * 4 + 1]], lut[px[lo * 4 + 2]], rgb);
+    let cr = rgb[0] / y;
+    let cg = rgb[1] / y;
+    let cb = rgb[2] / y;
+    const top = Math.max(cr, cg, cb);
+    if (top > CHROMA_MAX) {
+      const t = (top - CHROMA_MAX) / (top - 1);
+      cr += (1 - cr) * t;
+      cg += (1 - cg) * t;
+      cb += (1 - cb) * t;
+    }
+    const pick = rnd();
+    const nudge = pick < NUDGE_SHARE ? BLUE_WHITE : pick < 2 * NUDGE_SHARE ? AMBER : null;
+    if (nudge) {
+      cr += (nudge[0] - cr) * NUDGE_MIX;
+      cg += (nudge[1] - cg) * NUDGE_MIX;
+      cb += (nudge[2] - cb) * NUDGE_MIX;
+    }
+    colors[s * 3] = cr * raw;
+    colors[s * 3 + 1] = cg * raw;
+    colors[s * 3 + 2] = cb * raw;
+    scales[s] = Math.min(2, Math.max(0.5, Math.exp(0.35 * gauss())));
+    rawAll += raw;
+    if (s < STARS_LOW) rawLow += raw;
+    if (s % 1024 === 1023) yield;
+  }
+  return { positions, colors, scales, rawLow, rawAll, flux: flux * cell * cell };
+}
 
-    const core = new THREE.Color(PARAMS.coreColor);
-    const mid = new THREE.Color(PARAMS.midColor);
-    const edge = new THREE.Color(PARAMS.edgeColor);
-    const warm = new THREE.Color(PARAMS.warmColor);
-    const hii = new THREE.Color(PARAMS.hiiColor);
-    const tmp = new THREE.Color();
-    const rnd = makeRng(SEED.galaxy);
+// Module level, so a remount (StrictMode, a route change back home) neither fetches nor samples
+// again: the field is the same field for the whole session.
+let readback: Promise<Uint8ClampedArray | null> | null = null;
+let sampler: Generator<void, Field | null> | null = null;
+let field: Field | null = null;
+const drawingBuffer = new THREE.Vector2();
 
-    // Cluster centres on the arms' spines, drawn first so the disc below keeps one sequence.
-    const knotAt = Array.from({ length: PARAMS.knots }, (_, k) => {
-      const r = 1.1 + rnd() * (PARAMS.radius * PARAMS.rimStart - 1.1);
-      const b = ((k % PARAMS.branches) / PARAMS.branches) * Math.PI * 2;
-      const a = b + r * PARAMS.spin + (rnd() - 0.5) * PARAMS.armSpread * (0.25 + r / PARAMS.radius) + Math.sin(r * 2.7 + b * 1.7) * 0.16;
-      return [Math.cos(a) * r, Math.sin(a) * r];
+/**
+ * Written every frame for the rest of the scene to read.
+ * - `spin`: the disc's signed turn about y. Stream 2 lays the dive's late path and its target
+ *   star in this frame. Negative is clockwise seen from above, the way M101's arms trail: they
+ *   open counter-clockwise outward in the photograph (+83 deg per unit ln r, measured).
+ * - `handover`: k, 0 while the photo carries the disc and 1 once the stars do (Effects blends
+ *   the galaxy bloom with it).
+ */
+export const galaxyFrame = { spin: 0, handover: 0 };
+
+export default function Galaxy() {
+  const gl = useThree((s) => s.gl);
+  const high = useScene((s) => s.quality) === 'high';
+  const spinRef = useRef<THREE.Group>(null);
+  const discMatRef = useRef<THREE.ShaderMaterial>(null);
+  const starMatRef = useRef<THREE.ShaderMaterial>(null);
+  const pointsRef = useRef<THREE.Points>(null);
+  const turn = useRef(0);
+  const arrived = useRef(false);
+  const arrivedLate = useRef(false);
+  const fadeFrom = useRef<number | null>(null);
+  const hi = useRef<BitmapTextureLoad | null>(null);
+  const hiReady = useRef(false);
+  const hiUploaded = useRef(false);
+  const revealedAt = useRef<number | null>(null);
+  const stillSince = useRef(0);
+  const lastScroll = useRef(0);
+  const loFreed = useRef(false);
+
+  // Same anisotropy on both tiers, so they draw the same disc at a grazing angle.
+  const aniso = useMemo(() => Math.min(8, gl.capabilities.getMaxAnisotropy()), [gl]);
+  // Pre-uploaded, the one exception to bitmapTexture's startup rule: the loader waits for this
+  // disc (galaxyDiscReady) so that the first revealed frame has the galaxy in it.
+  const disc = useMemo(
+    () => loadBitmapTexture(DISC_URL, gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: aniso, preupload: true }),
+    [gl, aniso]
+  );
+  useEffect(() => {
+    disc.ready.then(() => {
+      // Decided here and not in the frame loop: the loader lifts on galaxyDiscReady, and a
+      // frame loop that read sceneReady could see it already true in the very frame this disc
+      // arrived and fade it in behind a loader that was waiting for it.
+      arrivedLate.current = useScene.getState().sceneReady;
+      arrived.current = true;
+      useScene.getState().setGalaxyDiscReady(true);
     });
+    return () => disc.dispose();
+  }, [disc]);
 
-    for (let i = 0; i < count; i++) {
-      const i3 = i * 3;
-      const bulge = i % 100 < PARAMS.bulgeShare * 100;
-      const pop = bulge ? 0 : rnd();
-      const diffuse = pop < PARAMS.diffuseShare;
-      const knot = !diffuse && pop < PARAMS.diffuseShare + PARAMS.knotShare;
-      // The disc keeps the old radial law; the bulge is a separate, much tighter population,
-      // which is what makes the core a point instead of the inner half of the disc.
-      let radius = bulge
-        ? Math.pow(rnd(), 2.6) * PARAMS.bulgeRadius
-        : 0.35 + Math.pow(rnd(), PARAMS.radialPower) * (PARAMS.radius - 0.35);
-      const branchAngle = ((i % PARAMS.branches) / PARAMS.branches) * Math.PI * 2;
-      const spinAngle = radius * PARAMS.spin;
-      // Angular scatter across the arm, widening outward, with a cube law so the arm has a
-      // dense spine and thin edges. Plus a slow radial wobble so no arm is a clean curve.
-      const t = radius / PARAMS.radius;
-      const u = Math.pow(rnd(), 3) * (rnd() < 0.5 ? 1 : -1);
-      const spread = bulge || diffuse ? (rnd() - 0.5) * Math.PI * 2 : u * PARAMS.armSpread * (0.25 + t);
-      const wobble = bulge || diffuse ? 0 : Math.sin(radius * 2.7 + branchAngle * 1.7) * 0.16;
-      let angle = branchAngle + spinAngle + spread + wobble;
-      let knotId = -1;
-      if (knot) {
-        // A cluster: a tight Gaussian-ish ball around one of the centres on the spines.
-        knotId = Math.floor(rnd() * PARAMS.knots);
-        const c = knotAt[knotId];
-        const s = PARAMS.knotSize * Math.sqrt(-2 * Math.log(1 - rnd() * 0.999));
-        const th = rnd() * Math.PI * 2;
-        const x = c[0] + Math.cos(th) * s, z = c[1] + Math.sin(th) * s;
-        radius = Math.hypot(x, z);
-        angle = Math.atan2(z, x);
-      }
+  useEffect(() => {
+    if (!readback) readback = readDisc();
+    readback.then((px) => {
+      if (px && !sampler && !field) sampler = sampleField(px);
+    });
+  }, []);
 
-      // Dust lane: a band at a fixed angular offset inside each arm, taking most of the light
-      // from the points that fall in it. Additive blending cannot darken, so a lane can only be
-      // made by NOT drawing there.
-      // Position across the arm, in units of the arm's own half-width, so the lane keeps its
-      // proportions from the core to the rim instead of being a fixed angle.
-      const half = PARAMS.armSpread * (0.25 + t);
-      const across = spread / half;
-      // One lane per arm, on the trailing side only. A lane on BOTH sides of both arms is four
-      // dark features around the ring, which is exactly the four-fold signature G4 exists to
-      // remove: it took m4 from 0.087 back to 0.196. A real dust lane is one-sided anyway.
-      const inLane = !bulge && !diffuse && !knot && Math.abs(across - PARAMS.laneOffset) < PARAMS.laneWidth;
-      const laneKeep = inLane ? 1 - PARAMS.laneDepth : 1;
+  // The 4096 loads once the tier is high, and stays when the tier drops: going back down would
+  // re-upload the 2048 mid-session for no saving that matters. Decoded here, off the main
+  // thread; uploaded by the frame loop when the view is still (HI_AFTER_REVEAL_S).
+  useEffect(() => {
+    if (!high || hi.current) return;
+    const load = loadBitmapTexture(DISC_URL_HIGH, gl, { colorSpace: THREE.SRGBColorSpace, anisotropy: aniso });
+    hi.current = load;
+    load.ready.then((t) => {
+      if (t) hiReady.current = true;
+    });
+  }, [high, gl, aniso]);
+  useEffect(() => () => hi.current?.dispose(), []);
 
-      const rand = () =>
-        Math.pow(rnd(), PARAMS.randomnessPower) * (rnd() < 0.5 ? 1 : -1) * PARAMS.randomness * radius;
-
-      // The scatter in the disc plane is part of the position, so it turns with the pattern.
-      // In aRandomness it was added after the spin, a fixed offset in world space, which slid
-      // every point around its place as the disc turned and smeared any structure finer than
-      // the scatter - the dust filaments first of all.
-      const x = Math.cos(angle) * radius + rand();
-      const z = Math.sin(angle) * radius + rand();
-      positions[i3] = x;
-      positions[i3 + 1] = 0;
-      positions[i3 + 2] = z;
-
-      // Real 3D thickness: a spherical bulge near the core, a thin disc in the arms.
-      randomness[i3 + 1] = rand() * (0.25 + 1.1 * Math.exp(-radius * 0.85));
-
-      // Three-stage gradient: the old warm population (yellow core, cream inner disc) gives way
-      // to blue arms by warmReach, which turn indigo toward the rim. It was ivory into blue from
-      // the centre, which left the core the only warm thing and the inner arms white.
-      const tr = radius / PARAMS.radius;
-      if (bulge) tmp.copy(warm).lerp(core, Math.min(1, tr / (PARAMS.bulgeRadius / PARAMS.radius)) * 0.3);
-      else {
-        tmp.copy(mid).lerp(edge, Math.max(0, tr - 0.5) * 2);
-        if (tr < PARAMS.warmReach) tmp.lerp(warm, 1 - smoothstep(0.3, PARAMS.warmReach, tr));
-      }
-      // Every third cluster is a star-forming one, lit pink by its hydrogen.
-      if (knotId % 3 === 0) tmp.lerp(hii, 0.75);
-      colors[i3] = tmp.r;
-      colors[i3 + 1] = tmp.g;
-      colors[i3 + 2] = tmp.b;
-
-      // A few resolved stars: small and bright, so the disc has grain and not only glow.
-      const resolved = !bulge && rnd() < PARAMS.resolvedShare;
-      scales[i] = resolved ? 0.35 + rnd() * 0.2 : 0.5 + rnd() * 0.8;
-      // Rim fade: the old cloud had a hard outer edge that the frame cut off, so the galaxy ran
-      // off three borders. The outer third of the radius fades out instead, and the fade now
-      // runs all the way to the rim rather than finishing at 0.88 - a cloud that still carries
-      // light at the frame's edge but is visibly FALLING there is what "dissolving into black"
-      // means; stopping early is how the galaxy ended up small and centred.
-      const rim = 1 - smoothstep(PARAMS.rimStart, PARAMS.rimEnd, t);
-      const pDim = diffuse ? PARAMS.diffuseDim : PARAMS.discDim;
-      dims[i] = bulge ? PARAMS.bulgeGain : laneKeep * rim * pDim * dustKeep(x, z) * (resolved ? PARAMS.resolvedGain : 1);
-      if (!bulge) {
-        const gi = Math.floor(((x + PARAMS.radius) / (2 * PARAMS.radius)) * LIGHT_GRID);
-        const gj = Math.floor(((z + PARAMS.radius) / (2 * PARAMS.radius)) * LIGHT_GRID);
-        if (gi >= 0 && gj >= 0 && gi < LIGHT_GRID && gj < LIGHT_GRID) light[gj * LIGHT_GRID + gi] += laneKeep * rim * pDim;
-      }
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
-    geo.setAttribute('aRandomness', new THREE.BufferAttribute(randomness, 3));
-    geo.setAttribute('aDim', new THREE.BufferAttribute(dims, 1));
-    return { geo, dustTex: dustTexture(light) };
-  }, [count]);
-
-  const uniforms = useMemo(
+  const discUniforms = useMemo(
     () => ({
-      uTime: { value: 0 },
-      uSize: { value: 40 },
-      uPixelRatio: { value: pixelRatio },
+      uMap: { value: disc.texture },
+      uGain: { value: 0 },
+      uMinInv: { value: MIN_INV },
+      uMoutInv: { value: MOUT_INV },
     }),
-    [pixelRatio]
+    [disc]
+  );
+  const starUniforms = useMemo(
+    () => ({
+      uFocal: { value: 1 },
+      uEnergy: { value: 0 },
+      uSigma: { value: STAR_SIGMA },
+      uPeak: { value: STAR_PEAK },
+      uSigmaMax: { value: 3 },
+    }),
+    []
   );
 
-  const dustRef = useRef<THREE.Mesh>(null);
-  const galaxyCentre = useMemo(() => new THREE.Vector3(), []);
-  const dust = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(2 * PARAMS.radius, 2 * PARAMS.radius);
-    geo.rotateX(-Math.PI / 2);
-    return { geo, uniforms: { uDust: { value: geometry.dustTex }, uRadius: { value: PARAMS.radius }, uDepth: { value: PARAMS.dustLayer }, uFade: { value: 1 }, uSky: { value: new THREE.Color(PARAMS.dustColor) } } };
-  }, [geometry]);
+  useFrame(({ camera, clock, gl: renderer }, dt) => {
+    const group = spinRef.current;
+    const discMat = discMatRef.current;
+    const starMat = starMatRef.current;
+    const points = pointsRef.current;
+    if (!group || !discMat || !starMat || !points) return;
+    const st = useScene.getState();
 
-  useFrame(({ camera }, dt) => {
-    if (!matRef.current) return;
-    const u = matRef.current.uniforms.uTime;
-    u.value += dt;
-    const mesh = dustRef.current;
-    if (!mesh) return;
-    // The vertex shader turns the cloud by uTime * 0.045 about y; the dust turns with it.
-    mesh.rotation.y = u.value * 0.045;
-    // The welcome shot sits ~9.9 from the centre. The dust is for that view: on the dive the
-    // whole frame is disc, and with full dust the passage sank below a mean of 20 for 300ms.
-    const d = camera.position.distanceTo(mesh.getWorldPosition(galaxyCentre));
-    (mesh.material as THREE.ShaderMaterial).uniforms.uFade.value = THREE.MathUtils.smoothstep(d, 6.5, 9.2);
+    if (sampler) {
+      const t0 = performance.now();
+      let step = sampler.next();
+      while (!step.done && performance.now() - t0 < SAMPLE_BUDGET_MS) step = sampler.next();
+      if (step.done) {
+        field = step.value;
+        sampler = null;
+      }
+    }
+    const geo = points.geometry;
+    // No attributes until the field is whole: an attribute three has seen is uploaded on the
+    // first draw, so empty placeholders would cost the 5.6 MB upload twice.
+    if (field && !geo.getAttribute('position')) {
+      geo.setAttribute('position', new THREE.BufferAttribute(field.positions, 3));
+      geo.setAttribute('aColor', new THREE.BufferAttribute(field.colors, 3));
+      geo.setAttribute('aScale', new THREE.BufferAttribute(field.scales, 1));
+    }
+    const starsOn = field !== null && geo.getAttribute('position') !== undefined;
+    if (starsOn) geo.setDrawRange(0, high ? STARS_MAX : STARS_LOW);
+
+    // The turn eases out over the first 15% of the scroll, so the dive starts from a still disc.
+    turn.current += SPIN_RATE * dt * (1 - smoothstep(0, 0.15, st.scrollProgress)) * Math.max(0, 1 - turn.current / SPIN_MAX);
+    group.rotation.y = -turn.current;
+    galaxyFrame.spin = group.rotation.y;
+
+    // A disc decoded before the loader lifted is there from the first revealed frame; a later
+    // one fades in.
+    if (arrived.current && fadeFrom.current === null) fadeFrom.current = arrivedLate.current ? clock.elapsedTime : -Infinity;
+    const load = fadeFrom.current === null ? 0 : Math.min(1, (clock.elapsedTime - fadeFrom.current) / LOAD_FADE_S);
+
+    const now = clock.elapsedTime;
+    if (st.sceneReady && revealedAt.current === null) revealedAt.current = now;
+    if (st.scrollProgress !== lastScroll.current || st.scrollProgress > 0) stillSince.current = now;
+    lastScroll.current = st.scrollProgress;
+    if (
+      hiReady.current && hi.current && !hiUploaded.current
+      && revealedAt.current !== null && now - revealedAt.current > HI_AFTER_REVEAL_S
+      && now - stillSince.current > HI_IDLE_S
+    ) {
+      renderer.initTexture(hi.current.texture);
+      hiUploaded.current = true;
+    }
+    if (hiUploaded.current && hi.current) {
+      discMat.uniforms.uMap.value = hi.current.texture;
+      if (!loFreed.current) {
+        loFreed.current = true;
+        disc.dispose();
+      }
+    }
+
+    // The act group sits at the origin, so the camera's y is its height over the disc. Until
+    // the stars exist the photo carries all the light.
+    const k = 1 - smoothstep(HANDOVER[0], HANDOVER[1], camera.position.y);
+    galaxyFrame.handover = k;
+    const share = starsOn ? REST_STARS + (1 - REST_STARS) * k : 0;
+    discMat.uniforms.uGain.value = (1 - share) * load * GX[0];
+    if (field) {
+      const drawn = high ? field.rawAll : field.rawLow;
+      starMat.uniforms.uEnergy.value = ((share * field.flux) / drawn) * load * GX[1];
+    }
+    // Pixels per world unit at unit depth: projection[5] = 1 / tan(fov / 2).
+    const size = renderer.getDrawingBufferSize(drawingBuffer);
+    starMat.uniforms.uFocal.value = camera.projectionMatrix.elements[5] * 0.5 * size.y;
+    starMat.uniforms.uSigmaMax.value = 3 * renderer.getPixelRatio();
   });
 
-  // Points never raycast (perf trap); frustumCulled off so the custom-geometry
-  // bounding sphere can't cull the galaxy at steep dive angles.
+  // Raycasting off on both (perf trap); the points are never culled, as their bounds are empty
+  // until the field lands.
   return (
-    <points geometry={geometry.geo} raycast={() => null} frustumCulled={false}>
-      <shaderMaterial
-        ref={matRef}
-        vertexShader={galaxyVertexShader}
-        fragmentShader={galaxyFragmentShader}
-        uniforms={uniforms}
-        transparent
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-      />
-      <mesh ref={dustRef} geometry={dust.geo} renderOrder={1} raycast={() => null}>
+    <group ref={spinRef}>
+      <mesh rotation-x={-Math.PI / 2} raycast={() => null}>
+        <planeGeometry args={[2 * R, 2 * R]} />
         <shaderMaterial
-          vertexShader={dustVertex}
-          fragmentShader={dustFragment}
-          uniforms={dust.uniforms}
+          ref={discMatRef}
+          vertexShader={discVertexShader}
+          fragmentShader={discFragmentShader}
+          uniforms={discUniforms}
           transparent
           depthWrite={false}
           side={THREE.DoubleSide}
-          toneMapped={false}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
-    </points>
+      <points ref={pointsRef} raycast={() => null} frustumCulled={false}>
+        <bufferGeometry />
+        <shaderMaterial
+          ref={starMatRef}
+          vertexShader={starVertexShader}
+          fragmentShader={starFragmentShader}
+          uniforms={starUniforms}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </points>
+    </group>
   );
 }

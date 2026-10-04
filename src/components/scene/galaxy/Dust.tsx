@@ -3,6 +3,9 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { makeRng, SEED } from '@/lib/rng';
+import { galaxyFrame } from './Galaxy';
+
+const OPACITY = 0.28;
 
 function softDot() {
   const c = document.createElement('canvas');
@@ -18,12 +21,19 @@ function softDot() {
 
 /**
  * Foreground interstellar dust — large soft motes scattered through the volume
- * (many between camera and galaxy) so parallax always has something drifting near
+ * (many between camera and galaxy) so the dive always has something drifting past
  * the lens. Additive, faint, slowly turning.
+ *
+ * Dive only. At rest the disc is a Hubble photograph, and against its neutral sky the motes
+ * read as lens orbs a telescope never shows; they fade in with the star field's handover,
+ * which is where the camera comes down among them and parallax starts to matter. Neutral
+ * grey for the same reason - the old blue matched the purple sky that is gone. One count
+ * for every tier: 70 points cost nothing, and a tier must not change what is on screen.
  */
 export default function Dust({ count = 70 }: { count?: number }) {
   const tex = useMemo(() => softDot(), []);
   const ref = useRef<THREE.Points>(null);
+  const matRef = useRef<THREE.PointsMaterial>(null);
   const geo = useMemo(() => {
     const pos = new Float32Array(count * 3);
     const rnd = makeRng(SEED.foregroundDust);
@@ -45,17 +55,21 @@ export default function Dust({ count = 70 }: { count?: number }) {
       ref.current.rotation.y += dt * 0.01;
       ref.current.rotation.x += dt * 0.004;
     }
+    if (matRef.current) {
+      matRef.current.opacity = OPACITY * galaxyFrame.handover;
+    }
   });
 
   return (
     <points ref={ref} geometry={geo} raycast={() => null} frustumCulled={false}>
       <pointsMaterial
+        ref={matRef}
         map={tex}
-        color="#9fb0e8"
+        color="#c2c6d0"
         size={0.7}
         sizeAttenuation
         transparent
-        opacity={0.28}
+        opacity={0}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />

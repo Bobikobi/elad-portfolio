@@ -5,6 +5,7 @@
  *
  *   BASE=<preview url> TAG=master node scripts/harness/galaxy-rest.mjs
  *   BASE=<preview url> TAG=v12 FRAMES=1600,2600,3600,4600,5600,6600 node ...
+ *   TIER=low EXTRA_QS=gx=1,0 ...   (tier and HUD knobs)
  *
  * SEVERAL FRAMES IN ONE RUN. The welcome shot is not a still: the camera orbits the galaxy on
  * three periods of 70 to 101 seconds, so one frozen frame is one pose out of a cycle, and a
@@ -32,6 +33,8 @@ const FRAMES = (process.env.FRAMES || process.env.FRAME || '1600')
   .sort((a, b) => a - b);
 const SETTLE = Number(process.env.SETTLE || 14000);
 const EXTRA_QS = process.env.EXTRA_QS || '';
+// The quality tier the page is forced to; M3 (tier law) captures `low` against `high`.
+const TIER = process.env.TIER || 'high';
 if (!TAG) { console.error('TAG is required'); process.exit(2); }
 if (!FRAMES.length) { console.error('FRAMES is empty'); process.exit(2); }
 fs.mkdirSync(OUT, { recursive: true });
@@ -61,7 +64,7 @@ try {
   });
   if (!/angle|vulkan/i.test(gpu) || /swiftshader|llvmpipe/i.test(gpu)) await fail(`NO REAL GPU (${gpu}) - refusing to measure`);
 
-  await page.goto(`${BASE}/?hud=1&tier=high&fixedStep${EXTRA_QS ? `&${EXTRA_QS}` : ''}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto(`${BASE}/?hud=1&tier=${TIER}&fixedStep${EXTRA_QS ? `&${EXTRA_QS}` : ''}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await new Promise((r) => setTimeout(r, SETTLE));
 
   const freezeAt = async (frame) => {
