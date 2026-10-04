@@ -6,7 +6,8 @@ import { softSprite } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 import { useScene } from '@/lib/sceneStore';
 
-// Where the dive ends (CameraRig DIVE_P1). The disc there is only ~0.25 thick, so a camera
+// Where the dive ends (CameraRig DIVE_P1, within 0.2 of this since the locked dive of #82 stage 2
+// moved it 0.35 short of DIVE_STAR). The disc there is only ~0.25 thick, so a camera
 // that arrives inside it sees a bright line over black; this fills the space around the
 // arrival point with stars above and below the plane so the arrival reads as being INSIDE.
 const CENTRE = new THREE.Vector3(3.7, 0, 1.5);

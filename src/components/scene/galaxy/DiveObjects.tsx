@@ -8,9 +8,12 @@ import { useScene } from '@/lib/sceneStore';
 
 // Three things to fly past on the way down, each visible only inside its own scroll window
 // (zero at rest, so the at-rest frame and its C4a baseline are untouched) and each a pure
-// function of scroll, so scrolling back retraces every encounter. Positions are 0.5-0.7
-// units to the LEFT of the camera path (CameraRig DIVE_*), a little ahead of where the
-// camera is at the window's middle, so each grows and then leaves through the left edge.
+// function of scroll, so scrolling back retraces every encounter. Each sits ahead of where
+// the camera is at its window's middle (CameraRig DIVE_*), off the line of sight below it and,
+// for the later two, to its right, so each grows and then leaves through the lower edge.
+// #82 stage 2 re-placed them on the locked dive's path at the same offsets in the camera's
+// frame they had on the old one; the shell is lifted from y -0.44 to 0.15, out from under the
+// disc it would otherwise be seen through.
 // The concept is Astra's (forked dust pillars, a cluster with separate cores, a dying star's
 // broken shell); the numbers were placed against the sampled path.
 
@@ -91,9 +94,9 @@ function shellTexture() {
   });
 }
 
-const PILLARS_AT = new THREE.Vector3(0.12, 1.0, 6.0);
-const CLUSTER_AT = new THREE.Vector3(2.21, 0.5, 2.76);
-const SHELL_AT = new THREE.Vector3(2.84, 0.25, 1.74);
+const PILLARS_AT = new THREE.Vector3(0.49, 0.83, 5.83);
+const CLUSTER_AT = new THREE.Vector3(2.87, 0.02, 2.96);
+const SHELL_AT = new THREE.Vector3(3.74, 0.15, 2.62);
 
 export default function DiveObjects() {
   const pillarMat = useRef<THREE.SpriteMaterial>(null);

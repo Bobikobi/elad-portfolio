@@ -4,10 +4,11 @@ import DiveNeighbourhood from '../galaxy/DiveNeighbourhood';
 import DiveObjects from '../galaxy/DiveObjects';
 import Dust from '../galaxy/Dust';
 import DiveFade from '../galaxy/DiveFade';
+import DiveStar from '../galaxy/DiveStar';
 
 /**
  * Act 1 content: the galaxy - the Hubble photograph of M101 with a star field drawn from it
- * (Galaxy.tsx) - its foreground dust, and the dive's fade to black.
+ * (Galaxy.tsx) - its foreground dust, the dive's fade to black, and the star the dive flies into.
  * The shared sky (gradient + star sphere + nebulae) lives in SceneRoot, so it persists
  * across the act swap. Camera + post FX also live in SceneRoot.
  *
@@ -26,6 +27,7 @@ export default function GalaxyAct() {
       <DiveNeighbourhood />
       <DiveObjects />
       <DiveFade />
+      <DiveStar />
       <Dust />
     </>
   );
