@@ -45,19 +45,45 @@ export const discVertexShader = /* glsl */ `
   }
 `;
 
+/**
+ * The photograph scintillates (owner, 2026-10-04: "not rich and alive enough"). Only its fine,
+ * bright grain - the stars and knots, what stands above a 4-mip blur of itself - is modulated,
+ * by a noise field ~6 px across that drifts on the clock, so the light of every patch averages
+ * to the photo's and the smooth arm light and the dark lanes stay still. uShimmer is the depth: 0.8 takes a
+ * knot from a fifth to 1.8 times its excess light. A 2-mip blur and a 520-cell field were the
+ * first pick and measured nothing: at the disc's on-screen size both are under a pixel.
+ */
 export const discFragmentShader = /* glsl */ `
   uniform sampler2D uMap;
   uniform float uGain;
+  uniform float uTime;
+  uniform float uShimmer;
   varying vec2 vUv;
   varying vec3 vWorld;
   ${inverseAces}
+  float hash3(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+  }
+  float vnoise(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash3(i), hash3(i + vec3(1, 0, 0)), f.x), mix(hash3(i + vec3(0, 1, 0)), hash3(i + vec3(1, 1, 0)), f.x), f.y),
+               mix(mix(hash3(i + vec3(0, 0, 1)), hash3(i + vec3(1, 0, 1)), f.x), mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+  }
   void main() {
     // The disc lies in y = 0 and only ever turns about y. Seen edge-on a photograph is a sheet
     // of paper, so it fades as the line of sight flattens onto it; the stars, which have
     // depth, are what the eye has there.
     vec3 v = vWorld - cameraPosition;
     float graze = smoothstep(0.06, 0.22, abs(v.y) / length(v));
-    gl_FragColor = vec4(invACES(texture2D(uMap, vUv).rgb) * (uGain * graze), 1.0);
+    vec3 t = texture2D(uMap, vUv).rgb;
+    vec3 grain = max(t - texture2D(uMap, vUv, 4.0).rgb, 0.0);
+    float tw = vnoise(vec3(vUv * 140.0, uTime * 1.2)) * 2.0 - 1.0;
+    t += grain * (uShimmer * tw);
+    gl_FragColor = vec4(invACES(t) * (uGain * graze), 1.0);
   }
 `;
 
@@ -82,6 +108,8 @@ export const starVertexShader = /* glsl */ `
   uniform float uSigma;
   uniform float uPeak;
   uniform float uSigmaMax;
+  uniform float uTime;
+  uniform float uTwinkle;
 
   attribute vec3 aColor;
   attribute float aScale;
@@ -96,7 +124,11 @@ export const starVertexShader = /* glsl */ `
 
     float z = max(-viewPosition.z, 1e-3);
     float s = uFocal / z;
-    vec3 light = aColor * (uEnergy * s * s);
+    // Each star twinkles on its own rate and phase, hashed from where it lies; the sine averages
+    // to 0, so the field's light - and the energy law's hand-over - is unchanged on average.
+    float h = fract(sin(dot(position.xz, vec2(12.9898, 78.233))) * 43758.5453);
+    float tw = 1.0 + uTwinkle * sin(uTime * (0.8 + 2.4 * h) + 40.0 * h);
+    vec3 light = aColor * (uEnergy * s * s * tw);
     float lum = dot(light, vec3(0.2126, 0.7152, 0.0722));
     float sigma = max(max(0.5, uSigma * aScale * s), sqrt(lum / (6.2831853 * uPeak)));
     sigma = min(sigma, uSigmaMax);

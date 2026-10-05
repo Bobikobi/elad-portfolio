@@ -11,7 +11,8 @@ import { RING_OUTER_R } from '@/lib/planetPositions';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect, livePlanetPlane } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 import { diveAt, arriveAt } from '@/lib/passageProfile';
-import { DIVE_STAR } from '@/lib/diveStar';
+import { diveStarAt } from '@/lib/diveStar';
+import { galaxyFrame } from './galaxy/Galaxy';
 import { NEUTRAL_APERTURE, ORBIT_APERTURE } from '@/lib/photometry';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useMotionDisabled } from '@/hooks/useMotionDisabled';
@@ -26,6 +27,12 @@ const DEV = process.env.NODE_ENV !== 'production';
 /** See the note at the `livePlanetRect` write below. Read once, at import. */
 const DISC_PROBE =
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discprobe');
+/**
+ * `?camhold` (HUD builds): the welcome shot's idle orbit and depth breathing stand still, so a
+ * measurement of the galaxy's own motion at rest (rest-life.mjs, C3) is not swamped by the camera's.
+ */
+const CAM_HOLD =
+  HUD_AVAILABLE && typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('camhold');
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
 
@@ -283,20 +290,29 @@ const LOOK = new THREE.Vector3(0, 1.5, 0);
 // #82 stage 2, the locked dive: the end used to slide sideways - in its last 0.5s the camera
 // travelled up to 33 deg off where it looked, and slowed from 9 to 4 units/s into the curtain,
 // which read as "the camera moves to a strange place and then the animation starts". It now
-// flies INTO a star (DIVE_STAR): the last leg is a straight push along DIVE_PUSH, the look
+// flies INTO a star (lib/diveStar): the last leg is a straight push along DIVE_PUSH, the look
 // settles on the star by 62% of the dive, and the swap curtain's warm centre grows out of it.
+// The star is a knot of the turning disc, so the late path is laid on wherever the turn left it
+// (planDive) - moved, not turned, so the push and every turn rate along it stay as flown.
 const DIVE_P0 = new THREE.Vector3(0, 4.6, 8.0);
 const LOOK_START = new THREE.Vector3(0, 1.5, 0);
-const DIVE_TARGET = new THREE.Vector3(...DIVE_STAR);
+const DIVE_TARGET = new THREE.Vector3();
 // 30 deg down, 30 deg right of straight-in: the push comes from above the disc, so the photo
 // stays in view under the star instead of collapsing to an edge-on line.
 const DIVE_PUSH = new THREE.Vector3(Math.sin(Math.PI / 6) * Math.cos(Math.PI / 6), -0.5, -Math.cos(Math.PI / 6) * Math.cos(Math.PI / 6));
 // Ends 0.35 short of the star, still above the disc (y 0.175): the curtain is shut by then.
-const DIVE_P1 = DIVE_TARGET.clone().addScaledVector(DIVE_PUSH, -0.35);
+const DIVE_P1 = new THREE.Vector3();
 // C1 leaves P0 along the idle shot's own sightline, so the first frames of the dive keep going
-// where the welcome shot already looked. C2 lines the last 3 units up on the push.
+// where the welcome shot already looked. C2 lines the last leg up on the push (DIVE_LEG).
 const DIVE_C1 = DIVE_P0.clone().addScaledVector(LOOK_START.clone().sub(DIVE_P0).normalize(), 1.5);
-const DIVE_C2 = DIVE_P1.clone().addScaledVector(DIVE_PUSH, -3);
+const DIVE_C2 = new THREE.Vector3();
+// The straight leg is 3 units for the knot where the disc starts, and grows by 1.75 for every
+// unit the turn has carried the knot: the path bends further to reach a knot that moved, and a
+// visitor who rested long enough for the full turn (0.5 rad, the knot 1.75 away) flew the last
+// 0.5s 9.3 deg off the look on a 3-unit leg (D1's bar is 8), 6.3 on a 6-unit one.
+const DIVE_LEG = 3;
+const DIVE_LEG_PER_UNIT = 1.75;
+const _knot0 = diveStarAt(0, new THREE.Vector3());
 // The look leaves LOOK_START (same point as LOOK, so the handover at scroll 0.015 cannot jump)
 // and settles on the star at this fraction of the dive.
 const DIVE_LOCK = 0.62;
@@ -318,18 +334,25 @@ function cubicBezier(out: THREE.Vector3, p0: THREE.Vector3, c1: THREE.Vector3, c
 // where the curve bends, so the camera slowed through the S and sagged into the curtain. With
 // distance = diveAt(p) the speed is diveAt's own, which rises all the way to the shut.
 const DIVE_ARC_N = 256;
-const DIVE_ARC = (() => {
-  const s = new Float32Array(DIVE_ARC_N + 1);
+const DIVE_ARC = new Float32Array(DIVE_ARC_N + 1);
+let divePlannedFor = NaN;
+/** Lays the late path on the knot as the disc stands at `spin`; a no-op while the disc is still. */
+function planDive(spin: number) {
+  if (spin === divePlannedFor) return;
+  divePlannedFor = spin;
+  diveStarAt(spin, DIVE_TARGET);
+  DIVE_P1.copy(DIVE_TARGET).addScaledVector(DIVE_PUSH, -0.35);
+  DIVE_C2.copy(DIVE_P1).addScaledVector(DIVE_PUSH, -(DIVE_LEG + DIVE_LEG_PER_UNIT * DIVE_TARGET.distanceTo(_knot0)));
   const a = new THREE.Vector3(), b = new THREE.Vector3();
   cubicBezier(a, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, 0);
   for (let i = 1; i <= DIVE_ARC_N; i++) {
     cubicBezier(b, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, i / DIVE_ARC_N);
-    s[i] = s[i - 1] + a.distanceTo(b);
+    DIVE_ARC[i] = DIVE_ARC[i - 1] + a.distanceTo(b);
     a.copy(b);
   }
-  for (let i = 1; i <= DIVE_ARC_N; i++) s[i] /= s[DIVE_ARC_N];
-  return s;
-})();
+  for (let i = 1; i <= DIVE_ARC_N; i++) DIVE_ARC[i] /= DIVE_ARC[DIVE_ARC_N];
+}
+planDive(0);
 /** Bézier parameter at fraction `e` of the dive's length. */
 function diveParam(e: number) {
   const x = clamp01(e);
@@ -1507,14 +1530,15 @@ export default function CameraRig() {
         // 30 degrees above the plane, where the same circle comes back at about 0.5 and the
         // galaxy occupies the frame in BOTH directions. LOOK stays at y 1.5, above the disc, so
         // the sightline still tilts down and the galaxy still sits in the lower half.
+        const ti = CAM_HOLD ? 0 : t;
         _tgt.set(
           px * 1.8,
           4.6 + py * 1.2,
-          8.0 + Math.cos(t * 0.085) * 0.9
+          8.0 + Math.cos(ti * 0.085) * 0.9
         );
         applyOrbit(_tgt, LOOK,
-          orbit.current.yaw + Math.sin(t * 0.09) * 0.13,   // drag-to-rotate (T6) + idle orbit
-          orbit.current.pitch + Math.sin(t * 0.062) * 0.05);
+          orbit.current.yaw + Math.sin(ti * 0.09) * 0.13,   // drag-to-rotate (T6) + idle orbit
+          orbit.current.pitch + Math.sin(ti * 0.062) * 0.05);
         damp3(cam.position, _tgt, 0.5, dt);
         damp(cam, 'fov', 55, 0.5, dt);
         cam.lookAt(LOOK.x, LOOK.y, LOOK.z);
@@ -1524,6 +1548,7 @@ export default function CameraRig() {
         // swap and is still accelerating there (#82): it used to finish at scroll 0.865 on an
         // in-out ease, so the camera stood still in front of the closing curtain.
         const e = diveAt(p);
+        planDive(galaxyFrame.spin);
         cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, diveParam(e));
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);

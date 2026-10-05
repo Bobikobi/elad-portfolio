@@ -44,11 +44,18 @@ const GAMMA = 0.55;
 // photo foreshortens with the view (about 0.5 at the welcome elevation) and points do not, so
 // the screen share runs above this. 0.026 was the geometric estimate and measured 7.1% (frame
 // sums of ?gx=0,1 against ?gx=1,0, sky taken off, 2026-10-04); scaled down to land near 5.
-const REST_STARS = 0.019;
+const REST_STARS = 0.011;
+// The thick-disc layer's share (buildHalo): it and REST_STARS split the 0.019 that measured M2
+// at 5.4%, so the stars' share of the rest frame stays where M2 put it.
+const HALO_SHARE = 0.008;
+// Stars lifted out of the disc plane, and the height they are lifted by: a thick disc of 0.35
+// thickening to 0.7 over the bulge. One count on every tier (composition law).
+const HALO_N = 2500;
+const HALO_H = 0.35;
 // rad/s: a turn every ten minutes, felt rather than watched.
 const SPIN = 0.01;
 // The turn eases to a stop at half a radian (time constant 50 s), so the dive's late path,
-// which is laid in this frame (stream 2), never meets a galaxy turned further than was flown.
+// which is laid on a knot of this disc (lib/diveStar), never moves further than was flown.
 const SPIN_MAX = 0.5;
 // World units: below half a pixel everywhere except the last unit of the dive, where a star
 // passing the lens grows to the shader's size cap.
@@ -117,6 +124,20 @@ const R = (() => {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) throw new Error(`Galaxy: ?gr must be a radius > 0 - got "${v}"`);
   return n;
+})();
+// Life at rest (owner, 2026-10-04: "not rich and alive enough"): how far the photo's grain
+// scintillates (shaders.ts, discFragmentShader) and how far each star twinkles. `?life=s,t` in
+// HUD builds is the sweep knob.
+const SHIMMER = 0.8;
+const TWINKLE = 0.35;
+const LIFE: [number, number] = (() => {
+  const v = hudParam('life');
+  if (!v) return [SHIMMER, TWINKLE];
+  const n = v.split(',').map(Number);
+  if (n.length !== 2 || n.some((x) => !Number.isFinite(x) || x < 0 || x > 1)) {
+    throw new Error(`Galaxy: ?life must be shimmer,twinkle in 0..1 - got "${v}"`);
+  }
+  return [n[0], n[1]];
 })();
 const SPIN_RATE = (() => {
   const v = hudParam('spin');
@@ -304,11 +325,44 @@ function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
   return { positions, colors, scales, rawLow, rawAll, flux: flux * cell * cell };
 }
 
+/**
+ * The galaxy's depth (owner, 2026-10-04: "depth, layers, parallax"). The photograph is a sheet
+ * and the field stars carry 1% of the light at rest, so as the welcome camera orbits nothing
+ * moves against anything. This layer is the first HALO_N stars of the field - placed by the
+ * photo's light, so over the arms and the core - lifted off the plane on both sides and each
+ * carrying about 60 field stars' light, so they read as single bright stars that slide over the
+ * arms beneath them as the view turns.
+ */
+interface Halo {
+  positions: Float32Array;
+  colors: Float32Array;
+  scales: Float32Array;
+  raw: number;
+}
+function buildHalo(f: Field): Halo {
+  const rnd = makeRng(SEED.galaxyHalo);
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+  const positions = new Float32Array(HALO_N * 3);
+  const colors = f.colors.slice(0, HALO_N * 3);
+  const scales = f.scales.slice(0, HALO_N);
+  let raw = 0;
+  for (let s = 0; s < HALO_N; s++) {
+    const x = f.positions[s * 3];
+    const z = f.positions[s * 3 + 2];
+    positions[s * 3] = x;
+    positions[s * 3 + 1] = gauss() * HALO_H * (1 + Math.exp(-((Math.hypot(x, z) / 1.2) ** 2)));
+    positions[s * 3 + 2] = z;
+    raw += lum(colors[s * 3], colors[s * 3 + 1], colors[s * 3 + 2]);
+  }
+  return { positions, colors, scales, raw };
+}
+
 // Module level, so a remount (StrictMode, a route change back home) neither fetches nor samples
 // again: the field is the same field for the whole session.
 let readback: Promise<Uint8ClampedArray | null> | null = null;
 let sampler: Generator<void, Field | null> | null = null;
 let field: Field | null = null;
+let halo: Halo | null = null;
 const drawingBuffer = new THREE.Vector2();
 
 /**
@@ -328,6 +382,8 @@ export default function Galaxy() {
   const discMatRef = useRef<THREE.ShaderMaterial>(null);
   const starMatRef = useRef<THREE.ShaderMaterial>(null);
   const pointsRef = useRef<THREE.Points>(null);
+  const haloRef = useRef<THREE.Points>(null);
+  const haloMatRef = useRef<THREE.ShaderMaterial>(null);
   const turn = useRef(0);
   const arrived = useRef(false);
   const arrivedLate = useRef(false);
@@ -384,6 +440,8 @@ export default function Galaxy() {
     () => ({
       uMap: { value: disc.texture },
       uGain: { value: 0 },
+      uTime: { value: 0 },
+      uShimmer: { value: LIFE[0] },
       uMinInv: { value: MIN_INV },
       uMoutInv: { value: MOUT_INV },
     }),
@@ -396,6 +454,20 @@ export default function Galaxy() {
       uSigma: { value: STAR_SIGMA },
       uPeak: { value: STAR_PEAK },
       uSigmaMax: { value: 3 },
+      uTime: { value: 0 },
+      uTwinkle: { value: LIFE[1] },
+    }),
+    []
+  );
+  const haloUniforms = useMemo(
+    () => ({
+      uFocal: { value: 1 },
+      uEnergy: { value: 0 },
+      uSigma: { value: STAR_SIGMA },
+      uPeak: { value: STAR_PEAK },
+      uSigmaMax: { value: 3 },
+      uTime: { value: 0 },
+      uTwinkle: { value: LIFE[1] },
     }),
     []
   );
@@ -425,11 +497,20 @@ export default function Galaxy() {
       geo.setAttribute('aColor', new THREE.BufferAttribute(field.colors, 3));
       geo.setAttribute('aScale', new THREE.BufferAttribute(field.scales, 1));
     }
+    const haloPts = haloRef.current;
+    if (field && haloPts && !haloPts.geometry.getAttribute('position')) {
+      halo ??= buildHalo(field);
+      haloPts.geometry.setAttribute('position', new THREE.BufferAttribute(halo.positions, 3));
+      haloPts.geometry.setAttribute('aColor', new THREE.BufferAttribute(halo.colors, 3));
+      haloPts.geometry.setAttribute('aScale', new THREE.BufferAttribute(halo.scales, 1));
+    }
     const starsOn = field !== null && geo.getAttribute('position') !== undefined;
     if (starsOn) geo.setDrawRange(0, high ? STARS_MAX : STARS_LOW);
 
-    // The turn eases out over the first 15% of the scroll, so the dive starts from a still disc.
-    turn.current += SPIN_RATE * dt * (1 - smoothstep(0, 0.15, st.scrollProgress)) * Math.max(0, 1 - turn.current / SPIN_MAX);
+    // The turn stops the moment the scroll leaves 0: the dive's target is a knot of this disc
+    // (lib/diveStar), and a disc that kept turning would carry it off the path being flown. At
+    // this rate the stop is a hundredth of a pixel a frame - nothing to ease.
+    if (st.scrollProgress <= 0) turn.current += SPIN_RATE * dt * Math.max(0, 1 - turn.current / SPIN_MAX);
     group.rotation.y = -turn.current;
     galaxyFrame.spin = group.rotation.y;
 
@@ -439,6 +520,8 @@ export default function Galaxy() {
     const load = fadeFrom.current === null ? 0 : Math.min(1, (clock.elapsedTime - fadeFrom.current) / LOAD_FADE_S);
 
     const now = clock.elapsedTime;
+    discMat.uniforms.uTime.value = now;
+    starMat.uniforms.uTime.value = now;
     if (st.sceneReady && revealedAt.current === null) revealedAt.current = now;
     if (st.scrollProgress !== lastScroll.current || st.scrollProgress > 0) stillSince.current = now;
     lastScroll.current = st.scrollProgress;
@@ -462,16 +545,26 @@ export default function Galaxy() {
     // the stars exist the photo carries all the light.
     const k = 1 - smoothstep(HANDOVER[0], HANDOVER[1], camera.position.y);
     galaxyFrame.handover = k;
-    const share = starsOn ? REST_STARS + (1 - REST_STARS) * k : 0;
-    discMat.uniforms.uGain.value = (1 - share) * load * GX[0];
+    const share = starsOn ? REST_STARS + (1 - REST_STARS - HALO_SHARE) * k : 0;
+    const haloShare = starsOn && halo ? HALO_SHARE : 0;
+    discMat.uniforms.uGain.value = (1 - share - haloShare) * load * GX[0];
     if (field) {
       const drawn = high ? field.rawAll : field.rawLow;
       starMat.uniforms.uEnergy.value = ((share * field.flux) / drawn) * load * GX[1];
+    }
+    const haloMat = haloMatRef.current;
+    if (haloMat) {
+      haloMat.uniforms.uEnergy.value = field && halo ? ((haloShare * field.flux) / halo.raw) * load * GX[1] : 0;
+      haloMat.uniforms.uTime.value = now;
     }
     // Pixels per world unit at unit depth: projection[5] = 1 / tan(fov / 2).
     const size = renderer.getDrawingBufferSize(drawingBuffer);
     starMat.uniforms.uFocal.value = camera.projectionMatrix.elements[5] * 0.5 * size.y;
     starMat.uniforms.uSigmaMax.value = 3 * renderer.getPixelRatio();
+    if (haloMat) {
+      haloMat.uniforms.uFocal.value = starMat.uniforms.uFocal.value;
+      haloMat.uniforms.uSigmaMax.value = starMat.uniforms.uSigmaMax.value;
+    }
   });
 
   // Raycasting off on both (perf trap); the points are never culled, as their bounds are empty
@@ -498,6 +591,18 @@ export default function Galaxy() {
           vertexShader={starVertexShader}
           fragmentShader={starFragmentShader}
           uniforms={starUniforms}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </points>
+      <points ref={haloRef} raycast={() => null} frustumCulled={false}>
+        <bufferGeometry />
+        <shaderMaterial
+          ref={haloMatRef}
+          vertexShader={starVertexShader}
+          fragmentShader={starFragmentShader}
+          uniforms={haloUniforms}
           transparent
           depthWrite={false}
           blending={THREE.AdditiveBlending}

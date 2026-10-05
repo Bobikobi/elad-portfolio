@@ -51,4 +51,5 @@ export const SEED = {
   moons: 0x5eed_0006,
   diveNeighbourhood: 0x5eed_000e,
   diveObjects: 0x5eed_0010,
+  galaxyHalo: 0x5eed_0011,
 } as const;

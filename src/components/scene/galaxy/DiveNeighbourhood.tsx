@@ -5,15 +5,21 @@ import * as THREE from 'three';
 import { softSprite } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 import { useScene } from '@/lib/sceneStore';
+import { DIVE_DESIGN, diveStarAt } from '@/lib/diveStar';
+import { galaxyFrame } from './Galaxy';
 
 // Where the dive ends (CameraRig DIVE_P1, within 0.2 of this since the locked dive of #82 stage 2
-// moved it 0.35 short of DIVE_STAR). The disc there is only ~0.25 thick, so a camera
+// moved it 0.35 short of the star), for the path as designed: the points move with the star
+// (lib/diveStar, `target - DIVE_DESIGN`). The disc there is only ~0.25 thick, so a camera
 // that arrives inside it sees a bright line over black; this fills the space around the
 // arrival point with stars above and below the plane so the arrival reads as being INSIDE.
 const CENTRE = new THREE.Vector3(3.7, 0, 1.5);
 const COUNT = 7000;
-const FADE_FROM = 0.35;
-const FADE_TO = 0.75;
+// From 0.15 of the scroll (was 0.35): the first half of the dive was the rest view getting
+// closer, fine detail 0.86-1.2 where the second half reached 3-7.5; the field fading in from
+// here doubles the dive's median fine detail (C4, M101 in motion, 2026-10-04).
+const FADE_FROM = 0.15;
+const FADE_TO = 0.6;
 const OPACITY = 0.9;
 
 const smoothstep = (a: number, b: number, x: number) => {
@@ -51,12 +57,18 @@ export default function DiveNeighbourhood() {
   // Handed in as a prop, so R3F does not dispose it; the act unmounts at every crossing.
   useEffect(() => () => geometry.dispose(), [geometry]);
 
+  const ptsRef = useRef<THREE.Points>(null);
   useFrame(() => {
+    if (ptsRef.current) {
+      diveStarAt(galaxyFrame.spin, ptsRef.current.position);
+      ptsRef.current.position.x -= DIVE_DESIGN[0];
+      ptsRef.current.position.z -= DIVE_DESIGN[2];
+    }
     if (matRef.current) matRef.current.opacity = smoothstep(FADE_FROM, FADE_TO, useScene.getState().scrollProgress) * OPACITY;
   });
 
   return (
-    <points geometry={geometry} raycast={() => null} frustumCulled={false}>
+    <points ref={ptsRef} geometry={geometry} raycast={() => null} frustumCulled={false}>
       <pointsMaterial
         ref={matRef}
         map={map}

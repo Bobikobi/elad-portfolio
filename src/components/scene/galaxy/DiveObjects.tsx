@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { softSprite } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 import { useScene } from '@/lib/sceneStore';
+import { DIVE_DESIGN, diveStarAt } from '@/lib/diveStar';
+import { galaxyFrame } from './Galaxy';
 
 // Three things to fly past on the way down, each visible only inside its own scroll window
 // (zero at rest, so the at-rest frame and its C4a baseline are untouched) and each a pure
@@ -97,6 +99,7 @@ function shellTexture() {
 const PILLARS_AT = new THREE.Vector3(0.49, 0.83, 5.83);
 const CLUSTER_AT = new THREE.Vector3(2.87, 0.02, 2.96);
 const SHELL_AT = new THREE.Vector3(3.74, 0.15, 2.62);
+const _shift = new THREE.Vector3();
 
 export default function DiveObjects() {
   const pillarMat = useRef<THREE.SpriteMaterial>(null);
@@ -128,7 +131,18 @@ export default function DiveObjects() {
     return { geo, cores };
   }, []);
 
+  const near = useRef<THREE.Group>(null);
+  const pillarRef = useRef<THREE.Sprite>(null);
   useFrame(() => {
+    // Laid along the path as designed and moved with its end (lib/diveStar): the cluster and the
+    // shell sit by the end (Bezier weight 0.94, 0.98), the pillars halfway (0.51).
+    if (near.current && pillarRef.current) {
+      diveStarAt(galaxyFrame.spin, _shift);
+      _shift.x -= DIVE_DESIGN[0];
+      _shift.z -= DIVE_DESIGN[2];
+      near.current.position.copy(_shift);
+      pillarRef.current.position.copy(PILLARS_AT).addScaledVector(_shift, 0.5);
+    }
     const sp = useScene.getState().scrollProgress;
     if (pillarMat.current) pillarMat.current.opacity = window4(0.24, 0.3, 0.4, 0.46, sp);
     const k = window4(0.4, 0.46, 0.56, 0.62, sp);
@@ -139,9 +153,10 @@ export default function DiveObjects() {
 
   return (
     <group>
-      <sprite position={PILLARS_AT} scale={[1.0, 1.5, 1]} renderOrder={3}>
+      <sprite ref={pillarRef} position={PILLARS_AT} scale={[1.0, 1.5, 1]} renderOrder={3}>
         <spriteMaterial ref={pillarMat} map={pillars} transparent opacity={0} depthWrite={false} toneMapped={false} />
       </sprite>
+      <group ref={near}>
       <points geometry={cluster.geo} raycast={() => null} frustumCulled={false}>
         <pointsMaterial ref={clusterMat} map={soft} size={0.03} sizeAttenuation color="#dbe6ff" transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
@@ -153,6 +168,7 @@ export default function DiveObjects() {
       <sprite position={SHELL_AT} scale={[0.8, 0.8, 1]}>
         <spriteMaterial ref={shellMat} map={shell} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </sprite>
+      </group>
     </group>
   );
 }

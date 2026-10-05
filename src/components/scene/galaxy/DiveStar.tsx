@@ -4,7 +4,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScene } from '@/lib/sceneStore';
 import { DIVE_START, diveAt } from '@/lib/passageProfile';
-import { DIVE_STAR } from '@/lib/diveStar';
+import { diveStarAt } from '@/lib/diveStar';
+import { galaxyFrame } from './Galaxy';
 
 /**
  * The star the dive flies into (#82 stage 2). The camera's look settles on it by 62% of the
@@ -43,21 +44,22 @@ const fragment = /* glsl */ `
   void main() {
     vec2 p = (vUv - 0.5) * 2.0;   // RADIUS at 0.5, the quad's edge at 1
     float r = length(p);
-    // A saturated near-white core, as a bright star burns out a Hubble exposure, inside an
-    // amber halo the size of the curtain's warm centre at the moment that centre starts to
-    // show, so one hands over to the other.
+    // A saturated white core, as the knot burns out the Hubble exposure, inside a halo in the
+    // knot's own blue-white (photo: core 232,241,244, surround 95,109,115) the size of the
+    // curtain's centre at the moment that centre starts to show, which opens in the same colour
+    // and only then warms toward the sun. The amber halo it had came from nowhere in the photo.
     float core = min(1.0, 1.4 * exp(-r * r / 0.008));
     float halo = exp(-r * r / 0.25) * 0.3 + exp(-r / 0.2) * 0.15;
     // Four thin spikes, fading along their length - the telescope's signature on every bright
     // star in the photograph.
     float spikes = (exp(-abs(p.y) / 0.005) + exp(-abs(p.x) / 0.005)) * exp(-r / 0.45) * 0.5;
     float edge = 1.0 - smoothstep(0.8, 1.0, r);
-    vec3 col = lin(vec3(1.0, 0.95, 0.86)) * core + lin(vec3(1.0, 0.72, 0.42)) * halo + lin(vec3(1.0, 0.85, 0.66)) * spikes;
+    vec3 col = lin(vec3(1.0, 0.99, 0.97)) * core + lin(vec3(0.80, 0.91, 1.0)) * halo + lin(vec3(0.90, 0.95, 1.0)) * spikes;
     gl_FragColor = vec4(col * edge * uOpacity, 1.0);
   }
 `;
 
-const _target = new THREE.Vector3(...DIVE_STAR);
+const _target = new THREE.Vector3();
 
 export default function DiveStar() {
   const ref = useRef<THREE.Mesh>(null);
@@ -72,13 +74,15 @@ export default function DiveStar() {
     const e = diveAt(p);
     // In as the look swings onto it, so it arrives in the frame the way the camera turns to it.
     (m.material as THREE.ShaderMaterial).uniforms.uOpacity.value = THREE.MathUtils.smoothstep(e, 0.08, 0.45);
+    diveStarAt(galaxyFrame.spin, _target);
+    m.position.copy(_target);
     m.quaternion.copy(camera.quaternion);
     const dist = camera.position.distanceTo(_target);
     m.scale.setScalar(4 * RADIUS * (dist < GROW_FROM ? Math.sqrt(dist / GROW_FROM) : 1));
   });
 
   return (
-    <mesh ref={ref} position={_target} renderOrder={18.5} visible={false} raycast={() => null} frustumCulled={false}>
+    <mesh ref={ref} renderOrder={18.5} visible={false} raycast={() => null} frustumCulled={false}>
       <planeGeometry args={[1, 1]} />
       <shaderMaterial
         vertexShader={vertex}
