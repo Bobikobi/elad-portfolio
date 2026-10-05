@@ -92,3 +92,50 @@ procedural disc: 57), so the dive passes under 20 by the look the owner chose. S
 - Whether the dive into the star feels cinematic, and the star's own look.
 - Antigravity's critique that the star field reads as a flat, uniform set of fuzzy dots.
 - The four conflicts above: G1-G3, GALAXY-REST G4 m2/m4, dark_ms, M1's last bin.
+
+# Round 2 - M101 in motion (2026-10-05)
+
+The owner on the round-1 preview: better, but missing detail, especially in motion - not rich and
+alive enough; the tunnel's colours unrelated; the start of the path and its colours should match.
+Answers: the location is both the dive target in the galaxy and where the tunnel opens on screen;
+the tunnel enters in M101's colours and warms to the sun; the dive star takes M101's colour.
+
+Numbers from the branch preview alias (deployment from 9792edd), desktop 1440x900, runs v-down,
+v-down2, v-up..v-up3, v-worst (`?spin=1`: the full 0.5 rad turn, the longest possible rest),
+von/voff (rest-life). "Before" is the round-1 build (b0-down, same localhost instrument).
+Instruments: `m101-motion.py` (C1, C2, C4, C3), `richness.py` (T1-T4), `passage.py`.
+
+| | bar | before | measured | |
+|---|---|---|---|---|
+| C1 tunnel colour, first half (B/R vs the last galaxy frame) | ±15% | +25% | -9.2% / -9.6% (worst-rest -6.4%) | PASS |
+| C2 seam (max RGB jump, last galaxy -> first tunnel frame) | ≤ 10 levels | 95.6 / 97.2 | 6.0 / 5.5 (worst-rest 5.0) | PASS |
+| C3 disc-body change at rest, life on vs off | ≥ 3x | 2.79 (spin only) | 3.23 = 1.16x · life alone, no spin: 1.08 vs 0.13 floor | FAIL - see below |
+| C4 dive fine detail | ≥ 1.5x | 1.196 / 1.215 | 2.86 / 2.82 (2.4x) | PASS |
+| GALAXY-REST, worst of 6 phases (localhost) | ≤ master | round 1 | G1 0.207% / p99 1.8 · G3 0.1135 · G5 right 1.28, bottom 25.23 · G4 m2/m4 1.41 | same as round 1 (G4 m2/m4 conflict stays) |
+| M2 stars' share at rest (disc stars + new halo) | 5 ± 2% | 5.39% | 4.66% | PASS |
+| T1 min change between tunnel frames | ≥ 3 | 3.67 | down 4.67 / 5.55 · up 2.91 / 3.46 / 3.53 | PASS down, 1 of 3 up runs 0.09 under |
+| T2 tunnel detail | ≥ 45% | 48.8% | 53.3 / 49.8 · up 57.4 | PASS |
+| T3 tunnel mean / over 200 | 20-80 / ≤ 8% | 62.0 | 52.5 / 53.5 · 1.3% | PASS |
+| T4 visible, moving | 0.5-0.9 s | 0.65 | 0.63 / 0.66 / 0.68 | PASS |
+| D1 velocity vs look, last 0.5 s | ≤ 8° | 2.7° | 2.84 / 2.86 · worst rest 6.5 | PASS |
+| D2 / D3 star and tunnel centre | 0 | 0 | 0 (look locked on the knot, centre drawn at screen centre) | PASS |
+| turn, both clocks | ≤ 1.5°/frame | 1.01 | 0.98 | PASS |
+| no frame > 0.1 s | 0 | 56-74 ms | 45-61 ms | PASS |
+| dark_ms | 0 | 1112 | 0 down and up | PASS (was the round-1 conflict) |
+| up-run stall at solar 0.987 | - | 458-529 ms (master 313) | 541 / 850 / 917 ms (localhost 437-850) | FAIL - older than this round, wide spread run to run |
+
+C3: today's change at rest is almost all the spin (camera held: life off 2.79, spin off 0.13).
+The new life - the photo's knots scintillating, stars twinkling - is eight times its floor with
+the spin stopped and adds 16% with it. Three times today would need ~8 levels of mean change over
+the whole disc every half second, which only the smooth arm light moving can give (a faster spin
+or a brightness wave over the arms), and a faster spin carries the dive target further. Left for
+the owner's eye on the preview, not tuned past this. DECISIONS 2026-10-05.
+
+The dive is now brighter than the rest pose near its end (mean ~41 just before the curtain
+against ~21 at rest; over 200 at 1.3%) - that is the detail C4 asked for, and the reason the old
+fade was 0.71 is gone with the procedural disc. The biggest frame-to-frame picture change while
+visible went 3.8 -> 13.4: the old dive was too dark to count, and the new one is the star field
+rushing past in the last 0.15 s before the curtain (a smooth rise 7 -> 13), not a cut.
+
+Not measured this round: phone. For the owner's eye: the tunnel's colours and its warming, the
+dive's star field fading in from the start, the life at rest, the halo's depth, the brighter dive.
