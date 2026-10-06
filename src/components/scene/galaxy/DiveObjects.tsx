@@ -102,8 +102,10 @@ function shellTexture() {
       g.arc(0, 0, r, a, a + len / r);
       g.stroke();
     }
-    const halo = g.createRadialGradient(0, 0, 0, 0, 0, 60);
-    halo.addColorStop(0, 'rgba(255,255,255,0.6)');
+    // The dying star itself, small: a 60 px halo lit the whole frame as the shell passed close
+    // (the last galaxy frame 8 levels over the tunnel's first, C2 12.6 against a bar of 10).
+    const halo = g.createRadialGradient(0, 0, 0, 0, 0, 24);
+    halo.addColorStop(0, 'rgba(255,255,255,0.8)');
     halo.addColorStop(0.15, 'rgba(210,230,255,0.3)');
     halo.addColorStop(1, 'rgba(120,160,255,0)');
     g.fillStyle = halo;
@@ -191,8 +193,8 @@ export default function DiveObjects() {
     if (pillarMat.current) pillarMat.current.opacity = window4(0.24, 0.3, 0.4, 0.46, sp);
     // Off at rest, so the welcome frame is untouched; in by scroll 0.2, while still small.
     const k = smoothstep(0.05, 0.2, sp);
-    if (clusterMat.current) clusterMat.current.opacity = k * 0.6;
-    coreMats.current.forEach((m) => { if (m) m.opacity = k; });
+    if (clusterMat.current) clusterMat.current.opacity = k * 0.4;
+    coreMats.current.forEach((m) => { if (m) m.opacity = k * 0.7; });
     if (shellMat.current) shellMat.current.opacity = k;
   });
 
