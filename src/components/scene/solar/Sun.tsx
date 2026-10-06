@@ -105,7 +105,7 @@ const LIMB_REACH = 100;
  *  edge treatment below; a big one is drawn exactly as before. */
 const SMALL_SUN_PX: [number, number] = [300, 450];
 /** Option A narrows the limb band back to the silhouette on a small sun; option B keeps it wide. */
-const SMALL_SUN_NARROW_LIMB = true;
+const SMALL_SUN_NARROW_LIMB = false;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
 const sunVert = /* glsl */ `
