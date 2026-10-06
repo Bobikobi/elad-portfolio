@@ -279,3 +279,22 @@ The up run's C2 (24.5) compares the galaxy at rest with the tunnel and read 26.5
 Not measured: real phones. For the owner's eye: whether the white ball and the rings read as part
 of the galaxy.
 
+# Round 5c - the cluster and the shell at rest (2026-10-06)
+
+The owner: they appear only with the scroll; they should be in the galaxy at rest, small, and
+grow with the dive. Numbers from the branch preview alias (deployment from 25afb57): rest pv8
+(6 phases, 1440x900), passages pv8a-down, pv8b-down, pv8-up at 1440x900, the object probe pv8obj
+(1.5 s at rest, then the dive) at 1440x900, 1920x1080 and 390x844.
+
+| | bar | measured | |
+|---|---|---|---|
+| R1 both in frame at rest | 1440 and 1920 | yes; shell r 43 / 52 px, cluster 24 / 29 px (phone: right of the frame) | PASS |
+| R2 grow with the dive, no jump as it starts | first step ≤ 1.5x, no shrink | first step 1.00x, worst 1.16x, worst shrink 0.996x; to 135 / 170 and 89 / 115 px | PASS |
+| G1 name box, worst phase | ≤ 0.051% / p99 2.0 | 0.049% / 2.0 (pv5 0.053%) | PASS |
+| G5 bottom | ≤ 28.7 | 24.59 (pv5 22.86) | PASS |
+| C1 · C2 · C4 | ±15% · ≤ 10 · ≥ 1.79 | 7.4 / 7.4 · 8.8 / 8.8 · 2.20 / 2.19 | PASS |
+| turn · frame > 0.1 s · dark_ms | ≤ 1.5° · 0 · 0 | 1.07 · max 60 ms · 0 | PASS |
+| fps, desktop | ≥ 38 | 40.3 / 38.9 / up 58.4 | PASS |
+
+Not measured: whether 43 px reads as "relatively small" - the owner's eye.
+
