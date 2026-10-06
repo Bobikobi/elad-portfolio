@@ -69,8 +69,16 @@ const fragment = /* glsl */ `
   }
 `;
 
-/** The photo's light projected edge-on, as TEX_W x TEX_H (x across the disc, y up its axis). */
-function buildTexture(ph: NonNullable<ReturnType<typeof galaxyLight>>): THREE.DataTexture {
+// The projection is ~90 ms of arithmetic (256 x 96 x 128 sech^2 terms): built a column at a
+// time inside this budget a frame, so the welcome view keeps its frame rate while it builds
+// (it lands about a second after the photo, which the edge-on view is never reached before).
+const BUILD_BUDGET_MS = 4;
+
+/**
+ * The photo's light projected edge-on, as TEX_W x TEX_H (x across the disc, y up its axis).
+ * A generator: it yields after each column, and returns the texture.
+ */
+function* buildTexture(ph: NonNullable<ReturnType<typeof galaxyLight>>): Generator<void, THREE.DataTexture> {
   // Radial profile of the face-on photo: mean light and colour per ring.
   const sum = new Float64Array(RADIAL_BINS * 3);
   const n = new Float64Array(RADIAL_BINS);
@@ -115,6 +123,7 @@ function buildTexture(ph: NonNullable<ReturnType<typeof galaxyLight>>): THREE.Da
         img[o + 2] += cb * k;
       }
     }
+    yield;
   }
   for (let i = 0; i < img.length; i++) peak = Math.max(peak, img[i]);
   const data = new Uint8Array(TEX_W * TEX_H * 4);
@@ -145,12 +154,22 @@ export default function EdgeOnDisc() {
   useEffect(() => () => tex?.dispose(), [tex]);
   const uniforms = useMemo(() => ({ uMap: { value: tex }, uGain: { value: EO.gain }, uShow: { value: 0 } }), [tex]);
 
+  const build = useRef<Generator<void, THREE.DataTexture> | null>(null);
+
   useFrame(({ camera }) => {
     if (!tex) {
-      const ph = galaxyLight();
-      if (ph) {
+      if (!build.current) {
+        const ph = galaxyLight();
+        if (!ph) return;
         setRadius(ph.r);
-        setTex(buildTexture(ph));
+        build.current = buildTexture(ph);
+      }
+      const t0 = performance.now();
+      let step = build.current.next();
+      while (!step.done && performance.now() - t0 < BUILD_BUDGET_MS) step = build.current.next();
+      if (step.done) {
+        build.current = null;
+        setTex(step.value);
       }
       return;
     }
