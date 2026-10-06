@@ -177,3 +177,42 @@ ordinary dive is 3.5-5.8. Not tuned; for the owner.
 
 Not measured: phone. For the owner's eye: how much sparkle (`?spk=0.8,16000,1.2` is the 2x look,
 `?spk=0` none), the bigger galaxy and its lower framing, the dive's stars coming in.
+
+# Round 4 - the edge-on galaxy, the dive's stars from the photo (2026-10-06)
+
+The owner on the round-3 preview: dragged to the disc's own height, the galaxy becomes too thin a
+line (up to 4x its height, like the scroll's start); and the dive's start still makes overly
+bright points at the right edge that feel on the screen, not in the galaxy. The drag stays free.
+
+Numbers from the branch preview alias (deployment from 446ff17), desktop 1440x900: drag sweep
+pv4 (`?camhold`, pitch set through the store), galaxy-rest pv4 / pv4b, passages pv4a-down,
+pv4b-down, pv4-up, pv4-nodn-down (`?dn=0.3,0,6,0`: the dive's stars hidden). "Before" is master
+(66ef6b9, localhost h0 / m0) and round 3's preview (pv, pva, pvb).
+
+| | bar | before | measured | |
+|---|---|---|---|---|
+| L1 thinnest band under the drag | ≥ 4x, ≤ rest | 41 px (rest 381) | 170 px = 4.15x (localhost 173) · rest 381-384 | PASS |
+| L2 p95 luma of new points, right third, scroll 0-0.3 | ≤ sparkles at rest | 79 vs 152 (already under) | 82 / 91 vs 171 / 167 | PASS - but it passed on master too, so it does not see the complaint |
+| L2b new points over dim photo, right third, scroll 0.2-0.35, vs rest | - | 3.12x (pre-round-3: 1.26x) | 1.61 / 1.50x (localhost 1.29 / 1.48) | added instrument |
+| L3 rim band past the galaxy's edge, max vs rest | ≤ 1.1x | 2.9-3.0x preview, 4.38x master | 2.52 / 3.00x · with the dive's stars hidden 2.68x | FAIL as written - the floor without any dive star is 2.7x |
+| L3 K2 largest rise between consecutive frames | ≤ 10% | 6.7 / 7.5% | 4.2 / 6.1% | PASS |
+| G1 name box, worst phase | ≤ 0.051% / p99 2.0 | 0.051% / 2.0 | run 1 0.123% (one phase; 0.022% on round 3) · repeat 0.050% / 2.1 | PASS on the repeat - the rest view draws nothing new, the spread is run to run |
+| G5 bottom | ≤ 28.7 | 22.78 | 21.79 / 23.49 | PASS |
+| K1 points on the disc, per phase | ≥ 2x of round 2 | 2.38-2.53x | 5341-8335 = 2.38-2.52x | PASS |
+| K3 sparkles' light vs photo | r ≥ 0.5 | 0.857 | 0.844 (localhost r1; the rest code path is unchanged) | PASS |
+| K5 width, worst phase | ≥ 926 px | 973 | 973 | PASS |
+| C1 tunnel colour | ±15% | -9.3 / -9.4 | 7.2 / 7.4 | PASS |
+| C2 seam | ≤ 10 | 3.5 / 5.8 | 4.0 / 3.2 | PASS |
+| C4 dive fine detail | ≥ 1.79 | 3.79-3.93 | 3.78 / 3.26 | PASS |
+| T1 / T2 / T3 / T4 | ≥ 3 / ≥ 45% / 20-80, ≤ 8% / 0.5-0.9 s | 5.36 / 50-57 / 43-53, 1.3 / 0.63-0.65 | min 3.22, 8.86, up 4.89 / 61.6-63.9% / 45-51, 1.2% / 0.62-0.68 | PASS |
+| D1 velocity vs look, last 0.5 s | ≤ 8° | 5.14 | 5.07 / 5.08 (localhost) | PASS |
+| turn, both clocks | ≤ 1.5°/frame | 1.06-1.07 | 1.07 | PASS |
+| no frame > 0.1 s · dark_ms | 0 · 0 | max 58 ms · 0 | max 68 ms · 0 | PASS |
+| fps, desktop | ≥ 38 | 39.6-40.0 | 52.7 / 37.4 (localhost 39.0 / 36.8) | 1 of 2 under, as round 3's 1 of 5 |
+
+L3: the rim band is recomputed on each frame's own edge, so as the dive grows the galaxy the band
+moves out over background stars; with the dive's stars switched off it still rises 2.7x. This
+round's change does not move it either way.
+
+Not measured: phone. For the owner's eye: the edge-on look (thickness, dust lane, `?eo`,
+`?lift`), the dive's stars in the photo's colour (`?dn`).
