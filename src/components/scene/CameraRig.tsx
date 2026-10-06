@@ -277,7 +277,18 @@ const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRin
 // viewing a disc"); the owner's direction is now a tilted galaxy across the LOWER half with
 // its edges dissolving into black. Looking higher tilts the camera up, which drops the disc
 // down the frame without moving the galaxy or the dive's path.
-const LOOK = new THREE.Vector3(0, 1.5, 0);
+// 1.5 until 2026-10-05; 0.1 since the disc grew to radius 6.3 (lib/diveStar, DISC_R): the camera
+// pitches 6 deg further down, the disc rises in the frame and the bottom edge sees its dim rim
+// instead of its arms. 0.3 left the bottom band at 30.4 (bar 28.7), -0.2 put the disc into the
+// name box (5.5% of its rows over the bar). `?lk=` in HUD builds is the sweep knob.
+const LOOK_Y = (() => {
+  const v = HUD_AVAILABLE && typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('lk') : null;
+  if (v === null) return 0.1;
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error(`CameraRig: ?lk must be a height - got "${v}"`);
+  return n;
+})();
+const LOOK = new THREE.Vector3(0, LOOK_Y, 0);
 // T4 dive choreography — a cubic-Bézier S-curve that comes DOWN onto the disc, never parallel
 // to it, so the galaxy is never a flat horizontal band. Ends in a spiral ARM (offset from the
 // centre, Sol's neighbourhood) with the core hanging off to one side.
@@ -295,7 +306,7 @@ const LOOK = new THREE.Vector3(0, 1.5, 0);
 // The star is a knot of the turning disc, so the late path is laid on wherever the turn left it
 // (planDive) - moved, not turned, so the push and every turn rate along it stay as flown.
 const DIVE_P0 = new THREE.Vector3(0, 4.6, 8.0);
-const LOOK_START = new THREE.Vector3(0, 1.5, 0);
+const LOOK_START = LOOK.clone();
 const DIVE_TARGET = new THREE.Vector3();
 // 30 deg down, 30 deg right of straight-in: the push comes from above the disc, so the photo
 // stays in view under the star instead of collapsing to an edge-on line.

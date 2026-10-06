@@ -52,4 +52,6 @@ export const SEED = {
   diveNeighbourhood: 0x5eed_000e,
   diveObjects: 0x5eed_0010,
   galaxyHalo: 0x5eed_0011,
+  galaxySparkle: 0x5eed_0012,
+  diveReveal: 0x5eed_0013,
 } as const;

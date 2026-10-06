@@ -7,6 +7,8 @@ import { makeRng, SEED } from '@/lib/rng';
 import { loadBitmapTexture, type BitmapTextureLoad } from '@/lib/bitmapTexture';
 import { useScene } from '@/lib/sceneStore';
 import { HUD_AVAILABLE } from '../DebugHud';
+import { DISC_R } from '@/lib/diveStar';
+import { paletteStar, spriteStarFragment, spriteStarUniforms, spriteStarVertex } from './spriteStars';
 
 /**
  * The galaxy act's disc: the Hubble photograph of M101 (ESA/Hubble heic0602, CC BY 4.0,
@@ -52,6 +54,22 @@ const HALO_SHARE = 0.008;
 // thickening to 0.7 over the bulge. One count on every tier (composition law).
 const HALO_N = 2500;
 const HALO_H = 0.35;
+// The sparkles (buildSparkles): soft stars of a fixed world size over the whole disc, visible
+// from rest. Owner, 2026-10-05, of the dive's stars: they "are prettier than the galaxy itself",
+// and appear only once the camera tilts - spread over the galaxy, they are the life it lacks.
+// One count on every tier. They add light rather than take it from the photo, so M2 (the stars'
+// share at rest, 5 +- 2%) was replaced by the owner with "at least twice the stars you can pick
+// out at rest". `?spk=` in HUD builds is the sweep knob (below). Swept 2026-10-05 at radius 5
+// (points picked out at rest, sparkles on / off, worst of 3 phases): 6000 at 0.5 added 1.3x;
+// 12000 at 0.5, 1.5x; 2x took 16000-20000 at 0.8 and buried the photo's lanes under a snow of
+// equal points. 12000 at 0.5 keeps the photo; the bigger disc (lib/diveStar) carries the rest
+// (2.4-2.55x today's points). Steeper placement than the field's Y^0.55 is what puts them on the
+// arms: their light follows the photo's at r 0.81 per cell (gamma 1.0: 0.61).
+const SPARKLE_OPACITY_D = 0.5;
+const SPARKLE_N_D = 12000;
+const SPARKLE_SIZE_D = 0.07;
+const SPARKLE_GAMMA_D = 1.5;
+const SPARKLE_FADE_S = 1.5;
 // rad/s: a turn every ten minutes, felt rather than watched.
 const SPIN = 0.01;
 // The turn eases to a stop at half a radian (time constant 50 s), so the dive's late path,
@@ -97,7 +115,7 @@ const AMBER = unitLum(1.0, 0.52, 0.21);
 
 /**
  * HUD builds only. `?gx=photo,stars` scales the two layers (M2 measures `?gx=1,0` against
- * `?gx=0,1`); `?spin=` is the turn in rad/s; `?gr=` is the disc radius. Malformed values throw,
+ * `?gx=0,1`); `?spin=` is the turn in rad/s (`?gr=`, the disc radius, is in lib/diveStar). Malformed values throw,
  * so a measurement can never silently run on the shipped constants.
  */
 const hudParam = (name: string): string | null =>
@@ -111,20 +129,8 @@ const GX: [number, number] = (() => {
   }
   return [n[0], n[1]];
 })();
-// The disc's radius. The welcome framing's bottom edge cuts the plane about 4 units in front of
-// the centre, and the photograph stays bright out to its rim, so any radius much past 4 runs a
-// bright wall off the bottom of the frame - the procedural disc it replaced (6.3) dissolved from
-// 0.62 of its radius for the same reason. Measured 2026-10-04, worst of three rest poses, light
-// in the bottom 40 px: 6.3 -> 40.0, 5.0 -> 15.2, 4.4 -> 4.7 (master 28.7, bar 6). 5.0 is the
-// largest that is no worse than master; 4.4 meets the bar but leaves the galaxy small, so the
-// size is the owner's call, and `?gr=` lets him compare.
-const R = (() => {
-  const v = hudParam('gr');
-  if (v === null) return 5.0;
-  const n = Number(v);
-  if (!Number.isFinite(n) || n <= 0) throw new Error(`Galaxy: ?gr must be a radius > 0 - got "${v}"`);
-  return n;
-})();
+// The disc's radius lives in lib/diveStar (DISC_R), with the knot the dive flies into.
+const R = DISC_R;
 // Life at rest (owner, 2026-10-04: "not rich and alive enough"): how far the photo's grain
 // scintillates (shaders.ts, discFragmentShader) and how far each star twinkles. `?life=s,t` in
 // HUD builds is the sweep knob.
@@ -145,6 +151,18 @@ const SPIN_RATE = (() => {
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0) throw new Error(`Galaxy: ?spin must be a rate >= 0 in rad/s - got "${v}"`);
   return n;
+})();
+
+// `?spk=opacity[,count[,gamma[,size]]]`: the sweep knob over the four sparkle constants.
+const SPK: { opacity: number; n: number; gamma: number; size: number } = (() => {
+  const d = { opacity: SPARKLE_OPACITY_D, n: SPARKLE_N_D, gamma: SPARKLE_GAMMA_D, size: SPARKLE_SIZE_D };
+  const v = hudParam('spk');
+  if (v === null) return d;
+  const n = v.split(',').map(Number);
+  if (n.length > 4 || n.some((x) => !Number.isFinite(x) || x < 0)) {
+    throw new Error(`Galaxy: ?spk must be opacity[,count[,gamma[,size]]], all >= 0 - got "${v}"`);
+  }
+  return { opacity: n[0], n: Math.round(n[1] ?? d.n), gamma: n[2] ?? d.gamma, size: n[3] ?? d.size };
 })();
 
 // The forward ACES fit's matrices (ExposureToneMap.acesFilmic), inverted. Matrix3.set takes
@@ -188,6 +206,8 @@ interface Field {
   rawAll: number;
   /** The photo's light in the units the disc draws it: summed Y times a cell's area. */
   flux: number;
+  /** The sparkles' places (buildSparkles), drawn to follow the arms more steeply than the field. */
+  sparkles: Float32Array;
 }
 
 /**
@@ -322,7 +342,39 @@ function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
     if (s < STARS_LOW) rawLow += raw;
     if (s % 1024 === 1023) yield;
   }
-  return { positions, colors, scales, rawLow, rawAll, flux: flux * cell * cell };
+  // The sparkles land with probability min(Y, cap)^SPK.gamma: steeper than the field's
+  // Y^0.55, so they gather on the arms and their knots rather than sprinkling the dim disc
+  // evenly; the cap (the 97th percentile of the disc's light) keeps the core, the brightest and
+  // smoothest place in the photo, from taking most of them.
+  const lit = Array.from(lightAt).filter((y) => y > 0).sort((a, b) => a - b);
+  const cap = lit.length ? lit[Math.floor(lit.length * 0.97)] : 1;
+  let sacc = 0;
+  for (let p = 0; p < MAP * MAP; p++) {
+    sacc += Math.min(lightAt[p], cap) ** SPK.gamma;
+    cdf[p] = sacc;
+  }
+  yield;
+  const sparkles = new Float32Array(SPK.n * 3);
+  const srnd = makeRng(SEED.galaxySparkle);
+  for (let s = 0; s < SPK.n; s++) {
+    const u = srnd() * sacc;
+    let lo = 0;
+    let hi = MAP * MAP - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (cdf[mid] > u) hi = mid;
+      else lo = mid + 1;
+    }
+    const i = lo % MAP;
+    const j = (lo - i) / MAP;
+    const x = -R + (i + srnd()) * cell;
+    const z = -R + (j + srnd()) * cell;
+    const r = Math.hypot(x, z);
+    sparkles[s * 3] = x;
+    sparkles[s * 3 + 1] = (srnd() - 0.5) * 2 * (0.04 + 0.3 * Math.exp(-((r / 0.9) ** 2)));
+    sparkles[s * 3 + 2] = z;
+  }
+  return { positions, colors, scales, rawLow, rawAll, flux: flux * cell * cell, sparkles };
 }
 
 /**
@@ -357,12 +409,40 @@ function buildHalo(f: Field): Halo {
   return { positions, colors, scales, raw };
 }
 
+/**
+ * The sparkles: SPK.n stars placed by the photo's light (sampleField), so dense on the arms
+ * and the knots, thin between them, none off the disc - drawn as the dive's soft stars
+ * (spriteStars). Warm over the bulge, where the photo is gold, and in the dive's blues
+ * elsewhere.
+ */
+function buildSparkles(f: Field): THREE.BufferGeometry {
+  const rnd = makeRng(SEED.galaxySparkle ^ 0x77);
+  const pos = f.sparkles;
+  const col = new Float32Array(SPK.n * 3);
+  const on = new Float32Array(SPK.n);
+  const phase = new Float32Array(SPK.n);
+  const c = new THREE.Color();
+  for (let s = 0; s < SPK.n; s++) {
+    const r = Math.hypot(pos[s * 3], pos[s * 3 + 2]);
+    paletteStar(rnd, 0.2 + 0.6 * Math.exp(-((r / 1.5) ** 2)), c);
+    col.set([c.r, c.g, c.b], s * 3);
+    phase[s] = rnd();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aOn', new THREE.BufferAttribute(on, 1));
+  geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+  return geo;
+}
+
 // Module level, so a remount (StrictMode, a route change back home) neither fetches nor samples
 // again: the field is the same field for the whole session.
 let readback: Promise<Uint8ClampedArray | null> | null = null;
 let sampler: Generator<void, Field | null> | null = null;
 let field: Field | null = null;
 let halo: Halo | null = null;
+let sparkles: THREE.BufferGeometry | null = null;
 const drawingBuffer = new THREE.Vector2();
 
 /**
@@ -384,6 +464,9 @@ export default function Galaxy() {
   const pointsRef = useRef<THREE.Points>(null);
   const haloRef = useRef<THREE.Points>(null);
   const haloMatRef = useRef<THREE.ShaderMaterial>(null);
+  const sparkleRef = useRef<THREE.Points>(null);
+  const sparkleMatRef = useRef<THREE.ShaderMaterial>(null);
+  const sparkledAt = useRef<number | null>(null);
   const turn = useRef(0);
   const arrived = useRef(false);
   const arrivedLate = useRef(false);
@@ -472,7 +555,13 @@ export default function Galaxy() {
     []
   );
 
-  useFrame(({ camera, clock, gl: renderer }, dt) => {
+  const sparkleUniforms = useMemo(() => {
+    const u = spriteStarUniforms(SPK.size, LIFE[1], 0.001);
+    u.uReveal.value = 1;
+    return u;
+  }, []);
+
+  useFrame(({ camera, clock, gl: renderer, size: css }, dt) => {
     const group = spinRef.current;
     const discMat = discMatRef.current;
     const starMat = starMatRef.current;
@@ -503,6 +592,14 @@ export default function Galaxy() {
       haloPts.geometry.setAttribute('position', new THREE.BufferAttribute(halo.positions, 3));
       haloPts.geometry.setAttribute('aColor', new THREE.BufferAttribute(halo.colors, 3));
       haloPts.geometry.setAttribute('aScale', new THREE.BufferAttribute(halo.scales, 1));
+    }
+    // The sparkles fade in over SPARKLE_FADE_S from the frame the field lands (about a second
+    // after the photo): appearing on a still view, they would otherwise pop.
+    const spk = sparkleRef.current;
+    if (field && spk && spk.geometry !== sparkles) {
+      sparkles ??= buildSparkles(field);
+      spk.geometry = sparkles;
+      sparkledAt.current = clock.elapsedTime;
     }
     const starsOn = field !== null && geo.getAttribute('position') !== undefined;
     if (starsOn) geo.setDrawRange(0, high ? STARS_MAX : STARS_LOW);
@@ -557,6 +654,13 @@ export default function Galaxy() {
       haloMat.uniforms.uEnergy.value = field && halo ? ((haloShare * field.flux) / halo.raw) * load * GX[1] : 0;
       haloMat.uniforms.uTime.value = now;
     }
+    const spkMat = sparkleMatRef.current;
+    if (spkMat) {
+      const since = sparkledAt.current === null ? 0 : Math.min(1, (now - sparkledAt.current) / SPARKLE_FADE_S);
+      spkMat.uniforms.uOpacity.value = SPK.opacity * since * since * load;
+      spkMat.uniforms.uScale.value = css.height * 0.5;
+      spkMat.uniforms.uTime.value = now;
+    }
     // Pixels per world unit at unit depth: projection[5] = 1 / tan(fov / 2).
     const size = renderer.getDrawingBufferSize(drawingBuffer);
     starMat.uniforms.uFocal.value = camera.projectionMatrix.elements[5] * 0.5 * size.y;
@@ -603,6 +707,18 @@ export default function Galaxy() {
           vertexShader={starVertexShader}
           fragmentShader={starFragmentShader}
           uniforms={haloUniforms}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </points>
+      {/* The geometry is the module's (sparkles), shared across remounts: never disposed here. */}
+      <points ref={sparkleRef} raycast={() => null} frustumCulled={false} dispose={null}>
+        <shaderMaterial
+          ref={sparkleMatRef}
+          vertexShader={spriteStarVertex}
+          fragmentShader={spriteStarFragment}
+          uniforms={sparkleUniforms}
           transparent
           depthWrite={false}
           blending={THREE.AdditiveBlending}

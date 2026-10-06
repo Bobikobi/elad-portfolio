@@ -11,10 +11,34 @@
  * The knot turns with the disc, so the dive's target is the knot as the disc stands when the dive
  * starts: Galaxy stops the turn the moment the scroll leaves 0, which holds the target still for
  * the whole dive, and the late path (DIVE_P1, DIVE_C2, the objects the dive passes) is laid
- * relative to it. Measured from the 2048 photo: peak of the 6 px blur at (3.313, 1.208), RGB
- * (232, 241, 244) in its core, (95, 109, 115) around it.
+ * relative to it. Measured from the 2048 photo at radius 5: peak of the 6 px blur at
+ * (3.313, 1.208), RGB (232, 241, 244) in its core, (95, 109, 115) around it.
  */
-export const DIVE_KNOT: readonly [number, number, number] = [3.313, 0, 1.208];
+const KNOT_AT_5: readonly [number, number, number] = [3.313, 0, 1.208];
+
+/**
+ * The disc's radius in world units (Galaxy draws the photo across 2R). Here, not in Galaxy, so
+ * the knot - a fixed place in the photograph - scales with it and CameraRig can lay the dive on
+ * it at module load. `?gr=` in non-production builds is the size knob; malformed values throw.
+ *
+ * 6.3 since 2026-10-05 (owner: "maybe make it cover more of the screen"): 1.31x wider at rest
+ * (worst phase 974 px against 741 at 5.0), with CameraRig's look lowered to 0.1 so the disc
+ * rises in the frame. The bottom band is what bounds it: at the old look, 6.3 put a wall of
+ * galaxy light on the bottom edge (G5 bottom 41, master 28.7; at 5.0 it was 25.4, and a look
+ * of -0.2 that fixed the bottom pushed the disc into the name). At 6.3 / 0.1: bottom 23.5.
+ */
+export const DISC_R: number = (() => {
+  const d = 6.3;
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV === 'production' || typeof window === 'undefined') return d;
+  const v = new URLSearchParams(window.location.search).get('gr');
+  if (v === null) return d;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`?gr must be a radius > 0 - got "${v}"`);
+  return n;
+})();
+
+/** The knot at DISC_R; measured on the photo at radius 5. */
+export const DIVE_KNOT: readonly [number, number, number] = [KNOT_AT_5[0] * (DISC_R / 5), 0, KNOT_AT_5[2] * (DISC_R / 5)];
 /**
  * Where the path was designed to end (the old world-fixed star). The late path and the dive's
  * props are authored around it and moved by `target - DIVE_DESIGN`.
