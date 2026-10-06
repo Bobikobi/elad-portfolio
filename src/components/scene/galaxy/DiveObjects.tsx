@@ -6,6 +6,7 @@ import { softSprite } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 import { useScene } from '@/lib/sceneStore';
 import { DIVE_DESIGN, diveStarAt } from '@/lib/diveStar';
+import { diveFrameAt } from '../CameraRig';
 import { galaxyFrame } from './Galaxy';
 
 // Three things to fly past on the way down, each visible only inside its own scroll window
@@ -18,6 +19,24 @@ import { galaxyFrame } from './Galaxy';
 // disc it would otherwise be seen through.
 // The concept is Astra's (forked dust pillars, a cluster with separate cores, a dying star's
 // broken shell); the numbers were placed against the sampled path.
+// 2026-10-06 (owner: the rings "show for too short a frame, so they read as a flash"): the
+// cluster and the shell sat off to the right, crossed the frame in 0.3 s and 0.13 s, and at
+// 16:10 the shell never entered it at all. Both are now laid on the dive itself (diveFrameAt):
+// each sits just off the camera's path where it passes at scroll PASS, so it is in view from
+// far off and grows as the camera closes in, ~0.6 s at 16:10 and 16:9 alike, and leaves through
+// the frame's lower corner while still fully lit. Placed with the recorded path (objsim).
+// Seen that long and that close they read as a white ball and a blue planet, so both are
+// smaller (cluster 0.22 -> 0.15 spread, shell 0.8 -> 0.5) and dimmer than when they flashed by.
+// Same day, the owner on that: they hang outside the galaxy, seen from the scroll's start where
+// they should be in it. They now lie IN the disc (y 0.05), near where the dive ends, so they are
+// part of the galaxy from the scroll's first moments - small, on the photo, by the knot - grow as
+// the camera comes down, and pass under it out of the frame's lower edge as the curtain starts.
+// Over the lit disc a 0.5 shell vanished (its rings under a pixel wide), so it is 1.2 across with
+// rings half again as strong.
+// Then (owner): they still only appear once the scroll starts - they should be in the galaxy at
+// rest, small, and grow with the dive. So they no longer fade in with the scroll: they arrive with
+// the disc's photo (galaxyFrame.load) and are there in the welcome frame, small and far; the dive
+// brings the camera to them, so they grow as fast as it flies.
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -81,15 +100,17 @@ function shellTexture() {
       if (a > gap0 && a < gap1) continue;
       const r = 78 + (rnd() - 0.5) * 22;
       const len = 6 + rnd() * 20;
-      g.strokeStyle = rnd() < 0.5 ? `rgba(90,220,210,${0.15 + rnd() * 0.3})` : `rgba(255,110,170,${0.12 + rnd() * 0.25})`;
-      g.lineWidth = 1 + rnd() * 3;
+      g.strokeStyle = rnd() < 0.5 ? `rgba(90,220,210,${0.35 + rnd() * 0.45})` : `rgba(255,110,170,${0.3 + rnd() * 0.4})`;
+      g.lineWidth = 3 + rnd() * 6; // drawn a quarter size: thinner strokes fall under a pixel
       g.beginPath();
       g.arc(0, 0, r, a, a + len / r);
       g.stroke();
     }
-    const halo = g.createRadialGradient(0, 0, 0, 0, 0, 60);
-    halo.addColorStop(0, 'rgba(255,255,255,0.95)');
-    halo.addColorStop(0.15, 'rgba(210,230,255,0.5)');
+    // The dying star itself, small: a 60 px halo lit the whole frame as the shell passed close
+    // (the last galaxy frame 8 levels over the tunnel's first, C2 12.6 against a bar of 10).
+    const halo = g.createRadialGradient(0, 0, 0, 0, 0, 24);
+    halo.addColorStop(0, 'rgba(255,255,255,0.8)');
+    halo.addColorStop(0.15, 'rgba(210,230,255,0.3)');
     halo.addColorStop(1, 'rgba(120,160,255,0)');
     g.fillStyle = halo;
     g.fillRect(-128, -128, 256, 256);
@@ -97,9 +118,32 @@ function shellTexture() {
 }
 
 const PILLARS_AT = new THREE.Vector3(0.49, 0.83, 5.83);
-const CLUSTER_AT = new THREE.Vector3(2.87, 0.02, 2.96);
-const SHELL_AT = new THREE.Vector3(3.74, 0.15, 2.62);
+/**
+ * Each lies in the disc, laid against the dive: from the point of the disc under the camera at
+ * scroll `at`, `ahead` units further along its course and `side` units to its right (negative:
+ * left). Placed with the recorded path (objsim): in frame from scroll 0.1 to the curtain at 16:10
+ * and 16:9; the shell leaves through the lower left corner (on a phone held upright it stays
+ * 0.7 s), the cluster under the knot through the bottom (phone 0.5 s), both on the lit disc
+ * (radius 3.5 and 4.6 of 6.3; further along the course was past the photo's light).
+ */
+const SHELL = { at: 0.75, ahead: 2.0, side: -1.2 };
+const CLUSTER = { at: 0.84, ahead: 1.5, side: 0 };
+const ON_DISC = 0.05;
+// Tiny (owner: "the pink-green is too big, it should be tiny"): 1.2 showed it 86 px across at rest.
+const SHELL_SIZE = 0.3;
 const _shift = new THREE.Vector3();
+const _pos = new THREE.Vector3();
+const _next = new THREE.Vector3();
+const _look = new THREE.Vector3();
+let laidSpin = NaN;
+const clusterAt = new THREE.Vector3();
+const shellAt = new THREE.Vector3();
+function layOnDisc(o: { at: number; ahead: number; side: number }, out: THREE.Vector3, spin: number) {
+  diveFrameAt(o.at, spin, _pos, _look);
+  diveFrameAt(o.at + 0.02, spin, _next, _look);
+  _next.sub(_pos).setY(0).normalize(); // the course over the disc
+  out.set(_pos.x + _next.x * o.ahead - _next.z * o.side, ON_DISC, _pos.z + _next.z * o.ahead + _next.x * o.side);
+}
 
 export default function DiveObjects() {
   const pillarMat = useRef<THREE.SpriteMaterial>(null);
@@ -117,38 +161,47 @@ export default function DiveObjects() {
     const N = 900;
     const pos = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) {
-      pos[i * 3] = CLUSTER_AT.x + gauss() * 0.22;
-      pos[i * 3 + 1] = CLUSTER_AT.y + gauss() * 0.22;
-      pos[i * 3 + 2] = CLUSTER_AT.z + gauss() * 0.22;
+      pos[i * 3] = gauss() * 0.15;
+      pos[i * 3 + 1] = gauss() * 0.15;
+      pos[i * 3 + 2] = gauss() * 0.15;
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const cores = Array.from({ length: 5 }, (_, i) => ({
-      pos: new THREE.Vector3(CLUSTER_AT.x + gauss() * 0.11, CLUSTER_AT.y + gauss() * 0.11, CLUSTER_AT.z + gauss() * 0.11),
+      pos: new THREE.Vector3(gauss() * 0.11, gauss() * 0.11, gauss() * 0.11),
       color: ['#ffffff', '#bcd3ff', '#ffe2b0', '#ffffff', '#cfe0ff'][i],
       size: 0.1 + rnd() * 0.06,
     }));
     return { geo, cores };
   }, []);
 
-  const near = useRef<THREE.Group>(null);
+  const clusterRef = useRef<THREE.Group>(null);
+  const shellRef = useRef<THREE.Sprite>(null);
   const pillarRef = useRef<THREE.Sprite>(null);
   useFrame(() => {
-    // Laid along the path as designed and moved with its end (lib/diveStar): the cluster and the
-    // shell sit by the end (Bezier weight 0.94, 0.98), the pillars halfway (0.51).
-    if (near.current && pillarRef.current) {
-      diveStarAt(galaxyFrame.spin, _shift);
+    // The pillars are laid along the path as designed and moved by half its end's shift
+    // (lib/diveStar; Bezier weight 0.51); the cluster and the shell on the path itself.
+    if (clusterRef.current && shellRef.current && pillarRef.current) {
+      const spin = galaxyFrame.spin;
+      if (spin !== laidSpin) {
+        laidSpin = spin;
+        layOnDisc(CLUSTER, clusterAt, spin);
+        layOnDisc(SHELL, shellAt, spin);
+      }
+      clusterRef.current.position.copy(clusterAt);
+      shellRef.current.position.copy(shellAt);
+      diveStarAt(spin, _shift);
       _shift.x -= DIVE_DESIGN[0];
       _shift.z -= DIVE_DESIGN[2];
-      near.current.position.copy(_shift);
       pillarRef.current.position.copy(PILLARS_AT).addScaledVector(_shift, 0.5);
     }
     const sp = useScene.getState().scrollProgress;
     if (pillarMat.current) pillarMat.current.opacity = window4(0.24, 0.3, 0.4, 0.46, sp);
-    const k = window4(0.4, 0.46, 0.56, 0.62, sp);
-    if (clusterMat.current) clusterMat.current.opacity = k * 0.9;
-    coreMats.current.forEach((m) => { if (m) m.opacity = k; });
-    if (shellMat.current) shellMat.current.opacity = window4(0.55, 0.61, 0.7, 0.76, sp);
+    // Part of the disc: there at rest, arriving with the photo.
+    const k = galaxyFrame.load;
+    if (clusterMat.current) clusterMat.current.opacity = k * 0.4;
+    coreMats.current.forEach((m) => { if (m) m.opacity = k * 0.7; });
+    if (shellMat.current) shellMat.current.opacity = k;
   });
 
   return (
@@ -156,19 +209,19 @@ export default function DiveObjects() {
       <sprite ref={pillarRef} position={PILLARS_AT} scale={[1.0, 1.5, 1]} renderOrder={3}>
         <spriteMaterial ref={pillarMat} map={pillars} transparent opacity={0} depthWrite={false} toneMapped={false} />
       </sprite>
-      <group ref={near}>
+      <group ref={clusterRef}>
       <points geometry={cluster.geo} raycast={() => null} frustumCulled={false}>
-        <pointsMaterial ref={clusterMat} map={soft} size={0.03} sizeAttenuation color="#dbe6ff" transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
+        <pointsMaterial ref={clusterMat} map={soft} size={0.022} sizeAttenuation color="#dbe6ff" transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
       {cluster.cores.map((c, i) => (
         <sprite key={i} position={c.pos} scale={[c.size * 3, c.size * 3, 1]}>
           <spriteMaterial ref={(m) => { coreMats.current[i] = m; }} map={soft} color={c.color} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
         </sprite>
       ))}
-      <sprite position={SHELL_AT} scale={[0.8, 0.8, 1]}>
+      </group>
+      <sprite ref={shellRef} scale={[SHELL_SIZE, SHELL_SIZE, 1]}>
         <spriteMaterial ref={shellMat} map={shell} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </sprite>
-      </group>
     </group>
   );
 }

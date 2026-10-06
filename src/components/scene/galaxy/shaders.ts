@@ -110,16 +110,19 @@ export const starVertexShader = /* glsl */ `
   uniform float uSigmaMax;
   uniform float uTime;
   uniform float uTwinkle;
+  uniform float uLift;
 
   attribute vec3 aColor;
   attribute float aScale;
+  attribute float aLift;
 
   varying vec3 vColor;
   varying float vSigma;
   varying float vSize;
 
   void main() {
-    vec4 viewPosition = viewMatrix * modelMatrix * vec4(position, 1.0);
+    // Near edge-on the field thickens (Galaxy, edgeOnShow): each star rises by its own aLift.
+    vec4 viewPosition = viewMatrix * modelMatrix * vec4(position + vec3(0.0, aLift * uLift, 0.0), 1.0);
     gl_Position = projectionMatrix * viewPosition;
 
     float z = max(-viewPosition.z, 1e-3);

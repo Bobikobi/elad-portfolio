@@ -375,6 +375,17 @@ function diveParam(e: number) {
   const span = DIVE_ARC[hi] - DIVE_ARC[lo];
   return (lo + (span > 0 ? (x - DIVE_ARC[lo]) / span : 0)) / DIVE_ARC_N;
 }
+/**
+ * Where the dive puts the camera, and where it looks, at scroll `p` for the disc turned `spin`:
+ * the path alone, without the pointer or the idle hand-over (gone by a third of the dive). The
+ * things the dive flies past (DiveObjects) are laid against it.
+ */
+export function diveFrameAt(p: number, spin: number, pos: THREE.Vector3, look: THREE.Vector3) {
+  const e = diveAt(p);
+  planDive(spin);
+  cubicBezier(pos, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, diveParam(e));
+  look.copy(LOOK_START).lerp(DIVE_TARGET, THREE.MathUtils.smoothstep(e, 0, DIVE_LOCK));
+}
 const _tgt = new THREE.Vector3();
 const _look = new THREE.Vector3();
 const _sunDir = new THREE.Vector3();

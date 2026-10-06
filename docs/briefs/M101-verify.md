@@ -177,3 +177,140 @@ ordinary dive is 3.5-5.8. Not tuned; for the owner.
 
 Not measured: phone. For the owner's eye: how much sparkle (`?spk=0.8,16000,1.2` is the 2x look,
 `?spk=0` none), the bigger galaxy and its lower framing, the dive's stars coming in.
+
+# Round 4 - the edge-on galaxy, the dive's stars from the photo (2026-10-06)
+
+The owner on the round-3 preview: dragged to the disc's own height, the galaxy becomes too thin a
+line (up to 4x its height, like the scroll's start); and the dive's start still makes overly
+bright points at the right edge that feel on the screen, not in the galaxy. The drag stays free.
+
+Numbers from the branch preview alias (deployment from 446ff17), desktop 1440x900: drag sweep
+pv4 (`?camhold`, pitch set through the store), galaxy-rest pv4 / pv4b, passages pv4a-down,
+pv4b-down, pv4-up, pv4-nodn-down (`?dn=0.3,0,6,0`: the dive's stars hidden). "Before" is master
+(66ef6b9, localhost h0 / m0) and round 3's preview (pv, pva, pvb).
+
+| | bar | before | measured | |
+|---|---|---|---|---|
+| L1 thinnest band under the drag | ≥ 4x, ≤ rest | 41 px (rest 381) | 170 px = 4.15x (localhost 173) · rest 381-384 | PASS |
+| L2 p95 luma of new points, right third, scroll 0-0.3 | ≤ sparkles at rest | 79 vs 152 (already under) | 82 / 91 vs 171 / 167 | PASS - but it passed on master too, so it does not see the complaint |
+| L2b new points over dim photo, right third, scroll 0.2-0.35, vs rest | - | 3.12x (pre-round-3: 1.26x) | 1.61 / 1.50x (localhost 1.29 / 1.48) | added instrument |
+| L3 rim band past the galaxy's edge, max vs rest | ≤ 1.1x | 2.9-3.0x preview, 4.38x master | 2.52 / 3.00x · with the dive's stars hidden 2.68x | FAIL as written - the floor without any dive star is 2.7x |
+| L3 K2 largest rise between consecutive frames | ≤ 10% | 6.7 / 7.5% | 4.2 / 6.1% | PASS |
+| G1 name box, worst phase | ≤ 0.051% / p99 2.0 | 0.051% / 2.0 | run 1 0.123% (one phase; 0.022% on round 3) · repeat 0.050% / 2.1 | PASS on the repeat - the rest view draws nothing new, the spread is run to run |
+| G5 bottom | ≤ 28.7 | 22.78 | 21.79 / 23.49 | PASS |
+| K1 points on the disc, per phase | ≥ 2x of round 2 | 2.38-2.53x | 5341-8335 = 2.38-2.52x | PASS |
+| K3 sparkles' light vs photo | r ≥ 0.5 | 0.857 | 0.844 (localhost r1; the rest code path is unchanged) | PASS |
+| K5 width, worst phase | ≥ 926 px | 973 | 973 | PASS |
+| C1 tunnel colour | ±15% | -9.3 / -9.4 | 7.2 / 7.4 | PASS |
+| C2 seam | ≤ 10 | 3.5 / 5.8 | 4.0 / 3.2 | PASS |
+| C4 dive fine detail | ≥ 1.79 | 3.79-3.93 | 3.78 / 3.26 | PASS |
+| T1 / T2 / T3 / T4 | ≥ 3 / ≥ 45% / 20-80, ≤ 8% / 0.5-0.9 s | 5.36 / 50-57 / 43-53, 1.3 / 0.63-0.65 | min 3.22, 8.86, up 4.89 / 61.6-63.9% / 45-51, 1.2% / 0.62-0.68 | PASS |
+| D1 velocity vs look, last 0.5 s | ≤ 8° | 5.14 | 5.07 / 5.08 (localhost) | PASS |
+| turn, both clocks | ≤ 1.5°/frame | 1.06-1.07 | 1.07 | PASS |
+| no frame > 0.1 s · dark_ms | 0 · 0 | max 58 ms · 0 | max 68 ms · 0 | PASS |
+| fps, desktop | ≥ 38 | 39.6-40.0 | 52.7 / 37.4 (localhost 39.0 / 36.8) | 1 of 2 under, as round 3's 1 of 5 |
+
+L3: the rim band is recomputed on each frame's own edge, so as the dive grows the galaxy the band
+moves out over background stars; with the dive's stars switched off it still rises 2.7x. This
+round's change does not move it either way.
+
+Not measured: phone. For the owner's eye: the edge-on look (thickness, dust lane, `?eo`,
+`?lift`), the dive's stars in the photo's colour (`?dn`).
+
+# Round 5 - streaks from the points, the cluster and the shell on the path (2026-10-06)
+
+The owner on the round-4 preview: the lines in the passage's first frames appear from nowhere -
+the points should turn into streaks; the "rings" are beautiful but show so briefly they read as a
+flash. The scroll hint is left as it is (it fades as the scroll starts, by design).
+
+Numbers from the branch preview alias (deployment from a3b9e8f), passages pv5a-down, pv5b-down,
+pv5-up at 1440x900, rest pv5; the object probe (`zz-passage-hi.mjs`, DOM visible) at 1440x900,
+1920x1080 and 390x844. Streak instruments at 1920x1080 on localhost (same build): s0-hi (streaks
+off), s3-1.8, c1-nostreak (`?streak=0,260,1.8`).
+
+| | bar | before | measured | |
+|---|---|---|---|---|
+| S1 tunnel lines before half cover (streaks off) | none | lines from cov ~0.15 | elongation 1.19-1.34 to cov 0.56 = floor (rest 1.1-1.4) | PASS |
+| S2 elongation of the brightest points, dive start -> cov 0.5 | 1 -> ≥ 6 | 1.2-1.3 flat | 1.5 -> 3.2-3.5 | FAIL as written - not moved by a longer shutter or cap |
+| S2 largest step between frames | ≤ 2x | - | 1.3x | PASS |
+| O1 shell in frame, opacity ≥ 0.3 | ≥ 0.5 s at 1440 and 1920 | 0 / 0.13 s | 0.58 / 0.58 s | PASS |
+| O2 cluster in frame | ≥ 0.5 s at 1440 and 1920 | ~0.3 s | 0.58 / 0.55 s (390x844: 0.55 s) | PASS |
+| O3 size step between frames | ≤ 1.5x | - | 1.42x worst | PASS |
+| C1 tunnel colour | ±15% | 7.2 / 7.4 | 6.5 / 6.2 | PASS |
+| C2 seam | ≤ 10 | 4.0 / 3.2 | 3.0 / 5.5 | PASS |
+| C4 dive fine detail | ≥ 1.79 | 3.78 / 3.26 | 2.13 / 1.99 | PASS - motion blur is less fine detail |
+| D1 velocity vs look, last 0.5 s | ≤ 8° | 5.07 / 5.08 | 5.91 / 5.40 (same instrument on pv4: 5.21 / 4.57) | PASS |
+| turn, both clocks | ≤ 1.5°/frame | 1.07 | 1.08 / 1.07 / up 1.07 | PASS |
+| no frame > 0.1 s · dark_ms | 0 · 0 | max 68 ms · 0 | max 53 ms · 0 | PASS |
+| fps, desktop | ≥ 38 | 52.7 / 37.4 | 55.0 / 40.3 / up 59.7 | PASS |
+| G1 name box, worst phase | ≤ 0.051% / p99 2.0 | 0.123% (repeat 0.050%) / 2.0 | 0.053% / 2.0 | at the bar, inside round 4's run-to-run spread |
+| G5 bottom | ≤ 28.7 | 21.79 | 22.86 | PASS |
+
+S2: the instrument (tile autocorrelation after a 7 px median, 50 brightest 128 px tiles) reads a
+synthetic 60x6 streak field as 6.3 and a radial one as 5.1-5.8; on the dive it holds at 3.3
+whatever the shutter, so it is reading the photo and the core, which cannot streak.
+
+Not measured: real phones. For the owner's eye: the streaks' look, the cluster as a soft white
+glow from afar, the shell's size.
+
+# Round 5b - the cluster and the shell in the disc (2026-10-06)
+
+The owner: the objects sit outside the galaxy; from the scroll's start they should be seen inside
+it. Both now lie on the disc plane near the knot. Numbers from the branch preview alias
+(deployment from 0b5aa41): passages pv7a-down, pv7b-down, pv7-up at 1440x900, phone pv7m1/pv7m2
+at 390x844, the object probe pv7obj at 1440x900, 1920x1080 and 390x844.
+
+| | bar | round 5 | measured | |
+|---|---|---|---|---|
+| P1 objects in the disc plane | y = disc | 0.3 under the sightline | y 0.05 at every viewport | PASS |
+| P2 seen from the scroll's start | in view from scroll ≤ 0.2 | 0.55 earlier than exit | shell from 0.11 / 0.12 / 0.27, cluster from 0.15 / 0.17 / 0.60 | PASS desktop; phone cluster late |
+| O1 shell in frame, opacity ≥ 0.3 | ≥ 0.5 s at 1440 and 1920 | 0.58 / 0.58 s | 1.18 / 1.18 s (390x844: 0.68 s, was hidden) | PASS |
+| O2 cluster in frame | ≥ 0.5 s at 1440 and 1920 | 0.58 / 0.55 s | 1.12 / 1.08 s (390x844: 0.48 s) | PASS |
+| O3 size step between frames | ≤ 1.5x | 1.42x | 1.23x | PASS |
+| C1 tunnel colour | ±15% | 6.5 / 6.2 | 7.1 / 7.4 | PASS |
+| C2 seam | ≤ 10 | 3.0 / 5.5 | 7.1 / 8.8 (def02b8 before the halo fix: 9.7 / 12.6) | PASS |
+| C4 dive fine detail | ≥ 1.79 | 2.13 / 1.99 | 2.27 / 2.18 | PASS |
+| D1 velocity vs look, last 0.5 s | ≤ 8° | - | 3.15 / 3.07 (rebuilt script; reads pv4 3.22 / 3.18, def02b8 3.27 / 3.36) | PASS |
+| turn, both clocks | ≤ 1.5°/frame | 1.07 | 1.07 / 1.07 / up 1.06 | PASS |
+| no frame > 0.1 s · dark_ms | 0 · 0 | max 53 ms · 0 | max 53 ms · 0 (phone too) | PASS |
+| fps, desktop | ≥ 38 | 55.0 / 40.3 | 55.2 / 39.3 / up 59.0 | PASS |
+
+The up run's C2 (24.5) compares the galaxy at rest with the tunnel and read 26.5 before this change.
+Not measured: real phones. For the owner's eye: whether the white ball and the rings read as part
+of the galaxy.
+
+# Round 5c - the cluster and the shell at rest (2026-10-06)
+
+The owner: they appear only with the scroll; they should be in the galaxy at rest, small, and
+grow with the dive. Numbers from the branch preview alias (deployment from 25afb57): rest pv8
+(6 phases, 1440x900), passages pv8a-down, pv8b-down, pv8-up at 1440x900, the object probe pv8obj
+(1.5 s at rest, then the dive) at 1440x900, 1920x1080 and 390x844.
+
+| | bar | measured | |
+|---|---|---|---|
+| R1 both in frame at rest | 1440 and 1920 | yes; shell r 43 / 52 px, cluster 24 / 29 px (phone: right of the frame) | PASS |
+| R2 grow with the dive, no jump as it starts | first step ≤ 1.5x, no shrink | first step 1.00x, worst 1.16x, worst shrink 0.996x; to 135 / 170 and 89 / 115 px | PASS |
+| G1 name box, worst phase | ≤ 0.051% / p99 2.0 | 0.049% / 2.0 (pv5 0.053%) | PASS |
+| G5 bottom | ≤ 28.7 | 24.59 (pv5 22.86) | PASS |
+| C1 · C2 · C4 | ±15% · ≤ 10 · ≥ 1.79 | 7.4 / 7.4 · 8.8 / 8.8 · 2.20 / 2.19 | PASS |
+| turn · frame > 0.1 s · dark_ms | ≤ 1.5° · 0 · 0 | 1.07 · max 60 ms · 0 | PASS |
+| fps, desktop | ≥ 38 | 40.3 / 38.9 / up 58.4 | PASS |
+
+Not measured: whether 43 px reads as "relatively small" - the owner's eye.
+
+# Round 5d - the shell tiny (2026-10-06)
+
+The owner: the pink-green ring is too big - tiny. Preview from b073c5b: rest pv9 + repeat pv9r,
+passages pv9a-down, pv9b-down at 1440x900, object probe pv9obj at 1440x900, 1920x1080, 390x844.
+
+| | bar | measured | |
+|---|---|---|---|
+| shell at rest | tiny (owner) | r 10.7 / 12.8 px (was 43 / 52) | for the owner's eye |
+| shell still a ring | by eye | ring at scroll 0, 0.4, 0.7, 0.85 | PASS |
+| grows with the dive | first step ≤ 1.5x, no shrink | worst 1.10x, shrink 0.992x; to 35 / 42 px | PASS |
+| G1 name box, worst phase | ≤ 0.051% | 0.054%, repeat 0.047% | PASS on repeat (run-to-run) |
+| G5 bottom | ≤ 28.7 | 24.45 | PASS |
+| C1 · C2 · C4 | ±15% · ≤ 10 · ≥ 1.79 | 7.6 / 7.7 · 8.8 / 9.0 · 2.16 / 2.17 | PASS |
+| turn · frame > 0.1 s · dark_ms | ≤ 1.5° · 0 · 0 | 1.07 · none over 50 ms · 0 | PASS |
+| fps, desktop | ≥ 38 | 38.1 / 40.3 | PASS (one at the bar) |
+
