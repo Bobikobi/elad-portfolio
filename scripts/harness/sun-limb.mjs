@@ -9,6 +9,8 @@ const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', hea
   args: ['--no-sandbox', '--hide-scrollbars', '--use-gl=angle', '--use-angle=vulkan', '--disable-dev-shm-usage'] });
 try {
   const p = await b.newPage(); await p.setViewport({ width: W, height: H, deviceScaleFactor: DSF, isMobile: MOB, hasTouch: MOB });
+  // Preview aliases sit behind protection: BYPASS names the file holding the bypass secret.
+  if (process.env.BYPASS) await p.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': fs.readFileSync(process.env.BYPASS, 'utf8').trim() });
   await p.goto(BASE + '/' + (process.env.QS || ''), { waitUntil: 'domcontentloaded', timeout: 90000 }); await new Promise((r) => setTimeout(r, 14000));
   await p.mouse.move(W / 2, H / 2);
   if (MOB) { await p.touchscreen.touchMove?.(0, 0).catch?.(() => {}); }
