@@ -13,6 +13,9 @@ import { softSprite } from '@/lib/spaceMaterials';
  * - `aOn`: the reveal value at which this star starts to show, over `uSoft` of reveal. Stars
  *   with spread-out thresholds come in one by one instead of the whole field at once.
  * - `aPhase`: each star twinkles on its own rate and phase, `uTwinkle` deep.
+ * - `uNear` (from, to), `uBoost` and `uFar`: a star past `to` from the camera shows at `uFar`
+ *   and brightens toward `uBoost` by `from`, so the dive's stars light up as they are reached.
+ *   1 and 1 is off.
  */
 export const spriteStarVertex = /* glsl */ `
   attribute vec3 color;
@@ -24,6 +27,9 @@ export const spriteStarVertex = /* glsl */ `
   uniform float uTwinkle;
   uniform float uReveal;
   uniform float uSoft;
+  uniform vec2 uNear;
+  uniform float uBoost;
+  uniform float uFar;
   varying vec3 vColor;
   varying float vA;
   void main() {
@@ -33,7 +39,7 @@ export const spriteStarVertex = /* glsl */ `
     float on = smoothstep(aOn, aOn + uSoft, uReveal);
     float tw = 1.0 + uTwinkle * sin(uTime * (0.6 + 1.8 * aPhase) + 40.0 * aPhase);
     vColor = color;
-    vA = on * tw;
+    vA = on * tw * mix(uBoost, uFar, smoothstep(uNear.x, uNear.y, -mv.z));
   }
 `;
 
@@ -58,6 +64,9 @@ export function spriteStarUniforms(size: number, twinkle: number, soft: number) 
     uReveal: { value: 0 },
     uSoft: { value: soft },
     uOpacity: { value: 0 },
+    uNear: { value: new THREE.Vector2(0, 1) },
+    uBoost: { value: 1 },
+    uFar: { value: 1 },
   };
 }
 

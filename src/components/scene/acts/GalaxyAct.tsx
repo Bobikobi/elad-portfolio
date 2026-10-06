@@ -1,6 +1,7 @@
 'use client';
 import Galaxy from '../galaxy/Galaxy';
 import DiveNeighbourhood from '../galaxy/DiveNeighbourhood';
+import EdgeOnDisc from '../galaxy/EdgeOnDisc';
 import DiveObjects from '../galaxy/DiveObjects';
 import Dust from '../galaxy/Dust';
 import DiveFade from '../galaxy/DiveFade';
@@ -24,6 +25,7 @@ export default function GalaxyAct() {
   return (
     <>
       <Galaxy />
+      <EdgeOnDisc />
       <DiveNeighbourhood />
       <DiveObjects />
       <DiveFade />

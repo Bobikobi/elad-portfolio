@@ -1,12 +1,13 @@
 'use client';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { makeRng, SEED } from '@/lib/rng';
 import { useScene } from '@/lib/sceneStore';
 import { DISC_R, DIVE_DESIGN, diveStarAt } from '@/lib/diveStar';
-import { galaxyFrame } from './Galaxy';
-import { paletteStar, spriteStarFragment, spriteStarUniforms, spriteStarVertex } from './spriteStars';
+import { HUD_AVAILABLE } from '../DebugHud';
+import { galaxyFrame, galaxyLight } from './Galaxy';
+import { spriteStarFragment, spriteStarUniforms, spriteStarVertex } from './spriteStars';
 
 // Where the dive ends (CameraRig DIVE_P1, within 0.2 of this since the locked dive of #82 stage 2
 // moved it 0.35 short of the star), for the path as designed: the points move with the star
@@ -16,7 +17,29 @@ import { paletteStar, spriteStarFragment, spriteStarUniforms, spriteStarVertex }
 const CENTRE = new THREE.Vector3(3.7, 0, 1.5);
 const COUNT = 7000;
 const SIZE = 0.07;
-const OPACITY = 0.9;
+// Owner, 2026-10-06: at the start of the scroll the right-hand side filled with points "too
+// bright, as if suddenly on the screen and not out of the galaxy" - 3.1x the points over the
+// dim outer arm that rest had there, all at 0.9 in a fixed palette of blues. Each star now
+// takes the photo's colour where it lies (COLOUR_CELLS around it, so a dim cell's noisy ratio
+// cannot paint it green), is kept with the photo's light there (KEEP_GAMMA, gentler than the
+// sparkles' 1.5 so the arrival stays thick), and shows at FAR of the sparkles' opacity until
+// the camera comes within NEAR_TO of it, then brightens to BOOST times it by NEAR[0]: the stars
+// come out of the galaxy as it is reached, and the arrival is as bright as it was. Swept
+// (keep, boost, near, far): 0.75/2/5/0.3 left 1.5x the points on the dim rim and a seam to the
+// tunnel of 14.6 (C2, bar 10, master 3.0) - the old blue snow had lit the last frame; 0.3/3/6/
+// 0.12 gives 1.35x and 4.5.
+const OPACITY = 0.5;
+const COLOUR_CELLS = 3;
+// `?dn=keepGamma,boost,nearTo,far` in HUD builds is the sweep knob.
+const [KEEP_GAMMA, BOOST, NEAR_TO, FAR] = (() => {
+  const d = [0.3, 3, 6, 0.12];
+  const v = HUD_AVAILABLE && typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('dn') : null;
+  if (v === null) return d;
+  const n = v.split(',').map(Number);
+  if (n.length !== 4 || n.some((x) => !Number.isFinite(x) || x < 0)) throw new Error(`DiveNeighbourhood: ?dn must be keepGamma,boost,nearTo,far - got "${v}"`);
+  return n;
+})();
+const NEAR: [number, number] = [1.5, NEAR_TO];
 // Each star has its own moment to appear, spread evenly over [REVEAL_FROM, REVEAL_TO] of the
 // scroll, and takes REVEAL_SOFT of scroll to come up. Owner, 2026-10-05: the whole cloud faded
 // in together (one opacity over 0.15-0.6) and on the right-hand side it "popped out of nowhere";
@@ -41,13 +64,26 @@ const TWINKLE = 0.35;
  */
 export default function DiveNeighbourhood() {
   const matRef = useRef<THREE.ShaderMaterial>(null);
-  const uniforms = useMemo(() => spriteStarUniforms(SIZE, TWINKLE, REVEAL_SOFT), []);
+  const uniforms = useMemo(() => {
+    const u = spriteStarUniforms(SIZE, TWINKLE, REVEAL_SOFT);
+    u.uNear.value.set(NEAR[0], NEAR[1]);
+    u.uBoost.value = BOOST;
+    u.uFar.value = FAR;
+    return u;
+  }, []);
 
-  const geometry = useMemo(() => {
+  // Built once the photo's light is sampled (Galaxy, about a second after the photo); until then
+  // nothing is drawn, which at rest is what is drawn anyway.
+  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
+  const build = () => {
+    const ph = galaxyLight();
+    if (!ph) return;
     const rnd = makeRng(SEED.diveNeighbourhood);
     const order = makeRng(SEED.diveReveal);
     const gauss = () => (rnd() + rnd() + rnd() + rnd() - 2) * 1.2;
-    // Where the cloud sits on the disc before any turn: its design centre moved onto the knot.
+    // The cloud is laid on the disc as it stands unturned: its design centre moved onto the knot.
+    // The points turn with the disc (useFrame), so a star keeps the place in the photo it took
+    // its colour from.
     const knot = diveStarAt(0, new THREE.Vector3());
     const dx = knot.x - DIVE_DESIGN[0];
     const dz = knot.z - DIVE_DESIGN[2];
@@ -55,39 +91,55 @@ export default function DiveNeighbourhood() {
     const col: number[] = [];
     const on: number[] = [];
     const phase: number[] = [];
-    const c = new THREE.Color();
+    const cell = (2 * ph.r) / ph.map;
     for (let i = 0; i < COUNT; i++) {
-      const x = CENTRE.x + gauss() * 1.8;
+      const x = CENTRE.x + gauss() * 1.8 + dx;
       const y = Math.max(-0.9, Math.min(0.9, gauss() * 0.42));
-      const z = CENTRE.z + gauss() * 1.8;
-      paletteStar(rnd, 0.2, c);
+      const z = CENTRE.z + gauss() * 1.8 + dz;
+      const bright = 0.5 + rnd() * 0.7;
+      const keep = rnd();
       const t = order();
-      const ph = order();
-      const inside = RIM * DISC_R - Math.hypot(x + dx, z + dz);
+      const tw = order();
+      const inside = RIM * DISC_R - Math.hypot(x, z);
       if (inside < 0) continue;
+      const ci = Math.min(ph.map - 1, Math.max(0, Math.floor((x + ph.r) / cell)));
+      const cj = Math.min(ph.map - 1, Math.max(0, Math.floor((z + ph.r) / cell)));
+      const c = cj * ph.map + ci;
+      const light = ph.light[c];
+      if (!(light > 0) || keep > (Math.min(light, ph.cap) / ph.cap) ** KEEP_GAMMA) continue;
+      let r = 0, g = 0, b = 0;
+      for (let jj = Math.max(0, cj - COLOUR_CELLS); jj <= Math.min(ph.map - 1, cj + COLOUR_CELLS); jj++) {
+        for (let ii = Math.max(0, ci - COLOUR_CELLS); ii <= Math.min(ph.map - 1, ci + COLOUR_CELLS); ii++) {
+          const n = (jj * ph.map + ii) * 3;
+          r += ph.rgb[n];
+          g += ph.rgb[n + 1];
+          b += ph.rgb[n + 2];
+        }
+      }
+      const top = Math.max(r, g, b);
       const edge = Math.min(1, inside / RIM_FLAT);
       pos.push(x, y * edge * edge * (3 - 2 * edge), z);
-      col.push(c.r, c.g, c.b);
+      col.push((r / top) * bright, (g / top) * bright, (b / top) * bright);
       on.push(REVEAL_FROM + (REVEAL_TO - REVEAL_FROM - REVEAL_SOFT) * t);
-      phase.push(ph);
+      phase.push(tw);
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.setAttribute('aOn', new THREE.Float32BufferAttribute(on, 1));
     geo.setAttribute('aPhase', new THREE.Float32BufferAttribute(phase, 1));
-    return geo;
-  }, []);
+    setGeometry(geo);
+  };
   // Handed in as a prop, so R3F does not dispose it; the act unmounts at every crossing.
-  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => geometry?.dispose(), [geometry]);
 
   const ptsRef = useRef<THREE.Points>(null);
   useFrame((state) => {
-    if (ptsRef.current) {
-      diveStarAt(galaxyFrame.spin, ptsRef.current.position);
-      ptsRef.current.position.x -= DIVE_DESIGN[0];
-      ptsRef.current.position.z -= DIVE_DESIGN[2];
+    if (!geometry) {
+      build();
+      return;
     }
+    if (ptsRef.current) ptsRef.current.rotation.y = galaxyFrame.spin;
     const u = matRef.current?.uniforms;
     if (!u) return;
     const p = useScene.getState().scrollProgress;
@@ -97,6 +149,7 @@ export default function DiveNeighbourhood() {
     u.uTime.value = state.clock.elapsedTime;
   });
 
+  if (!geometry) return null;
   return (
     <points ref={ptsRef} geometry={geometry} raycast={() => null} frustumCulled={false}>
       <shaderMaterial

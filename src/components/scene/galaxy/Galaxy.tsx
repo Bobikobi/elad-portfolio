@@ -84,6 +84,15 @@ const STAR_PEAK = 1.6;
 // Camera height over the disc across which the stars take the light over (k = 0 above, 1 below).
 // The welcome shot sits at 4.6; the dive is under 2.5 from its middle on.
 const HANDOVER: [number, number] = [0.5, 2.5];
+// Edge-on (owner, 2026-10-06): dragged down to the disc's height at rest, the photo and a field
+// 0.03 thick collapse to a line 45-77 px high. Within EDGE_FADE degrees of the plane the field
+// thickens into the old thick disc a real spiral has - every star rises by its own lift, LIFT[0]
+// thick over the disc, none at the core, whose bulge is already round (0.35), and less on the
+// bright knots, which are young stars that stay in the thin disc (lifted, they stood up as
+// columns) - and EdgeOnDisc draws the glow and the dust lane of a spiral seen side-on. Only at
+// rest and only there: the welcome view sits at 26 degrees and the dive is untouched.
+// `?lift=disc,knots` in HUD builds is the sweep knob (LIFT, below the other knobs).
+const EDGE_FADE: [number, number] = [2, 15];
 // A disc that arrives after the loader has lifted fades in over this, instead of popping.
 const LOAD_FADE_S = 0.6;
 // The 4096's GPU upload is one frame of 80-180 ms here (three production loads, 2026-10-04),
@@ -165,6 +174,14 @@ const SPK: { opacity: number; n: number; gamma: number; size: number } = (() => 
   return { opacity: n[0], n: Math.round(n[1] ?? d.n), gamma: n[2] ?? d.gamma, size: n[3] ?? d.size };
 })();
 
+const LIFT: [number, number] = (() => {
+  const v = hudParam('lift');
+  if (!v) return [0.6, 2];
+  const n = v.split(',').map(Number);
+  if (n.length !== 2 || n.some((x) => !Number.isFinite(x) || x < 0)) throw new Error(`Galaxy: ?lift must be disc,knots, both >= 0 - got "${v}"`);
+  return [n[0], n[1]];
+})();
+
 // The forward ACES fit's matrices (ExposureToneMap.acesFilmic), inverted. Matrix3.set takes
 // rows; the GLSL there lists the same matrices by column.
 const MIN_INV = new THREE.Matrix3()
@@ -201,6 +218,8 @@ interface Field {
   positions: Float32Array;
   colors: Float32Array;
   scales: Float32Array;
+  /** Each star's rise over the plane when the view is edge-on (EDGE_FADE). */
+  lifts: Float32Array;
   /** Summed luminance of the first STARS_LOW stars and of all of them. */
   rawLow: number;
   rawAll: number;
@@ -208,6 +227,10 @@ interface Field {
   flux: number;
   /** The sparkles' places (buildSparkles), drawn to follow the arms more steeply than the field. */
   sparkles: Float32Array;
+  /** The photo's linear light per MAP x MAP cell (row 0 at world -z), its RGB, and the 97th percentile. */
+  light: Float32Array;
+  rgb: Float32Array;
+  cap: number;
 }
 
 /**
@@ -266,6 +289,7 @@ function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
   }
   const rgb = [0, 0, 0];
   const lightAt = new Float32Array(MAP * MAP);
+  const rgbAt = new Float32Array(MAP * MAP * 3);
   const cdf = new Float64Array(MAP * MAP);
   let flux = 0;
   let acc = 0;
@@ -275,6 +299,7 @@ function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
       invAces(lut[px[p * 4]], lut[px[p * 4 + 1]], lut[px[p * 4 + 2]], rgb);
       const y = lum(rgb[0], rgb[1], rgb[2]);
       lightAt[p] = y;
+      rgbAt.set(rgb, p * 3);
       flux += y;
       acc += y ** GAMMA;
       cdf[p] = acc;
@@ -288,6 +313,13 @@ function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
   const positions = new Float32Array(STARS_MAX * 3);
   const colors = new Float32Array(STARS_MAX * 3);
   const scales = new Float32Array(STARS_MAX);
+  const lifts = new Float32Array(STARS_MAX);
+  // The 97th percentile of the disc's light: the sparkles' cap (below) and the knots' (lifts).
+  const lit = Array.from(lightAt).filter((y) => y > 0).sort((a, b) => a - b);
+  const cap = lit.length ? lit[Math.floor(lit.length * 0.97)] : 1;
+  // Its own generator, so the stars themselves are the ones every build before drew.
+  const lrnd = makeRng(SEED.galaxy ^ 0x11f7);
+  const lgauss = () => Math.sqrt(-2 * Math.log(1 - lrnd())) * Math.cos(2 * Math.PI * lrnd());
   let rawLow = 0;
   let rawAll = 0;
   for (let s = 0; s < STARS_MAX; s++) {
@@ -312,6 +344,9 @@ function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
     // A thin disc (0.03) thickening into a bulge of 0.35 at the centre.
     positions[s * 3 + 1] = gauss() * (0.03 + 0.35 * Math.exp(-((r / 0.9) ** 2)));
     positions[s * 3 + 2] = z;
+    // Thinning toward the rim, so the side view ends in a lens and not a slab.
+    lifts[s] = (lgauss() * LIFT[0] * (1 - Math.exp(-((r / 0.9) ** 2))) * (1 - 0.65 * smoothstep(0.45 * R, 0.95 * R, r)))
+      / (1 + (LIFT[1] * Math.min(lightAt[lo], cap)) / cap);
 
     // Lognormal grain with a mean of 1 (E[exp(0.8 n)] = exp(0.32)): a field of unequal stars.
     const y = lightAt[lo];
@@ -346,8 +381,6 @@ function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
   // Y^0.55, so they gather on the arms and their knots rather than sprinkling the dim disc
   // evenly; the cap (the 97th percentile of the disc's light) keeps the core, the brightest and
   // smoothest place in the photo, from taking most of them.
-  const lit = Array.from(lightAt).filter((y) => y > 0).sort((a, b) => a - b);
-  const cap = lit.length ? lit[Math.floor(lit.length * 0.97)] : 1;
   let sacc = 0;
   for (let p = 0; p < MAP * MAP; p++) {
     sacc += Math.min(lightAt[p], cap) ** SPK.gamma;
@@ -374,7 +407,7 @@ function* sampleField(px: Uint8ClampedArray): Generator<void, Field | null> {
     sparkles[s * 3 + 1] = (srnd() - 0.5) * 2 * (0.04 + 0.3 * Math.exp(-((r / 0.9) ** 2)));
     sparkles[s * 3 + 2] = z;
   }
-  return { positions, colors, scales, rawLow, rawAll, flux: flux * cell * cell, sparkles };
+  return { positions, colors, scales, lifts, rawLow, rawAll, flux: flux * cell * cell, sparkles, light: lightAt, rgb: rgbAt, cap };
 }
 
 /**
@@ -454,6 +487,21 @@ const drawingBuffer = new THREE.Vector2();
  *   the galaxy bloom with it).
  */
 export const galaxyFrame = { spin: 0, handover: 0 };
+
+/**
+ * The photo's light, for the layers that take their colour and density from it (the dive's
+ * stars, the edge-on disc): null until the field is sampled, about a second after the photo.
+ * `light` and `rgb` are per cell of a `map` x `map` grid over the disc as it stands unturned,
+ * cell (i, j) at x = -r + (i + 0.5) * 2r / map, z = -r + (j + 0.5) * 2r / map.
+ */
+export function edgeOnShow(camera: THREE.Vector3, scroll: number) {
+  const elev = THREE.MathUtils.radToDeg(Math.atan2(Math.abs(camera.y), Math.hypot(camera.x, camera.z)));
+  return (1 - smoothstep(EDGE_FADE[0], EDGE_FADE[1], elev)) * (1 - smoothstep(0, 0.1, scroll));
+}
+
+export function galaxyLight() {
+  return field ? { light: field.light, rgb: field.rgb, cap: field.cap, map: MAP, r: R } : null;
+}
 
 export default function Galaxy() {
   const gl = useThree((s) => s.gl);
@@ -539,6 +587,7 @@ export default function Galaxy() {
       uSigmaMax: { value: 3 },
       uTime: { value: 0 },
       uTwinkle: { value: LIFE[1] },
+      uLift: { value: 0 },
     }),
     []
   );
@@ -551,6 +600,7 @@ export default function Galaxy() {
       uSigmaMax: { value: 3 },
       uTime: { value: 0 },
       uTwinkle: { value: LIFE[1] },
+      uLift: { value: 0 },
     }),
     []
   );
@@ -585,6 +635,7 @@ export default function Galaxy() {
       geo.setAttribute('position', new THREE.BufferAttribute(field.positions, 3));
       geo.setAttribute('aColor', new THREE.BufferAttribute(field.colors, 3));
       geo.setAttribute('aScale', new THREE.BufferAttribute(field.scales, 1));
+      geo.setAttribute('aLift', new THREE.BufferAttribute(field.lifts, 1));
     }
     const haloPts = haloRef.current;
     if (field && haloPts && !haloPts.geometry.getAttribute('position')) {
@@ -619,6 +670,7 @@ export default function Galaxy() {
     const now = clock.elapsedTime;
     discMat.uniforms.uTime.value = now;
     starMat.uniforms.uTime.value = now;
+    starMat.uniforms.uLift.value = edgeOnShow(camera.position, st.scrollProgress);
     if (st.sceneReady && revealedAt.current === null) revealedAt.current = now;
     if (st.scrollProgress !== lastScroll.current || st.scrollProgress > 0) stillSince.current = now;
     lastScroll.current = st.scrollProgress;
@@ -700,7 +752,8 @@ export default function Galaxy() {
           blending={THREE.AdditiveBlending}
         />
       </points>
-      <points ref={haloRef} raycast={() => null} frustumCulled={false}>
+      {/* renderOrder 2: the stars lifted off the plane draw after the edge-on disc's dust lane (EdgeOnDisc), which dims what lies in it. */}
+      <points ref={haloRef} raycast={() => null} frustumCulled={false} renderOrder={2}>
         <bufferGeometry />
         <shaderMaterial
           ref={haloMatRef}
