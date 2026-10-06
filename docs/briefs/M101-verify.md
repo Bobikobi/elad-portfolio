@@ -252,3 +252,30 @@ whatever the shutter, so it is reading the photo and the core, which cannot stre
 
 Not measured: real phones. For the owner's eye: the streaks' look, the cluster as a soft white
 glow from afar, the shell's size.
+
+# Round 5b - the cluster and the shell in the disc (2026-10-06)
+
+The owner: the objects sit outside the galaxy; from the scroll's start they should be seen inside
+it. Both now lie on the disc plane near the knot. Numbers from the branch preview alias
+(deployment from 0b5aa41): passages pv7a-down, pv7b-down, pv7-up at 1440x900, phone pv7m1/pv7m2
+at 390x844, the object probe pv7obj at 1440x900, 1920x1080 and 390x844.
+
+| | bar | round 5 | measured | |
+|---|---|---|---|---|
+| P1 objects in the disc plane | y = disc | 0.3 under the sightline | y 0.05 at every viewport | PASS |
+| P2 seen from the scroll's start | in view from scroll ≤ 0.2 | 0.55 earlier than exit | shell from 0.11 / 0.12 / 0.27, cluster from 0.15 / 0.17 / 0.60 | PASS desktop; phone cluster late |
+| O1 shell in frame, opacity ≥ 0.3 | ≥ 0.5 s at 1440 and 1920 | 0.58 / 0.58 s | 1.18 / 1.18 s (390x844: 0.68 s, was hidden) | PASS |
+| O2 cluster in frame | ≥ 0.5 s at 1440 and 1920 | 0.58 / 0.55 s | 1.12 / 1.08 s (390x844: 0.48 s) | PASS |
+| O3 size step between frames | ≤ 1.5x | 1.42x | 1.23x | PASS |
+| C1 tunnel colour | ±15% | 6.5 / 6.2 | 7.1 / 7.4 | PASS |
+| C2 seam | ≤ 10 | 3.0 / 5.5 | 7.1 / 8.8 (def02b8 before the halo fix: 9.7 / 12.6) | PASS |
+| C4 dive fine detail | ≥ 1.79 | 2.13 / 1.99 | 2.27 / 2.18 | PASS |
+| D1 velocity vs look, last 0.5 s | ≤ 8° | - | 3.15 / 3.07 (rebuilt script; reads pv4 3.22 / 3.18, def02b8 3.27 / 3.36) | PASS |
+| turn, both clocks | ≤ 1.5°/frame | 1.07 | 1.07 / 1.07 / up 1.06 | PASS |
+| no frame > 0.1 s · dark_ms | 0 · 0 | max 53 ms · 0 | max 53 ms · 0 (phone too) | PASS |
+| fps, desktop | ≥ 38 | 55.0 / 40.3 | 55.2 / 39.3 / up 59.0 | PASS |
+
+The up run's C2 (24.5) compares the galaxy at rest with the tunnel and read 26.5 before this change.
+Not measured: real phones. For the owner's eye: whether the white ball and the rings read as part
+of the galaxy.
+
