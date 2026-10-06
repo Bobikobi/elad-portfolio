@@ -33,6 +33,10 @@ import { galaxyFrame } from './Galaxy';
 // the camera comes down, and pass under it out of the frame's lower edge as the curtain starts.
 // Over the lit disc a 0.5 shell vanished (its rings under a pixel wide), so it is 1.2 across with
 // rings half again as strong.
+// Then (owner): they still only appear once the scroll starts - they should be in the galaxy at
+// rest, small, and grow with the dive. So they no longer fade in with the scroll: they arrive with
+// the disc's photo (galaxyFrame.load) and are there in the welcome frame, small and far; the dive
+// brings the camera to them, so they grow as fast as it flies.
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -191,8 +195,8 @@ export default function DiveObjects() {
     }
     const sp = useScene.getState().scrollProgress;
     if (pillarMat.current) pillarMat.current.opacity = window4(0.24, 0.3, 0.4, 0.46, sp);
-    // Off at rest, so the welcome frame is untouched; in by scroll 0.2, while still small.
-    const k = smoothstep(0.05, 0.2, sp);
+    // Part of the disc: there at rest, arriving with the photo.
+    const k = galaxyFrame.load;
     if (clusterMat.current) clusterMat.current.opacity = k * 0.4;
     coreMats.current.forEach((m) => { if (m) m.opacity = k * 0.7; });
     if (shellMat.current) shellMat.current.opacity = k;

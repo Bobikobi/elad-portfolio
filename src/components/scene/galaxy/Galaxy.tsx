@@ -485,8 +485,10 @@ const drawingBuffer = new THREE.Vector2();
  *   open counter-clockwise outward in the photograph (+83 deg per unit ln r, measured).
  * - `handover`: k, 0 while the photo carries the disc and 1 once the stars do (Effects blends
  *   the galaxy bloom with it).
+ * - `load`: the disc's own fade-in, 0 until the photo is there and 1 once it has faded in, for
+ *   what lies on the disc (DiveObjects) to arrive with it.
  */
-export const galaxyFrame = { spin: 0, handover: 0 };
+export const galaxyFrame = { spin: 0, handover: 0, load: 0 };
 
 /**
  * The photo's light, for the layers that take their colour and density from it (the dive's
@@ -667,6 +669,7 @@ export default function Galaxy() {
     // one fades in.
     if (arrived.current && fadeFrom.current === null) fadeFrom.current = arrivedLate.current ? clock.elapsedTime : -Infinity;
     const load = fadeFrom.current === null ? 0 : Math.min(1, (clock.elapsedTime - fadeFrom.current) / LOAD_FADE_S);
+    galaxyFrame.load = load;
 
     const now = clock.elapsedTime;
     discMat.uniforms.uTime.value = now;
