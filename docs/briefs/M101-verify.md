@@ -298,3 +298,19 @@ grow with the dive. Numbers from the branch preview alias (deployment from 25afb
 
 Not measured: whether 43 px reads as "relatively small" - the owner's eye.
 
+# Round 5d - the shell tiny (2026-10-06)
+
+The owner: the pink-green ring is too big - tiny. Preview from b073c5b: rest pv9 + repeat pv9r,
+passages pv9a-down, pv9b-down at 1440x900, object probe pv9obj at 1440x900, 1920x1080, 390x844.
+
+| | bar | measured | |
+|---|---|---|---|
+| shell at rest | tiny (owner) | r 10.7 / 12.8 px (was 43 / 52) | for the owner's eye |
+| shell still a ring | by eye | ring at scroll 0, 0.4, 0.7, 0.85 | PASS |
+| grows with the dive | first step ≤ 1.5x, no shrink | worst 1.10x, shrink 0.992x; to 35 / 42 px | PASS |
+| G1 name box, worst phase | ≤ 0.051% | 0.054%, repeat 0.047% | PASS on repeat (run-to-run) |
+| G5 bottom | ≤ 28.7 | 24.45 | PASS |
+| C1 · C2 · C4 | ±15% · ≤ 10 · ≥ 1.79 | 7.6 / 7.7 · 8.8 / 9.0 · 2.16 / 2.17 | PASS |
+| turn · frame > 0.1 s · dark_ms | ≤ 1.5° · 0 · 0 | 1.07 · none over 50 ms · 0 | PASS |
+| fps, desktop | ≥ 38 | 38.1 / 40.3 | PASS (one at the bar) |
+
