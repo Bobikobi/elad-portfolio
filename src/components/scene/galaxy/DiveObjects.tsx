@@ -100,8 +100,8 @@ function shellTexture() {
       if (a > gap0 && a < gap1) continue;
       const r = 78 + (rnd() - 0.5) * 22;
       const len = 6 + rnd() * 20;
-      g.strokeStyle = rnd() < 0.5 ? `rgba(90,220,210,${0.25 + rnd() * 0.45})` : `rgba(255,110,170,${0.2 + rnd() * 0.4})`;
-      g.lineWidth = 1 + rnd() * 3;
+      g.strokeStyle = rnd() < 0.5 ? `rgba(90,220,210,${0.35 + rnd() * 0.45})` : `rgba(255,110,170,${0.3 + rnd() * 0.4})`;
+      g.lineWidth = 3 + rnd() * 6; // drawn a quarter size: thinner strokes fall under a pixel
       g.beginPath();
       g.arc(0, 0, r, a, a + len / r);
       g.stroke();
@@ -129,6 +129,8 @@ const PILLARS_AT = new THREE.Vector3(0.49, 0.83, 5.83);
 const SHELL = { at: 0.75, ahead: 2.0, side: -1.2 };
 const CLUSTER = { at: 0.84, ahead: 1.5, side: 0 };
 const ON_DISC = 0.05;
+// Tiny (owner: "the pink-green is too big, it should be tiny"): 1.2 showed it 86 px across at rest.
+const SHELL_SIZE = 0.3;
 const _shift = new THREE.Vector3();
 const _pos = new THREE.Vector3();
 const _next = new THREE.Vector3();
@@ -217,7 +219,7 @@ export default function DiveObjects() {
         </sprite>
       ))}
       </group>
-      <sprite ref={shellRef} scale={[1.2, 1.2, 1]}>
+      <sprite ref={shellRef} scale={[SHELL_SIZE, SHELL_SIZE, 1]}>
         <spriteMaterial ref={shellMat} map={shell} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </sprite>
     </group>
