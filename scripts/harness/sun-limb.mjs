@@ -9,7 +9,7 @@ const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', hea
   args: ['--no-sandbox', '--hide-scrollbars', '--use-gl=angle', '--use-angle=vulkan', '--disable-dev-shm-usage'] });
 try {
   const p = await b.newPage(); await p.setViewport({ width: W, height: H, deviceScaleFactor: DSF, isMobile: MOB, hasTouch: MOB });
-  await p.goto(BASE + '/', { waitUntil: 'domcontentloaded', timeout: 90000 }); await new Promise((r) => setTimeout(r, 14000));
+  await p.goto(BASE + '/' + (process.env.QS || ''), { waitUntil: 'domcontentloaded', timeout: 90000 }); await new Promise((r) => setTimeout(r, 14000));
   await p.mouse.move(W / 2, H / 2);
   if (MOB) { await p.touchscreen.touchMove?.(0, 0).catch?.(() => {}); }
   await p.mouse.wheel({ deltaY: 120 }); await new Promise((r) => setTimeout(r, 9000));

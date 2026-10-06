@@ -100,6 +100,12 @@ const FIB_FINE = 2.2;
  *  silhouette is reached. ~82 was the old desktop value (the silhouette's own angle); 100
  *  copies the edge Elad picked on the phone - see limb in sunFrag. */
 const LIMB_REACH = 100;
+/** SUN-LIMB (Task B): the sun's radius in render px below which it counts as small (a laptop's
+ *  overview, ~177 px) and above which it does not (the phone tour, ~600 px). Small suns get the
+ *  edge treatment below; a big one is drawn exactly as before. */
+const SMALL_SUN_PX: [number, number] = [300, 450];
+/** Option A narrows the limb band back to the silhouette on a small sun; option B keeps it wide. */
+const SMALL_SUN_NARROW_LIMB = true;
 
 // Slightly wobbling edge — the silhouette breathes so it's not a hard circle.
 const sunVert = /* glsl */ `
@@ -140,6 +146,7 @@ const sunVert = /* glsl */ `
 const sunFrag = /* glsl */ `
   uniform float uTime;
   uniform float uPulse;
+  uniform float uSmall;
   varying vec3 vPos;
   varying vec3 vNormal;
   varying vec3 vToCam;
@@ -283,6 +290,17 @@ const sunFrag = /* glsl */ `
       float fibFine = mix(${glslFloat(FIB_MEAN)}, pow(r2, 4.0), fibAA2) * 0.6 + mix(${glslFloat(FIB_MEAN)}, pow(r3, 4.0), fibAA4) * 0.4;
       fib = mix(fib, fibFine, fibAA3);
     }
+    // SUN-LIMB (Task B): on a small sun the foreshortened fibrils near the limb fade to their
+    // mean, which left a bare orange band over the outer ~12% of the radius on a laptop (texture
+    // at 0.90-0.95R 5.2-6.4 vs the phone's 18.2). There an octave HALF as fine takes over: its
+    // footprint is half as large, so it passes the same 2 px test the fine ones fail.
+    float fibVis = fibAA;
+    if (uSmall > 0.0 && fibAA < 1.0) {
+      float rc = 1.0 - abs(noise(fbq * 0.5 + wv * 1.5) * 2.0 - 1.0);
+      float fibAAc = 1.0 - smoothstep(0.35, 0.7, 0.5 * fw);
+      fib = mix(fib, mix(mix(${glslFloat(FIB_MEAN)}, pow(rc, 4.0), fibAAc), fib, fibAA), uSmall);
+      fibVis = mix(fibAA, max(fibAA, fibAAc), uSmall);
+    }
     n = n * ${glslFloat(FIB_KEEP)} + ${glslFloat((1 - FIB_KEEP) * 0.5)} + (fib - ${glslFloat(FIB_MEAN)}) * ${glslFloat(FIB_GAIN)};
     // SUN-3. THE defect this stage exists for, and it was not in this shader's structure -
     // it was in these nine numbers.
@@ -399,6 +417,9 @@ const sunFrag = /* glsl */ `
     // silhouette's own angle, i.e. limb = ndv.
     float phiT = acos(clamp(vK, 0.0, 0.999));
     float reach = mix(${glslFloat((LIMB_REACH * Math.PI) / 180)}, phiT, smoothstep(0.30, 0.45, vK));
+    // SUN-LIMB: on a small sun the wide band is ~25% of a 177 px radius with nothing resolvable
+    // on it - the "blurred edge" (Elad, 2026-10-06). Option A gives that sun the plain limb.
+    ${SMALL_SUN_NARROW_LIMB ? 'reach = mix(reach, phiT, uSmall);' : ''}
     float limb = cos(min(acos(ndv) / phiT * reach, 1.5708));
     // Exposure rationale lives with SUN_EMISSIVE_EXPOSURE in photometry.ts.
     // glslFloat, not toFixed: see its comment - one guarantees the decimal point, the
@@ -447,7 +468,8 @@ const sunFrag = /* glsl */ `
     col *= 1.0 + core * vec3(0.75, 1.05, -0.35) * (0.25 + 0.75 * fire);
     float fa = ${glslFloat(FIB_AMP)} * fib;
     vec3 fibMul = mix(vec3(0.060, 0.005, 0.001), vec3(1.0), smoothstep(0.25, 1.0, fa + 2.0 * ev));
-    col *= mix(vec3(1.0), fibMul, smoothstep(0.20, 0.55, limb) * fibAA);
+    // SUN-LIMB: on a small sun the fibrils' dark marks run on further toward the silhouette.
+    col *= mix(vec3(1.0), fibMul, smoothstep(mix(0.20, 0.05, uSmall), mix(0.55, 0.35, uSmall), limb) * fibVis);
     // Measured ceiling: x3 on the core reached only 243 of 255 through ACES, turned it white
     // (blue 232), and its bloom raised the halo 40% and the whole frame 16%. This is the knee.
     gl_FragColor = vec4(col, 1.0);
@@ -836,6 +858,9 @@ const LAMP_OVERRIDE = (() => {
   return Number.isFinite(n) ? n : null;
 })();
 
+const _sunPos = new THREE.Vector3();
+const _sunWorldScale = new THREE.Vector3();
+
 export default function Sun() {
   const lampRef = useRef<THREE.PointLight>(null);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -843,7 +868,7 @@ export default function Sun() {
   const setSunMesh = useScene((s) => s.setSunMesh);
   const tex = useMemo(() => softSprite(), []);
   const streakTex = useMemo(() => streakSprite(), []);
-  const uniforms = useMemo(() => ({ uTime: { value: 0 }, uPulse: { value: 0 } }), []);
+  const uniforms = useMemo(() => ({ uTime: { value: 0 }, uPulse: { value: 0 }, uSmall: { value: 0 } }), []);
   // Driven through the live material — a memoised object is frozen to the React Compiler.
   const sunMat = useRef<THREE.ShaderMaterial>(null);
   const prevCam = useRef(new THREE.Vector3());
@@ -883,6 +908,16 @@ export default function Sun() {
       // did, so the halo's motion has to come from the breath itself.
       pulse = 0.15 * Math.sin(t * 0.52) + 0.075 * Math.sin(t * 0.21 + 2.0);
       u.uPulse.value = pulse;
+      // SUN-LIMB: the sun's radius in render px, from its angular radius and the buffer height.
+      const m = meshRef.current;
+      const cam = state.camera as THREE.PerspectiveCamera;
+      if (m && cam.isPerspectiveCamera) {
+        m.getWorldPosition(_sunPos);
+        const rw = SUN_R * m.getWorldScale(_sunWorldScale).x;
+        const d = Math.max(_sunPos.distanceTo(cam.position), rw * 1.001);
+        const px = (Math.tan(Math.asin(rw / d)) / Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) * (state.size.height * state.gl.getPixelRatio()) / 2;
+        u.uSmall.value = 1 - THREE.MathUtils.smoothstep(px, SMALL_SUN_PX[0], SMALL_SUN_PX[1]);
+      }
     }
     // Debug-only: a harness measuring how fast the SURFACE evolves has to stop the sun
     // spinning first. Measured on 2026-08-17: slowing every time term in the shader by
