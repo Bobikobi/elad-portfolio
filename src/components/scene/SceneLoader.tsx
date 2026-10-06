@@ -54,10 +54,13 @@ export default function SceneLoader() {
   const line = LINES[step % LINES.length];
   const lang = LANGS[step % LANGS.length];
 
+  // The loader fades straight into the galaxy act, so it wears that sky: the frame-edge median
+  // of the rest view, measured (5,7,9) on 2026-10-04. The site's navy void (#050714) left a
+  // visible blue-to-charcoal shift as it faded.
   return (
     <div
       className="fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500"
-      style={{ background: '#050714', opacity: ready ? 0 : 1, pointerEvents: ready ? 'none' : 'auto' }}
+      style={{ background: '#050709', opacity: ready ? 0 : 1, pointerEvents: ready ? 'none' : 'auto' }}
       aria-hidden="true"
     >
       {/* Shooting stars - three staggered diagonal streaks, one crossing every ~2.5s. */}

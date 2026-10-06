@@ -13,14 +13,19 @@
 import { SWAP_V, COVER_PLATEAU, COVER_FALLOFF } from './diveEnvelope';
 
 /** Scroll where the curtain starts to rise, and where it has fully lifted again. */
-const COVER_IN = SWAP_V - COVER_PLATEAU - COVER_FALLOFF;
-const COVER_OUT = SWAP_V + COVER_PLATEAU + COVER_FALLOFF;
+export const COVER_IN = SWAP_V - COVER_PLATEAU - COVER_FALLOFF;
+export const COVER_OUT = SWAP_V + COVER_PLATEAU + COVER_FALLOFF;
 /** Scroll below which the galaxy is at rest (the welcome idle). */
 export const DIVE_START = 0.015;
 
-/** Time (ms) spent on each scroll segment: the dive, the curtain, the arrival. */
+/**
+ * Time (ms) spent on each scroll segment: the dive, the curtain, the arrival. The curtain was
+ * 500ms, which showed the tunnel at half cover or more for 0.31s - a blink, not a passage
+ * (#82 stage 2 asks 0.5-0.9s). Coverage is linear in scroll, so that share is 0.31 of the
+ * segment, and 1100ms puts it near 0.66s (desktop; the phone's coverage rises a little later).
+ */
 const DIVE_MS = 1200;
-const TUNNEL_MS = 500;
+const TUNNEL_MS = 1100;
 const ARRIVE_MS = 900;
 export const PASSAGE_MS = DIVE_MS + TUNNEL_MS + ARRIVE_MS;
 
@@ -43,7 +48,11 @@ export function timeAt(p: number): number {
 }
 
 const T_START = timeAt(DIVE_START);
-const T_SWAP = timeAt(SWAP_V);
+/**
+ * The dive runs until the curtain is fully shut, not to the swap: timed to the swap, the longer
+ * curtain would have hidden 44% of the dive path instead of 27% and slowed what shows of it.
+ */
+const T_SHUT = timeAt(SWAP_V - COVER_PLATEAU);
 /** The arrival starts where the curtain is 60% shut on its way open, not at the swap. */
 const T_ARRIVE = timeAt(SWAP_V + COVER_PLATEAU + 0.4 * COVER_FALLOFF);
 
@@ -54,7 +63,7 @@ const T_ARRIVE = timeAt(SWAP_V + COVER_PLATEAU + 0.4 * COVER_FALLOFF);
  * short hand-off damp in the camera rig hides.
  */
 export function diveAt(p: number): number {
-  const x = Math.min(1, Math.max(0, (timeAt(p) - T_START) / (T_SWAP - T_START)));
+  const x = Math.min(1, Math.max(0, (timeAt(p) - T_START) / (T_SHUT - T_START)));
   return 0.35 * x + 0.65 * x * x;
 }
 

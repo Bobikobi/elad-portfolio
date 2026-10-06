@@ -11,6 +11,8 @@ import { RING_OUTER_R } from '@/lib/planetPositions';
 import { ORBIT_FRAME, orbitDistance, DEG2RAD, livePlanetRect, livePlanetPlane } from '@/lib/orbitFraming';
 import { SWAP_V, coverageFor } from '@/lib/diveEnvelope';
 import { diveAt, arriveAt } from '@/lib/passageProfile';
+import { diveStarAt } from '@/lib/diveStar';
+import { galaxyFrame } from './galaxy/Galaxy';
 import { NEUTRAL_APERTURE, ORBIT_APERTURE } from '@/lib/photometry';
 import { HUD_AVAILABLE } from './DebugHud';
 import { useMotionDisabled } from '@/hooks/useMotionDisabled';
@@ -25,6 +27,12 @@ const DEV = process.env.NODE_ENV !== 'production';
 /** See the note at the `livePlanetRect` write below. Read once, at import. */
 const DISC_PROBE =
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discprobe');
+/**
+ * `?camhold` (HUD builds): the welcome shot's idle orbit and depth breathing stand still, so a
+ * measurement of the galaxy's own motion at rest (rest-life.mjs, C3) is not swamped by the camera's.
+ */
+const CAM_HOLD =
+  HUD_AVAILABLE && typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('camhold');
 // Swap point + curtain envelope live in @/lib/diveEnvelope so the DOM scroll driver can
 // share them without importing three.js.
 
@@ -269,32 +277,60 @@ const DT_WINDOW = 12;     // frames in the median frame-time estimate (see dtRin
 // viewing a disc"); the owner's direction is now a tilted galaxy across the LOWER half with
 // its edges dissolving into black. Looking higher tilts the camera up, which drops the disc
 // down the frame without moving the galaxy or the dive's path.
-const LOOK = new THREE.Vector3(0, 1.5, 0);
-// T4 dive choreography — a cubic-Bézier S-curve that PITCHES THROUGH the disc plane
-// (y: +2.6 above → −0.9 below), not parallel to it, so the galaxy disc is never a flat
-// horizontal band. Ends inside a spiral ARM (offset from centre, Sol's neighbourhood);
-// the gold core slides sideways to hang in the background.
+// 1.5 until 2026-10-05; 0.1 since the disc grew to radius 6.3 (lib/diveStar, DISC_R): the camera
+// pitches 6 deg further down, the disc rises in the frame and the bottom edge sees its dim rim
+// instead of its arms. 0.3 left the bottom band at 30.4 (bar 28.7), -0.2 put the disc into the
+// name box (5.5% of its rows over the bar). `?lk=` in HUD builds is the sweep knob.
+const LOOK_Y = (() => {
+  const v = HUD_AVAILABLE && typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('lk') : null;
+  if (v === null) return 0.1;
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error(`CameraRig: ?lk must be a height - got "${v}"`);
+  return n;
+})();
+const LOOK = new THREE.Vector3(0, LOOK_Y, 0);
+// T4 dive choreography — a cubic-Bézier S-curve that comes DOWN onto the disc, never parallel
+// to it, so the galaxy is never a flat horizontal band. Ends in a spiral ARM (offset from the
+// centre, Sol's neighbourhood) with the core hanging off to one side.
 // GALAXY-REST round 2 (owner: "the galaxy is too small, spread it wider"): the welcome shot
 // moved from z 9 to z 8, so the disc is larger in frame and still lies across the lower half.
 // Round 3 lifts the camera instead - see WELCOME_IDLE. The dive START must be the same point
 // the idle shot sits at or scroll 0.015 jumps the camera, so P0 moves with it. C1 rises with P0
 // as well, because leaving it at 2.5 under a P0 at 4.6 turns the opening third of the dive into
-// a plunge. The END (C2/P1/LOOK_END) is master's crossing-ember path, merged in unchanged.
+// a plunge.
+// #82 stage 2, the locked dive: the end used to slide sideways - in its last 0.5s the camera
+// travelled up to 33 deg off where it looked, and slowed from 9 to 4 units/s into the curtain,
+// which read as "the camera moves to a strange place and then the animation starts". It now
+// flies INTO a star (lib/diveStar): the last leg is a straight push along DIVE_PUSH, the look
+// settles on the star by 62% of the dive, and the swap curtain's warm centre grows out of it.
+// The star is a knot of the turning disc, so the late path is laid on wherever the turn left it
+// (planDive) - moved, not turned, so the push and every turn rate along it stay as flown.
 const DIVE_P0 = new THREE.Vector3(0, 4.6, 8.0);
-const DIVE_C1 = new THREE.Vector3(-0.7, 4.0, 6.4);
-const DIVE_C2 = new THREE.Vector3(2.8, 0.12, 3.0);
-// The dive now ENDS INSIDE the disc (y +0.08) instead of below it: the v2 path crossed the
-// plane and finished under an edge-on sheet, which read as "entering under the galaxy".
-const DIVE_P1 = new THREE.Vector3(3.7, 0.08, 1.5);
-// Look pitches from looking-DOWN at the core (camera above the plane) to level with the disc.
-// Same point as LOOK: the dive must start from exactly where the welcome shot was looking,
-// or the handover at scroll 0.015 jumps the look target.
+const LOOK_START = LOOK.clone();
+const DIVE_TARGET = new THREE.Vector3();
+// 30 deg down, 30 deg right of straight-in: the push comes from above the disc, so the photo
+// stays in view under the star instead of collapsing to an edge-on line.
+const DIVE_PUSH = new THREE.Vector3(Math.sin(Math.PI / 6) * Math.cos(Math.PI / 6), -0.5, -Math.cos(Math.PI / 6) * Math.cos(Math.PI / 6));
+// Ends 0.35 short of the star, still above the disc (y 0.175): the curtain is shut by then.
+const DIVE_P1 = new THREE.Vector3();
+// C1 leaves P0 along the idle shot's own sightline, so the first frames of the dive keep going
+// where the welcome shot already looked. C2 lines the last leg up on the push (DIVE_LEG).
+const DIVE_C1 = DIVE_P0.clone().addScaledVector(LOOK_START.clone().sub(DIVE_P0).normalize(), 1.5);
+const DIVE_C2 = new THREE.Vector3();
+// The straight leg is 3 units for the knot where the disc starts, and grows by 1.75 for every
+// unit the turn has carried the knot: the path bends further to reach a knot that moved, and a
+// visitor who rested long enough for the full turn (0.5 rad, the knot 1.75 away) flew the last
+// 0.5s 9.3 deg off the look on a 3-unit leg (D1's bar is 8), 6.3 on a 6-unit one.
+const DIVE_LEG = 3;
+const DIVE_LEG_PER_UNIT = 1.75;
+const _knot0 = diveStarAt(0, new THREE.Vector3());
+// The look leaves LOOK_START (same point as LOOK, so the handover at scroll 0.015 cannot jump)
+// and settles on the star at this fraction of the dive.
+const DIVE_LOCK = 0.62;
 // The arrival dolly is a pure function of scroll (passageProfile shapes its speed); this damp
 // only smooths a hand-scrolled driver. At 0.3 it started every arrival from rest and ate the
 // speed the camera crosses the curtain with (#82).
 const ARRIVE_TAU = 0.06;
-const LOOK_START = new THREE.Vector3(0, 1.5, 0);
-const LOOK_END = new THREE.Vector3(4.6, 0.05, -1.5); // level with the camera: it ends inside the disc, looking along it
 const _tmp = new THREE.Vector3();
 /** Cubic Bézier into `out`. */
 function cubicBezier(out: THREE.Vector3, p0: THREE.Vector3, c1: THREE.Vector3, c2: THREE.Vector3, p1: THREE.Vector3, e: number) {
@@ -304,6 +340,40 @@ function cubicBezier(out: THREE.Vector3, p0: THREE.Vector3, c1: THREE.Vector3, c
     a * p0.y + b * c1.y + c * c2.y + d * p1.y,
     a * p0.z + b * c1.z + c * c2.z + d * p1.z
   );
+}
+// The dive is walked by ARC LENGTH, not by the Bézier parameter: a cubic's parameter bunches up
+// where the curve bends, so the camera slowed through the S and sagged into the curtain. With
+// distance = diveAt(p) the speed is diveAt's own, which rises all the way to the shut.
+const DIVE_ARC_N = 256;
+const DIVE_ARC = new Float32Array(DIVE_ARC_N + 1);
+let divePlannedFor = NaN;
+/** Lays the late path on the knot as the disc stands at `spin`; a no-op while the disc is still. */
+function planDive(spin: number) {
+  if (spin === divePlannedFor) return;
+  divePlannedFor = spin;
+  diveStarAt(spin, DIVE_TARGET);
+  DIVE_P1.copy(DIVE_TARGET).addScaledVector(DIVE_PUSH, -0.35);
+  DIVE_C2.copy(DIVE_P1).addScaledVector(DIVE_PUSH, -(DIVE_LEG + DIVE_LEG_PER_UNIT * DIVE_TARGET.distanceTo(_knot0)));
+  const a = new THREE.Vector3(), b = new THREE.Vector3();
+  cubicBezier(a, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, 0);
+  for (let i = 1; i <= DIVE_ARC_N; i++) {
+    cubicBezier(b, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, i / DIVE_ARC_N);
+    DIVE_ARC[i] = DIVE_ARC[i - 1] + a.distanceTo(b);
+    a.copy(b);
+  }
+  for (let i = 1; i <= DIVE_ARC_N; i++) DIVE_ARC[i] /= DIVE_ARC[DIVE_ARC_N];
+}
+planDive(0);
+/** Bézier parameter at fraction `e` of the dive's length. */
+function diveParam(e: number) {
+  const x = clamp01(e);
+  let lo = 0, hi = DIVE_ARC_N;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (DIVE_ARC[mid] < x) lo = mid; else hi = mid;
+  }
+  const span = DIVE_ARC[hi] - DIVE_ARC[lo];
+  return (lo + (span > 0 ? (x - DIVE_ARC[lo]) / span : 0)) / DIVE_ARC_N;
 }
 const _tgt = new THREE.Vector3();
 const _look = new THREE.Vector3();
@@ -1471,24 +1541,26 @@ export default function CameraRig() {
         // 30 degrees above the plane, where the same circle comes back at about 0.5 and the
         // galaxy occupies the frame in BOTH directions. LOOK stays at y 1.5, above the disc, so
         // the sightline still tilts down and the galaxy still sits in the lower half.
+        const ti = CAM_HOLD ? 0 : t;
         _tgt.set(
           px * 1.8,
           4.6 + py * 1.2,
-          8.0 + Math.cos(t * 0.085) * 0.9
+          8.0 + Math.cos(ti * 0.085) * 0.9
         );
         applyOrbit(_tgt, LOOK,
-          orbit.current.yaw + Math.sin(t * 0.09) * 0.13,   // drag-to-rotate (T6) + idle orbit
-          orbit.current.pitch + Math.sin(t * 0.062) * 0.05);
+          orbit.current.yaw + Math.sin(ti * 0.09) * 0.13,   // drag-to-rotate (T6) + idle orbit
+          orbit.current.pitch + Math.sin(ti * 0.062) * 0.05);
         damp3(cam.position, _tgt, 0.5, dt);
         damp(cam, 'fov', 55, 0.5, dt);
         cam.lookAt(LOOK.x, LOOK.y, LOOK.z);
         fromIdle.current = true;
       } else {
-        // DIVE — a staged S-curve that descends THROUGH the disc plane. It runs right up to the
+        // DIVE — a staged S-curve down onto the disc, ending in a push into DIVE_STAR. It runs right up to the
         // swap and is still accelerating there (#82): it used to finish at scroll 0.865 on an
         // in-out ease, so the camera stood still in front of the closing curtain.
         const e = diveAt(p);
-        cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, e);
+        planDive(galaxyFrame.spin);
+        cubicBezier(_tgt, DIVE_P0, DIVE_C1, DIVE_C2, DIVE_P1, diveParam(e));
         _tgt.x += px * 0.6 * (1 - e);
         _tgt.y += py * 0.4 * (1 - e);
         // The idle pose drifts (orbit, depth breathing, pointer, a drag), so the dive starts
@@ -1504,13 +1576,11 @@ export default function CameraRig() {
         cam.position.copy(_tgt).addScaledVector(diveOff.current, 1 - THREE.MathUtils.smoothstep(e, 0, 0.35));
         // FOV opens for speed on the way in, eases back near arrival (deceleration cue).
         cam.fov = 55 + 13 * Math.sin(clamp01(e) * Math.PI * 0.85);
-        // Look pitches down→up as the camera crosses the plane, and a small extra pitch
-        // bump mid-dive — so the disc sweeps across the frame at an angle, never a flat
-        // horizontal band. The core (LOOK_END.x) slides off-side toward the arm.
-        // Smoothstep, not a cubic in-out: the cubic's steep middle turned the camera 3.3 deg in
-        // a 60fps frame at mid-dive; this one keeps the whole dive under 1 deg (#82).
-        _look.copy(LOOK_START).lerp(LOOK_END, e * e * (3 - 2 * e));
-        _look.y += 0.15 * Math.sin(e * Math.PI);
+        // Look slides from the welcome shot's point onto the star and stays there: from 62% of
+        // the dive the camera looks where it is going, so the curtain closes on the thing the
+        // eye is already following. Smoothstep, not a cubic in-out: the cubic's steep middle
+        // turned the camera 3.3 deg in a 60fps frame at mid-dive (#82); modelled max is 0.93.
+        _look.copy(LOOK_START).lerp(DIVE_TARGET, THREE.MathUtils.smoothstep(e, 0, DIVE_LOCK));
         cam.lookAt(_look.x, _look.y, _look.z);
         // Cinematic bank — a roll that tilts the disc diagonally (kills any residual
         // horizontal read). Frequency 0.85π so it stays banked THROUGH the late crossing

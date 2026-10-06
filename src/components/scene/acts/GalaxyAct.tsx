@@ -1,15 +1,14 @@
 'use client';
-import { useScene } from '@/lib/sceneStore';
 import Galaxy from '../galaxy/Galaxy';
-import GalaxyDetail from '../galaxy/GalaxyDetail';
 import DiveNeighbourhood from '../galaxy/DiveNeighbourhood';
 import DiveObjects from '../galaxy/DiveObjects';
-import GalaxyNebulae from '../galaxy/GalaxyNebulae';
 import Dust from '../galaxy/Dust';
 import DiveFade from '../galaxy/DiveFade';
+import DiveStar from '../galaxy/DiveStar';
 
 /**
- * Act 1 content: the living galaxy, its foreground dust, and the dive's fade to black.
+ * Act 1 content: the galaxy - the Hubble photograph of M101 with a star field drawn from it
+ * (Galaxy.tsx) - its foreground dust, the dive's fade to black, and the star the dive flies into.
  * The shared sky (gradient + star sphere + nebulae) lives in SceneRoot, so it persists
  * across the act swap. Camera + post FX also live in SceneRoot.
  *
@@ -22,19 +21,14 @@ import DiveFade from '../galaxy/DiveFade';
  * dive now travels through darkness instead: `DiveFade`.
  */
 export default function GalaxyAct() {
-  const high = useScene((s) => s.quality) === 'high';
   return (
     <>
-      <Galaxy count={high ? 200000 : 40000} />
-      {/* Lightweight (~40 sprites) - kept regardless of tier so they never flash
-          out when PerformanceMonitor dips quality during the heavy first frames. */}
-      <GalaxyDetail />
+      <Galaxy />
       <DiveNeighbourhood />
       <DiveObjects />
-      {/* A6: real Hubble HII pockets embedded in the arms (one-universe family). */}
-      <GalaxyNebulae />
       <DiveFade />
-      <Dust count={high ? 70 : 30} />
+      <DiveStar />
+      <Dust />
     </>
   );
 }

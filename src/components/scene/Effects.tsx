@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import {
   BLOOM_FOCUSED_WORLD_INTENSITY,
   BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD,
+  BLOOM_GALAXY_REST_LUMINANCE_SMOOTHING,
+  BLOOM_GALAXY_REST_LUMINANCE_THRESHOLD,
   BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY,
   BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING,
   BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD,
@@ -17,6 +19,24 @@ import {
 import { useScene } from '@/lib/sceneStore';
 import { HUD_AVAILABLE } from './DebugHud';
 import ExposureToneMap from './ExposureToneMap';
+import { galaxyFrame } from './galaxy/Galaxy';
+
+/**
+ * HUD builds only: `?gbloom=threshold,smoothing` replaces the galaxy act's resting bloom
+ * threshold and smoothing. Malformed values throw, so a capture never measures the shipped ones
+ * by accident.
+ */
+const GALAXY_REST_BLOOM: [number, number] = (() => {
+  const shipped: [number, number] = [BLOOM_GALAXY_REST_LUMINANCE_THRESHOLD, BLOOM_GALAXY_REST_LUMINANCE_SMOOTHING];
+  if (!HUD_AVAILABLE || typeof window === 'undefined') return shipped;
+  const v = new URLSearchParams(window.location.search).get('gbloom');
+  if (!v) return shipped;
+  const n = v.split(',').map(Number);
+  if (n.length !== 2 || n.some((x) => !Number.isFinite(x) || x < 0)) {
+    throw new Error(`Effects: ?gbloom must be threshold,smoothing with both >= 0 - got "${v}"`);
+  }
+  return [n[0], n[1]];
+})();
 
 
 // The postprocessing VignetteEffect exposes `darkness`/`offset` as live setters; the
@@ -92,8 +112,11 @@ const WORLD_GRADE: Record<string, { hue: number; sat: number }> = {
  * one look) so the two scene-graphs read as one world.
  *
  * Bloom threshold is ACT-DEPENDENT — this is the difference between "space" and
- * "purple fog": the galaxy act is a dim additive point cloud, so thresholding it
- * flickers → threshold 0. The solar act has textured planets + an HDR (>1) sun; a
+ * "purple fog". The galaxy act at rest is a photograph of M101 (galaxy/Galaxy.tsx): only its
+ * nucleus may bloom, so the threshold sits at 0.8 there. As the dive goes down its star field
+ * takes the disc over, and dim additive points flicker under a threshold, so it blends back to
+ * 0 with the stars' handover or the curtain, whichever is further on. The solar act has
+ * textured planets + an HDR (>1) sun; a
  * zero threshold there blooms the entire dark-indigo sky into a uniform purple haze
  * and blurs every star into mush. So in solar we raise the threshold to ~0.7 — only
  * the burning sun and lit planet limbs bloom, the sky stays deep and the stars crisp.
@@ -201,11 +224,14 @@ export default function Effects() {
     const b = bloomRef.current;
     if (b) {
       b.intensity = sol ? (fp ? BLOOM_FOCUSED_WORLD_INTENSITY : BLOOM_SOLAR_OVERVIEW_INTENSITY) : BLOOM_OUTSIDE_SOLAR_ACT_INTENSITY;
-      b.luminanceMaterial.threshold = sol ? (fp ? BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD : BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD) : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD;
+      const dive = Math.max(galaxyFrame.handover, coverage);
+      const galaxyThreshold = THREE.MathUtils.lerp(GALAXY_REST_BLOOM[0], BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_THRESHOLD, dive);
+      const galaxySmoothing = THREE.MathUtils.lerp(GALAXY_REST_BLOOM[1], BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING, dive);
+      b.luminanceMaterial.threshold = sol ? (fp ? BLOOM_FOCUSED_WORLD_LUMINANCE_THRESHOLD : BLOOM_SOLAR_OVERVIEW_LUMINANCE_THRESHOLD) : galaxyThreshold;
       // Never exactly 0: with threshold AND smoothing at 0 the material drops its THRESHOLD
       // define, and a define flip only takes effect through a rebuild. 1e-4 keeps the define
       // and passes every pixel brighter than 1e-4 whole - the old "no threshold" galaxy.
-      b.luminanceMaterial.smoothing = Math.max(1e-4, sol ? BLOOM_SOLAR_LUMINANCE_SMOOTHING : BLOOM_OUTSIDE_SOLAR_ACT_LUMINANCE_SMOOTHING);
+      b.luminanceMaterial.smoothing = Math.max(1e-4, sol ? BLOOM_SOLAR_LUMINANCE_SMOOTHING : galaxySmoothing);
       b.mipmapBlurPass.radius = sol ? 0.45 : 0.5;
     }
 

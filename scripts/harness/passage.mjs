@@ -76,7 +76,7 @@ try {
   });
   // A returning visitor is one who entered on a world and left it: Escape routes home in-document,
   // and Hero lands in the overview (a reload of / is always a fresh visit).
-  await page.goto(`${BASE}/${SEEN ? 'about' : ''}?hud=1&tier=high`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto(`${BASE}/${SEEN ? 'about' : ''}?hud=1&tier=high${process.env.EXTRA_QS ? '&' + process.env.EXTRA_QS : ''}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await sleep(SETTLE);
   if (SEEN) { await page.keyboard.press('Escape'); await sleep(SETTLE); }
   const probe = await page.evaluate(() => {

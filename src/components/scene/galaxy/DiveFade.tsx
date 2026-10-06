@@ -69,12 +69,19 @@ const FADE_TO = 0.55;
  * than this only buys colour: 0.68 measured a split of 19.4 with the frame under mean 20 from
  * scroll 0.872, this one 16.7 from 0.867, and each step deeper starts the darkness earlier.
  */
-const FADE_MAX = 0.71;
-// 0.74 was the first pick and it was measured on the DOWN direction only. On the way back up the
-// same ember reads about 5 levels darker (19.0 at scroll 0.68-0.76 against 25 going down) and
-// dipped under the mean-20 line, stretching the near-black run to 0.25 of the scroll. Swept on the
-// return at a 360-frame ramp: 0.72 -> ember floor 20.5, colour 18.5; 0.71 -> 21.2, 19.0;
-// 0.70 -> 21.9, 19.5. 0.71 leaves about one level on each side of the two bars.
+const FADE_MAX = 0.25;
+// 0.71 (the two notes above and below) was set for the procedural disc, which rested at a mean of
+// 76. The M101 photograph rests at ~21, so at 0.71 the dive sank under the mean-20 line for 1.1s
+// and the tunnel opened on a black frame. M101 in motion (2026-10-04, owner: "not rich and alive
+// enough", the tunnel "in unrelated colours") swept it with the tunnel's entry gain (SwapMask
+// TUNNEL_GAIN): 0.4 -> seam 19.0, 0.25 -> 3.0 with the dive's fine detail 1.9x the 0.71 build,
+// 0.2 -> 3.1 and no more detail. 0.25 measured dark_ms 0 (was 1112) and the dive peaking at a
+// mean of ~41 just before the curtain, over200 1.3%.
+// History, kept for the old disc: 0.74 was the first pick and it was measured on the DOWN
+// direction only. On the way back up the same ember read about 5 levels darker (19.0 at scroll
+// 0.68-0.76 against 25 going down) and dipped under the mean-20 line, stretching the near-black
+// run to 0.25 of the scroll. Swept on the return at a 360-frame ramp: 0.72 -> ember floor 20.5,
+// colour 18.5; 0.71 -> 21.2, 19.0; 0.70 -> 21.9, 19.5.
 
 /**
  * Fastest the plane may change, in opacity per second. The scroll is read raw, so a scroll
