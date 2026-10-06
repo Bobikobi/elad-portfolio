@@ -27,6 +27,12 @@ import { galaxyFrame } from './Galaxy';
 // the frame's lower corner while still fully lit. Placed with the recorded path (objsim).
 // Seen that long and that close they read as a white ball and a blue planet, so both are
 // smaller (cluster 0.22 -> 0.15 spread, shell 0.8 -> 0.5) and dimmer than when they flashed by.
+// Same day, the owner on that: they hang outside the galaxy, seen from the scroll's start where
+// they should be in it. They now lie IN the disc (y 0.05), near where the dive ends, so they are
+// part of the galaxy from the scroll's first moments - small, on the photo, by the knot - grow as
+// the camera comes down, and pass under it out of the frame's lower edge as the curtain starts.
+// Over the lit disc a 0.5 shell vanished (its rings under a pixel wide), so it is 1.2 across with
+// rings half again as strong.
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -90,7 +96,7 @@ function shellTexture() {
       if (a > gap0 && a < gap1) continue;
       const r = 78 + (rnd() - 0.5) * 22;
       const len = 6 + rnd() * 20;
-      g.strokeStyle = rnd() < 0.5 ? `rgba(90,220,210,${0.15 + rnd() * 0.3})` : `rgba(255,110,170,${0.12 + rnd() * 0.25})`;
+      g.strokeStyle = rnd() < 0.5 ? `rgba(90,220,210,${0.25 + rnd() * 0.45})` : `rgba(255,110,170,${0.2 + rnd() * 0.4})`;
       g.lineWidth = 1 + rnd() * 3;
       g.beginPath();
       g.arc(0, 0, r, a, a + len / r);
@@ -107,35 +113,29 @@ function shellTexture() {
 
 const PILLARS_AT = new THREE.Vector3(0.49, 0.83, 5.83);
 /**
- * Each laid where the dive passes it: at scroll `pass` it is `side` units right (negative: left)
- * of the camera and `below` under its sightline, in view from `pass - LEAD` (fading in over
- * FADE_IN while still far and small) until it has left the frame, then gone by `pass + 0.03`.
+ * Each lies in the disc, laid against the dive: from the point of the disc under the camera at
+ * scroll `at`, `ahead` units further along its course and `side` units to its right (negative:
+ * left). Placed with the recorded path (objsim): in frame from scroll 0.1 to the curtain at 16:10
+ * and 16:9; the shell leaves through the lower left corner (on a phone held upright it stays
+ * 0.7 s), the cluster under the knot through the bottom (phone 0.5 s), both on the lit disc
+ * (radius 3.5 and 4.6 of 6.3; further along the course was past the photo's light).
  */
-const CLUSTER = { pass: 0.62, side: -0.5, below: 0.3 };
-const SHELL = { pass: 0.81, side: 0.4, below: 0.3 };
-const LEAD = 0.55;
-const FADE_IN = 0.15;
+const SHELL = { at: 0.75, ahead: 2.0, side: -1.2 };
+const CLUSTER = { at: 0.84, ahead: 1.5, side: 0 };
+const ON_DISC = 0.05;
 const _shift = new THREE.Vector3();
 const _pos = new THREE.Vector3();
+const _next = new THREE.Vector3();
 const _look = new THREE.Vector3();
-const _fwd = new THREE.Vector3();
-const _right = new THREE.Vector3();
-const _up = new THREE.Vector3();
-const UP = new THREE.Vector3(0, 1, 0);
 let laidSpin = NaN;
-let laidAspect = NaN;
 const clusterAt = new THREE.Vector3();
 const shellAt = new THREE.Vector3();
-/** The sideways offset narrows with the frame below 16:10, so a phone held upright sees the
- * same pass as a desktop (at 0.4 to the side the shell never entered a 390x844 frame). */
-function layBeside(o: { pass: number; side: number; below: number }, out: THREE.Vector3, spin: number, aspect: number) {
-  diveFrameAt(o.pass, spin, _pos, _look);
-  _fwd.subVectors(_look, _pos).normalize();
-  _right.crossVectors(_fwd, UP).normalize();
-  _up.crossVectors(_right, _fwd);
-  out.copy(_pos).addScaledVector(_right, o.side * Math.min(1, aspect / 1.6)).addScaledVector(_up, -o.below);
+function layOnDisc(o: { at: number; ahead: number; side: number }, out: THREE.Vector3, spin: number) {
+  diveFrameAt(o.at, spin, _pos, _look);
+  diveFrameAt(o.at + 0.02, spin, _next, _look);
+  _next.sub(_pos).setY(0).normalize(); // the course over the disc
+  out.set(_pos.x + _next.x * o.ahead - _next.z * o.side, ON_DISC, _pos.z + _next.z * o.ahead + _next.x * o.side);
 }
-const inView = (o: { pass: number }, p: number) => window4(o.pass - LEAD, o.pass - LEAD + FADE_IN, o.pass, o.pass + 0.03, p);
 
 export default function DiveObjects() {
   const pillarMat = useRef<THREE.SpriteMaterial>(null);
@@ -170,17 +170,15 @@ export default function DiveObjects() {
   const clusterRef = useRef<THREE.Group>(null);
   const shellRef = useRef<THREE.Sprite>(null);
   const pillarRef = useRef<THREE.Sprite>(null);
-  useFrame(({ camera }) => {
+  useFrame(() => {
     // The pillars are laid along the path as designed and moved by half its end's shift
     // (lib/diveStar; Bezier weight 0.51); the cluster and the shell on the path itself.
     if (clusterRef.current && shellRef.current && pillarRef.current) {
       const spin = galaxyFrame.spin;
-      const aspect = (camera as THREE.PerspectiveCamera).aspect;
-      if (spin !== laidSpin || aspect !== laidAspect) {
+      if (spin !== laidSpin) {
         laidSpin = spin;
-        laidAspect = aspect;
-        layBeside(CLUSTER, clusterAt, spin, aspect);
-        layBeside(SHELL, shellAt, spin, aspect);
+        layOnDisc(CLUSTER, clusterAt, spin);
+        layOnDisc(SHELL, shellAt, spin);
       }
       clusterRef.current.position.copy(clusterAt);
       shellRef.current.position.copy(shellAt);
@@ -191,13 +189,11 @@ export default function DiveObjects() {
     }
     const sp = useScene.getState().scrollProgress;
     if (pillarMat.current) pillarMat.current.opacity = window4(0.24, 0.3, 0.4, 0.46, sp);
-    const k = inView(CLUSTER, sp);
+    // Off at rest, so the welcome frame is untouched; in by scroll 0.2, while still small.
+    const k = smoothstep(0.05, 0.2, sp);
     if (clusterMat.current) clusterMat.current.opacity = k * 0.6;
     coreMats.current.forEach((m) => { if (m) m.opacity = k; });
-    // Upright the frame is too narrow for the shell: the look only turns onto the path late, so
-    // it would cross in 0.12 s - the flash this placement exists to avoid. It stays off there,
-    // as it was before (never in a 390x844 frame).
-    if (shellMat.current) shellMat.current.opacity = (camera as THREE.PerspectiveCamera).aspect >= 1 ? inView(SHELL, sp) : 0;
+    if (shellMat.current) shellMat.current.opacity = k;
   });
 
   return (
@@ -215,7 +211,7 @@ export default function DiveObjects() {
         </sprite>
       ))}
       </group>
-      <sprite ref={shellRef} scale={[0.5, 0.5, 1]}>
+      <sprite ref={shellRef} scale={[1.2, 1.2, 1]}>
         <spriteMaterial ref={shellMat} map={shell} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </sprite>
     </group>
