@@ -8,7 +8,7 @@ import { loadBitmapTexture, type BitmapTextureLoad } from '@/lib/bitmapTexture';
 import { useScene } from '@/lib/sceneStore';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { DISC_R } from '@/lib/diveStar';
-import { paletteStar, spriteStarFragment, spriteStarUniforms, spriteStarVertex } from './spriteStars';
+import { paletteStar, spriteStarFragment, spriteStarUniforms, spriteStarVertex, streakFrame, streakGeometry } from './spriteStars';
 
 /**
  * The galaxy act's disc: the Hubble photograph of M101 (ESA/Hubble heic0602, CC BY 4.0,
@@ -448,7 +448,7 @@ function buildHalo(f: Field): Halo {
  * (spriteStars). Warm over the bulge, where the photo is gold, and in the dive's blues
  * elsewhere.
  */
-function buildSparkles(f: Field): THREE.BufferGeometry {
+function buildSparkles(f: Field): THREE.InstancedBufferGeometry {
   const rnd = makeRng(SEED.galaxySparkle ^ 0x77);
   const pos = f.sparkles;
   const col = new Float32Array(SPK.n * 3);
@@ -466,7 +466,7 @@ function buildSparkles(f: Field): THREE.BufferGeometry {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('aOn', new THREE.BufferAttribute(on, 1));
   geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
-  return geo;
+  return streakGeometry(geo);
 }
 
 // Module level, so a remount (StrictMode, a route change back home) neither fetches nor samples
@@ -475,7 +475,7 @@ let readback: Promise<Uint8ClampedArray | null> | null = null;
 let sampler: Generator<void, Field | null> | null = null;
 let field: Field | null = null;
 let halo: Halo | null = null;
-let sparkles: THREE.BufferGeometry | null = null;
+let sparkles: THREE.InstancedBufferGeometry | null = null;
 const drawingBuffer = new THREE.Vector2();
 
 /**
@@ -512,7 +512,8 @@ export default function Galaxy() {
   const pointsRef = useRef<THREE.Points>(null);
   const haloRef = useRef<THREE.Points>(null);
   const haloMatRef = useRef<THREE.ShaderMaterial>(null);
-  const sparkleRef = useRef<THREE.Points>(null);
+  const sparkleRef = useRef<THREE.Mesh>(null);
+  const sparkleHeld = useRef({ m: new THREE.Matrix4(), ok: false });
   const sparkleMatRef = useRef<THREE.ShaderMaterial>(null);
   const sparkledAt = useRef<number | null>(null);
   const turn = useRef(0);
@@ -712,6 +713,7 @@ export default function Galaxy() {
       spkMat.uniforms.uOpacity.value = SPK.opacity * since * since * load;
       spkMat.uniforms.uScale.value = css.height * 0.5;
       spkMat.uniforms.uTime.value = now;
+      if (spk) streakFrame(spk, spkMat.uniforms as ReturnType<typeof spriteStarUniforms>, sparkleHeld.current, camera, renderer, dt, st.scrollProgress);
     }
     // Pixels per world unit at unit depth: projection[5] = 1 / tan(fov / 2).
     const size = renderer.getDrawingBufferSize(drawingBuffer);
@@ -766,7 +768,7 @@ export default function Galaxy() {
         />
       </points>
       {/* The geometry is the module's (sparkles), shared across remounts: never disposed here. */}
-      <points ref={sparkleRef} raycast={() => null} frustumCulled={false} dispose={null}>
+      <mesh ref={sparkleRef} raycast={() => null} frustumCulled={false} dispose={null}>
         <shaderMaterial
           ref={sparkleMatRef}
           vertexShader={spriteStarVertex}
@@ -776,7 +778,7 @@ export default function Galaxy() {
           depthWrite={false}
           blending={THREE.AdditiveBlending}
         />
-      </points>
+      </mesh>
     </group>
   );
 }

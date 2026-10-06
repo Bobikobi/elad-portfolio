@@ -7,7 +7,7 @@ import { useScene } from '@/lib/sceneStore';
 import { DISC_R, DIVE_DESIGN, diveStarAt } from '@/lib/diveStar';
 import { HUD_AVAILABLE } from '../DebugHud';
 import { galaxyFrame, galaxyLight } from './Galaxy';
-import { spriteStarFragment, spriteStarUniforms, spriteStarVertex } from './spriteStars';
+import { spriteStarFragment, spriteStarUniforms, spriteStarVertex, streakFrame, streakGeometry } from './spriteStars';
 
 // Where the dive ends (CameraRig DIVE_P1, within 0.2 of this since the locked dive of #82 stage 2
 // moved it 0.35 short of the star), for the path as designed: the points move with the star
@@ -74,7 +74,7 @@ export default function DiveNeighbourhood() {
 
   // Built once the photo's light is sampled (Galaxy, about a second after the photo); until then
   // nothing is drawn, which at rest is what is drawn anyway.
-  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
+  const [geometry, setGeometry] = useState<THREE.InstancedBufferGeometry | null>(null);
   const build = () => {
     const ph = galaxyLight();
     if (!ph) return;
@@ -128,13 +128,14 @@ export default function DiveNeighbourhood() {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.setAttribute('aOn', new THREE.Float32BufferAttribute(on, 1));
     geo.setAttribute('aPhase', new THREE.Float32BufferAttribute(phase, 1));
-    setGeometry(geo);
+    setGeometry(streakGeometry(geo));
   };
   // Handed in as a prop, so R3F does not dispose it; the act unmounts at every crossing.
   useEffect(() => () => geometry?.dispose(), [geometry]);
 
-  const ptsRef = useRef<THREE.Points>(null);
-  useFrame((state) => {
+  const ptsRef = useRef<THREE.Mesh>(null);
+  const held = useRef({ m: new THREE.Matrix4(), ok: false });
+  useFrame((state, dt) => {
     if (!geometry) {
       build();
       return;
@@ -147,11 +148,12 @@ export default function DiveNeighbourhood() {
     u.uOpacity.value = p > 0 ? OPACITY : 0;
     u.uScale.value = state.size.height * 0.5;
     u.uTime.value = state.clock.elapsedTime;
+    if (ptsRef.current) streakFrame(ptsRef.current, u as ReturnType<typeof spriteStarUniforms>, held.current, state.camera, state.gl, dt, p);
   });
 
   if (!geometry) return null;
   return (
-    <points ref={ptsRef} geometry={geometry} raycast={() => null} frustumCulled={false}>
+    <mesh ref={ptsRef} geometry={geometry} raycast={() => null} frustumCulled={false}>
       <shaderMaterial
         ref={matRef}
         vertexShader={spriteStarVertex}
@@ -161,6 +163,6 @@ export default function DiveNeighbourhood() {
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />
-    </points>
+    </mesh>
   );
 }

@@ -6,6 +6,7 @@ import { softSprite } from '@/lib/spaceMaterials';
 import { makeRng, SEED } from '@/lib/rng';
 import { useScene } from '@/lib/sceneStore';
 import { DIVE_DESIGN, diveStarAt } from '@/lib/diveStar';
+import { diveFrameAt } from '../CameraRig';
 import { galaxyFrame } from './Galaxy';
 
 // Three things to fly past on the way down, each visible only inside its own scroll window
@@ -18,6 +19,14 @@ import { galaxyFrame } from './Galaxy';
 // disc it would otherwise be seen through.
 // The concept is Astra's (forked dust pillars, a cluster with separate cores, a dying star's
 // broken shell); the numbers were placed against the sampled path.
+// 2026-10-06 (owner: the rings "show for too short a frame, so they read as a flash"): the
+// cluster and the shell sat off to the right, crossed the frame in 0.3 s and 0.13 s, and at
+// 16:10 the shell never entered it at all. Both are now laid on the dive itself (diveFrameAt):
+// each sits just off the camera's path where it passes at scroll PASS, so it is in view from
+// far off and grows as the camera closes in, ~0.6 s at 16:10 and 16:9 alike, and leaves through
+// the frame's lower corner while still fully lit. Placed with the recorded path (objsim).
+// Seen that long and that close they read as a white ball and a blue planet, so both are
+// smaller (cluster 0.22 -> 0.15 spread, shell 0.8 -> 0.5) and dimmer than when they flashed by.
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -88,8 +97,8 @@ function shellTexture() {
       g.stroke();
     }
     const halo = g.createRadialGradient(0, 0, 0, 0, 0, 60);
-    halo.addColorStop(0, 'rgba(255,255,255,0.95)');
-    halo.addColorStop(0.15, 'rgba(210,230,255,0.5)');
+    halo.addColorStop(0, 'rgba(255,255,255,0.6)');
+    halo.addColorStop(0.15, 'rgba(210,230,255,0.3)');
     halo.addColorStop(1, 'rgba(120,160,255,0)');
     g.fillStyle = halo;
     g.fillRect(-128, -128, 256, 256);
@@ -97,9 +106,36 @@ function shellTexture() {
 }
 
 const PILLARS_AT = new THREE.Vector3(0.49, 0.83, 5.83);
-const CLUSTER_AT = new THREE.Vector3(2.87, 0.02, 2.96);
-const SHELL_AT = new THREE.Vector3(3.74, 0.15, 2.62);
+/**
+ * Each laid where the dive passes it: at scroll `pass` it is `side` units right (negative: left)
+ * of the camera and `below` under its sightline, in view from `pass - LEAD` (fading in over
+ * FADE_IN while still far and small) until it has left the frame, then gone by `pass + 0.03`.
+ */
+const CLUSTER = { pass: 0.62, side: -0.5, below: 0.3 };
+const SHELL = { pass: 0.81, side: 0.4, below: 0.3 };
+const LEAD = 0.55;
+const FADE_IN = 0.15;
 const _shift = new THREE.Vector3();
+const _pos = new THREE.Vector3();
+const _look = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+let laidSpin = NaN;
+let laidAspect = NaN;
+const clusterAt = new THREE.Vector3();
+const shellAt = new THREE.Vector3();
+/** The sideways offset narrows with the frame below 16:10, so a phone held upright sees the
+ * same pass as a desktop (at 0.4 to the side the shell never entered a 390x844 frame). */
+function layBeside(o: { pass: number; side: number; below: number }, out: THREE.Vector3, spin: number, aspect: number) {
+  diveFrameAt(o.pass, spin, _pos, _look);
+  _fwd.subVectors(_look, _pos).normalize();
+  _right.crossVectors(_fwd, UP).normalize();
+  _up.crossVectors(_right, _fwd);
+  out.copy(_pos).addScaledVector(_right, o.side * Math.min(1, aspect / 1.6)).addScaledVector(_up, -o.below);
+}
+const inView = (o: { pass: number }, p: number) => window4(o.pass - LEAD, o.pass - LEAD + FADE_IN, o.pass, o.pass + 0.03, p);
 
 export default function DiveObjects() {
   const pillarMat = useRef<THREE.SpriteMaterial>(null);
@@ -117,38 +153,51 @@ export default function DiveObjects() {
     const N = 900;
     const pos = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) {
-      pos[i * 3] = CLUSTER_AT.x + gauss() * 0.22;
-      pos[i * 3 + 1] = CLUSTER_AT.y + gauss() * 0.22;
-      pos[i * 3 + 2] = CLUSTER_AT.z + gauss() * 0.22;
+      pos[i * 3] = gauss() * 0.15;
+      pos[i * 3 + 1] = gauss() * 0.15;
+      pos[i * 3 + 2] = gauss() * 0.15;
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const cores = Array.from({ length: 5 }, (_, i) => ({
-      pos: new THREE.Vector3(CLUSTER_AT.x + gauss() * 0.11, CLUSTER_AT.y + gauss() * 0.11, CLUSTER_AT.z + gauss() * 0.11),
+      pos: new THREE.Vector3(gauss() * 0.11, gauss() * 0.11, gauss() * 0.11),
       color: ['#ffffff', '#bcd3ff', '#ffe2b0', '#ffffff', '#cfe0ff'][i],
       size: 0.1 + rnd() * 0.06,
     }));
     return { geo, cores };
   }, []);
 
-  const near = useRef<THREE.Group>(null);
+  const clusterRef = useRef<THREE.Group>(null);
+  const shellRef = useRef<THREE.Sprite>(null);
   const pillarRef = useRef<THREE.Sprite>(null);
-  useFrame(() => {
-    // Laid along the path as designed and moved with its end (lib/diveStar): the cluster and the
-    // shell sit by the end (Bezier weight 0.94, 0.98), the pillars halfway (0.51).
-    if (near.current && pillarRef.current) {
-      diveStarAt(galaxyFrame.spin, _shift);
+  useFrame(({ camera }) => {
+    // The pillars are laid along the path as designed and moved by half its end's shift
+    // (lib/diveStar; Bezier weight 0.51); the cluster and the shell on the path itself.
+    if (clusterRef.current && shellRef.current && pillarRef.current) {
+      const spin = galaxyFrame.spin;
+      const aspect = (camera as THREE.PerspectiveCamera).aspect;
+      if (spin !== laidSpin || aspect !== laidAspect) {
+        laidSpin = spin;
+        laidAspect = aspect;
+        layBeside(CLUSTER, clusterAt, spin, aspect);
+        layBeside(SHELL, shellAt, spin, aspect);
+      }
+      clusterRef.current.position.copy(clusterAt);
+      shellRef.current.position.copy(shellAt);
+      diveStarAt(spin, _shift);
       _shift.x -= DIVE_DESIGN[0];
       _shift.z -= DIVE_DESIGN[2];
-      near.current.position.copy(_shift);
       pillarRef.current.position.copy(PILLARS_AT).addScaledVector(_shift, 0.5);
     }
     const sp = useScene.getState().scrollProgress;
     if (pillarMat.current) pillarMat.current.opacity = window4(0.24, 0.3, 0.4, 0.46, sp);
-    const k = window4(0.4, 0.46, 0.56, 0.62, sp);
-    if (clusterMat.current) clusterMat.current.opacity = k * 0.9;
+    const k = inView(CLUSTER, sp);
+    if (clusterMat.current) clusterMat.current.opacity = k * 0.6;
     coreMats.current.forEach((m) => { if (m) m.opacity = k; });
-    if (shellMat.current) shellMat.current.opacity = window4(0.55, 0.61, 0.7, 0.76, sp);
+    // Upright the frame is too narrow for the shell: the look only turns onto the path late, so
+    // it would cross in 0.12 s - the flash this placement exists to avoid. It stays off there,
+    // as it was before (never in a 390x844 frame).
+    if (shellMat.current) shellMat.current.opacity = (camera as THREE.PerspectiveCamera).aspect >= 1 ? inView(SHELL, sp) : 0;
   });
 
   return (
@@ -156,19 +205,19 @@ export default function DiveObjects() {
       <sprite ref={pillarRef} position={PILLARS_AT} scale={[1.0, 1.5, 1]} renderOrder={3}>
         <spriteMaterial ref={pillarMat} map={pillars} transparent opacity={0} depthWrite={false} toneMapped={false} />
       </sprite>
-      <group ref={near}>
+      <group ref={clusterRef}>
       <points geometry={cluster.geo} raycast={() => null} frustumCulled={false}>
-        <pointsMaterial ref={clusterMat} map={soft} size={0.03} sizeAttenuation color="#dbe6ff" transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
+        <pointsMaterial ref={clusterMat} map={soft} size={0.022} sizeAttenuation color="#dbe6ff" transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
       {cluster.cores.map((c, i) => (
         <sprite key={i} position={c.pos} scale={[c.size * 3, c.size * 3, 1]}>
           <spriteMaterial ref={(m) => { coreMats.current[i] = m; }} map={soft} color={c.color} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
         </sprite>
       ))}
-      <sprite position={SHELL_AT} scale={[0.8, 0.8, 1]}>
+      </group>
+      <sprite ref={shellRef} scale={[0.5, 0.5, 1]}>
         <spriteMaterial ref={shellMat} map={shell} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </sprite>
-      </group>
     </group>
   );
 }

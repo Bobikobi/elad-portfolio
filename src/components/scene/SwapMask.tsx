@@ -55,6 +55,8 @@ const TUNNEL_GAIN: [number, number, number] = (() => {
   return [v[0], v[1], v[2]];
 })();
 
+/** Coverage over which the tunnel's own star streaks come in. */
+const LINES_FROM: [number, number] = [0.5, 0.75];
 const _fwd = new THREE.Vector3();
 const DEG2RAD = Math.PI / 180;
 
@@ -85,6 +87,7 @@ const tunnelFragment = /* glsl */ `
   uniform float uAspect;
   uniform float uOpacity;
   uniform vec3 uGain;     // the walls' gain entering, from the middle on, and the detail's floor
+  uniform float uLines;   // 0..1, how much of its own star streaks the tunnel draws
   varying vec2 vUv;
 
   float hash(vec3 p) {
@@ -149,7 +152,7 @@ const tunnelFragment = /* glsl */ `
     float streak = smoothstep(0.0, 0.25, seg) * (1.0 - smoothstep(0.55 + 0.3 * h, 0.95, seg));
     streak *= step(0.62, h) * line * smoothstep(0.05, 0.25, r);
     vec3 sc = fract(h * 97.0) < 0.2 ? lin(vec3(1.0, 0.86, 0.62)) : lin(vec3(0.80, 0.88, 1.0));
-    fine += sc * streak * (0.3 + 0.7 * (h - 0.62) / 0.38);
+    fine += sc * streak * (0.3 + 0.7 * (h - 0.62) / 0.38) * uLines;
 
     // Specks on the walls, flowing with them.
     vec3 sq = vec3(a * 40.0 / 6.2831853, z * 3.0, 0.0);
@@ -184,7 +187,7 @@ const tunnelFragment = /* glsl */ `
 export default function SwapMask() {
   const fill = useRef<THREE.Mesh>(null);
   const uniforms = useMemo(
-    () => ({ uFlow: { value: 0 }, uTime: { value: 0 }, uWarm: { value: 0 }, uAspect: { value: 1 }, uOpacity: { value: 0 }, uGain: { value: new THREE.Vector3(...TUNNEL_GAIN) } }),
+    () => ({ uFlow: { value: 0 }, uTime: { value: 0 }, uWarm: { value: 0 }, uAspect: { value: 1 }, uOpacity: { value: 0 }, uLines: { value: 0 }, uGain: { value: new THREE.Vector3(...TUNNEL_GAIN) } }),
     []
   );
   const last = useRef({ p: 0, dir: 1 });
@@ -218,6 +221,10 @@ export default function SwapMask() {
     // ramped from low coverage rather than slammed on near the peak: coming back UP from the
     // solar overview this plane is the whole transition, with no dive fade underneath it.
     u.uOpacity.value = smoothstep(0.15, 0.95, cov);
+    // The tunnel's own streaks wait until it covers half the frame (owner, 2026-10-06): until
+    // then the streaks on screen are the dive's stars stretching (spriteStars, STREAK), and lines
+    // drawn over them from nowhere read as false. From half cover they carry those streaks on.
+    u.uLines.value = smoothstep(LINES_FROM[0], LINES_FROM[1], cov);
   });
 
   return (
