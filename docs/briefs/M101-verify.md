@@ -216,3 +216,39 @@ round's change does not move it either way.
 
 Not measured: phone. For the owner's eye: the edge-on look (thickness, dust lane, `?eo`,
 `?lift`), the dive's stars in the photo's colour (`?dn`).
+
+# Round 5 - streaks from the points, the cluster and the shell on the path (2026-10-06)
+
+The owner on the round-4 preview: the lines in the passage's first frames appear from nowhere -
+the points should turn into streaks; the "rings" are beautiful but show so briefly they read as a
+flash. The scroll hint is left as it is (it fades as the scroll starts, by design).
+
+Numbers from the branch preview alias (deployment from a3b9e8f), passages pv5a-down, pv5b-down,
+pv5-up at 1440x900, rest pv5; the object probe (`zz-passage-hi.mjs`, DOM visible) at 1440x900,
+1920x1080 and 390x844. Streak instruments at 1920x1080 on localhost (same build): s0-hi (streaks
+off), s3-1.8, c1-nostreak (`?streak=0,260,1.8`).
+
+| | bar | before | measured | |
+|---|---|---|---|---|
+| S1 tunnel lines before half cover (streaks off) | none | lines from cov ~0.15 | elongation 1.19-1.34 to cov 0.56 = floor (rest 1.1-1.4) | PASS |
+| S2 elongation of the brightest points, dive start -> cov 0.5 | 1 -> ≥ 6 | 1.2-1.3 flat | 1.5 -> 3.2-3.5 | FAIL as written - not moved by a longer shutter or cap |
+| S2 largest step between frames | ≤ 2x | - | 1.3x | PASS |
+| O1 shell in frame, opacity ≥ 0.3 | ≥ 0.5 s at 1440 and 1920 | 0 / 0.13 s | 0.58 / 0.58 s | PASS |
+| O2 cluster in frame | ≥ 0.5 s at 1440 and 1920 | ~0.3 s | 0.58 / 0.55 s (390x844: 0.55 s) | PASS |
+| O3 size step between frames | ≤ 1.5x | - | 1.42x worst | PASS |
+| C1 tunnel colour | ±15% | 7.2 / 7.4 | 6.5 / 6.2 | PASS |
+| C2 seam | ≤ 10 | 4.0 / 3.2 | 3.0 / 5.5 | PASS |
+| C4 dive fine detail | ≥ 1.79 | 3.78 / 3.26 | 2.13 / 1.99 | PASS - motion blur is less fine detail |
+| D1 velocity vs look, last 0.5 s | ≤ 8° | 5.07 / 5.08 | 5.91 / 5.40 (same instrument on pv4: 5.21 / 4.57) | PASS |
+| turn, both clocks | ≤ 1.5°/frame | 1.07 | 1.08 / 1.07 / up 1.07 | PASS |
+| no frame > 0.1 s · dark_ms | 0 · 0 | max 68 ms · 0 | max 53 ms · 0 | PASS |
+| fps, desktop | ≥ 38 | 52.7 / 37.4 | 55.0 / 40.3 / up 59.7 | PASS |
+| G1 name box, worst phase | ≤ 0.051% / p99 2.0 | 0.123% (repeat 0.050%) / 2.0 | 0.053% / 2.0 | at the bar, inside round 4's run-to-run spread |
+| G5 bottom | ≤ 28.7 | 21.79 | 22.86 | PASS |
+
+S2: the instrument (tile autocorrelation after a 7 px median, 50 brightest 128 px tiles) reads a
+synthetic 60x6 streak field as 6.3 and a radial one as 5.1-5.8; on the dive it holds at 3.3
+whatever the shutter, so it is reading the photo and the core, which cannot streak.
+
+Not measured: real phones. For the owner's eye: the streaks' look, the cluster as a soft white
+glow from afar, the shell's size.
