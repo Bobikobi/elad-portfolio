@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Filter, Mail, BarChart2, Sparkles, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'אוטומציית שיווק וצמיחה דיגיטלית',
   description:
     'פיתוח תשתיות שיווק מדידות: אוטומציות לידים, תהליכי nurturing, דשבורדים ותסריטי המרה שמחברים בין מוצר, תוכן ותוצאות עסקיות.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/he/services/growth-marketing',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/growth-marketing',
-      'en-US': 'https://www.eladsaadon.dev/services/growth-marketing',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/growth-marketing',
-      'x-default': 'https://www.eladsaadon.dev/services/growth-marketing',
-    },
+  path: '/he/services/growth-marketing',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/growth-marketing',
+    'en-US': 'https://www.eladsaadon.dev/services/growth-marketing',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/growth-marketing',
+    'x-default': 'https://www.eladsaadon.dev/services/growth-marketing',
   },
-};
+});
 
 const schemas = [
   {

@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Bot, FileText, MessageSquare, Zap, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'ru',
   title: 'Интеграция ИИ в существующие и новые системы',
   description:
     'Внедрение ИИ в веб-продукты: умный чат, суммаризация документов, классификация данных и автоматизация с Gemini и OpenAI — безопасно.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/ru/services/ai-integration',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/ai-integration',
-      'en-US': 'https://www.eladsaadon.dev/services/ai-integration',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/ai-integration',
-      'x-default': 'https://www.eladsaadon.dev/services/ai-integration',
-    },
+  path: '/ru/services/ai-integration',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/ai-integration',
+    'en-US': 'https://www.eladsaadon.dev/services/ai-integration',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/ai-integration',
+    'x-default': 'https://www.eladsaadon.dev/services/ai-integration',
   },
-};
+});
 
 const schemas = [
   {

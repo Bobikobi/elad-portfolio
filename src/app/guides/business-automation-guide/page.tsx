@@ -1,17 +1,18 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Workflow, Clock, FileText, TrendingUp, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'אוטומציה עסקית לעסקים קטנים: איפה מתחילים?',
   description:
     'מדריך מעשי לאוטומציה עסקית לעסקים קטנים: איך לחסוך שעות עבודה בשבוע, להפחית טעויות אנוש ולשחרר את הצוות לעבודה חשובה יותר - בלי תקציב של תאגיד.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/guides/business-automation-guide',
-  },
-};
+  path: '/guides/business-automation-guide',
+  article: { publishedTime: '2026-05-01T00:00:00Z' },
+});
 
 const schemas = [
   {

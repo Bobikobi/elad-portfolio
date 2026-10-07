@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Bot, FileText, MessageSquare, Zap, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'אינטגרציית AI למערכות קיימות וחדשות',
   description:
     'הטמעת AI בתוך מוצרי Web: צ׳אט חכם, סיכום מסמכים, סיווג נתונים ואוטומציה עם Gemini ו-OpenAI בצורה מאובטחת.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/he/services/ai-integration',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/ai-integration',
-      'en-US': 'https://www.eladsaadon.dev/services/ai-integration',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/ai-integration',
-      'x-default': 'https://www.eladsaadon.dev/services/ai-integration',
-    },
+  path: '/he/services/ai-integration',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/ai-integration',
+    'en-US': 'https://www.eladsaadon.dev/services/ai-integration',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/ai-integration',
+    'x-default': 'https://www.eladsaadon.dev/services/ai-integration',
   },
-};
+});
 
 const schemas = [
   {

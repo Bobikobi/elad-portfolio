@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { RefreshCw, Bell, BarChart2, Link2, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'en',
   title: 'Business Process Automation',
   description:
     'Planning and developing automations that reduce manual work: system integration, triggers, data processing, and automated reports with Node.js, Python, and APIs.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/services/automation-workflows',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/automation-workflows',
-      'en-US': 'https://www.eladsaadon.dev/services/automation-workflows',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
-      'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
-    },
+  path: '/services/automation-workflows',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/automation-workflows',
+    'en-US': 'https://www.eladsaadon.dev/services/automation-workflows',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
+    'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
   },
-};
+});
 
 const schemas = [
   {

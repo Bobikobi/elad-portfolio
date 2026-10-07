@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { RefreshCw, Bell, BarChart2, Link2, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'אוטומציה של תהליכים עסקיים',
   description:
     'תכנון ופיתוח אוטומציות שמקצרות עבודה ידנית: חיבור מערכות, טריגרים, עיבוד נתונים ודו"חות אוטומטיים עם Node.js, Python ו-APIs.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/he/services/automation-workflows',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/automation-workflows',
-      'en-US': 'https://www.eladsaadon.dev/services/automation-workflows',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
-      'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
-    },
+  path: '/he/services/automation-workflows',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/automation-workflows',
+    'en-US': 'https://www.eladsaadon.dev/services/automation-workflows',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
+    'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
   },
-};
+});
 
 const schemas = [
   {

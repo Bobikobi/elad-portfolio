@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { RefreshCw, Bell, BarChart2, Link2, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'ru',
   title: 'Автоматизация бизнес-процессов',
   description:
     'Планирование и разработка автоматизаций, сокращающих ручную работу: интеграция систем, триггеры, обработка данных и автоматические отчёты с Node.js, Python и API.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/ru/services/automation-workflows',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/automation-workflows',
-      'en-US': 'https://www.eladsaadon.dev/services/automation-workflows',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
-      'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
-    },
+  path: '/ru/services/automation-workflows',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/automation-workflows',
+    'en-US': 'https://www.eladsaadon.dev/services/automation-workflows',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/automation-workflows',
+    'x-default': 'https://www.eladsaadon.dev/services/automation-workflows',
   },
-};
+});
 
 const schemas = [
   {

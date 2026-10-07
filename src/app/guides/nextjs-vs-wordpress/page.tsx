@@ -1,17 +1,18 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Shield, DollarSign, Gauge, ArrowLeft, Search } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'Next.js vs וורדפרס: מה עדיף לבניית אתרים ב-2026?',
   description:
     'השוואה מקיפה בין Next.js לוורדפרס: ביצועים, SEO, אבטחה, תחזוקה ועלויות. מדוע יותר עסקים עוברים ל-Next.js בשנת 2026.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/guides/nextjs-vs-wordpress',
-  },
-};
+  path: '/guides/nextjs-vs-wordpress',
+  article: { publishedTime: '2026-05-01T00:00:00Z' },
+});
 
 const schemas = [
   {
