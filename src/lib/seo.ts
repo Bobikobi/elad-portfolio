@@ -80,3 +80,42 @@ export function socialMeta(locale: OgLocale, title: string, description: string,
     twitter: { card: 'summary_large_image', title, description, images: [image] },
   };
 }
+
+/** The name that closes every social title, per language ("About | Elad Saadon"). */
+export const OG_NAME: Record<OgLocale, string> = { he: 'אלעד סעדון', en: 'Elad Saadon', ru: 'Элад Саадон' };
+
+/**
+ * Full metadata for one page: title, description, canonical and a localized social card.
+ * A page that sets only title/description/alternates inherits the ROOT openGraph block
+ * whole (Next merges metadata shallowly), so Facebook shows the home card with og:url =
+ * home for it. Every page that is not a section page goes through here instead.
+ */
+export function pageMetadata(opts: {
+  locale: OgLocale;
+  title: string;
+  description: string;
+  /** Site-relative path, e.g. '/services/ai-integration'. */
+  path: string;
+  languages?: Record<string, string>;
+  /** Guides and posts: emits og:type=article with the publish date and author. */
+  article?: { publishedTime: string; modifiedTime?: string };
+}): Metadata {
+  const url = `${siteConfig.url}${opts.path}`;
+  const social = socialMeta(opts.locale, `${opts.title} | ${OG_NAME[opts.locale]}`, opts.description, url);
+  const openGraph: Metadata['openGraph'] = opts.article
+    ? {
+        ...social.openGraph,
+        type: 'article',
+        publishedTime: opts.article.publishedTime,
+        modifiedTime: opts.article.modifiedTime,
+        authors: [siteConfig.author.url],
+      }
+    : social.openGraph;
+  return {
+    ...social,
+    openGraph,
+    title: opts.title,
+    description: opts.description,
+    alternates: { canonical: url, ...(opts.languages ? { languages: opts.languages } : {}) },
+  };
+}

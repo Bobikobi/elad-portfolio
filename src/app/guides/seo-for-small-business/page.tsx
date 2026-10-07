@@ -1,17 +1,18 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Search, FileText, Link2, Smartphone, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'מדריך SEO לעסקים קטנים: איך להגיע ראשון בגוגל בלי תשלום',
   description:
     'מדריך SEO מעשי לעסקים קטנים: איך לבחור מילות מפתח, לבנות תוכן מנצח, להשיג קישורים איכותיים ולהופיע בעמוד הראשון של גוגל - בלי לשלם על פרסום.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/guides/seo-for-small-business',
-  },
-};
+  path: '/guides/seo-for-small-business',
+  article: { publishedTime: '2026-05-01T00:00:00Z' },
+});
 
 const schemas = [
   {

@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Globe, ShieldCheck, Gauge, Database, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'en',
   title: 'Next.js Development for Businesses & Startups',
   description:
     'End-to-end Next.js development: architecture, performance, SEO, API integrations, and secure production deployment with TypeScript and Supabase.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/services/nextjs-development',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/nextjs-development',
-      'en-US': 'https://www.eladsaadon.dev/services/nextjs-development',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/nextjs-development',
-      'x-default': 'https://www.eladsaadon.dev/services/nextjs-development',
-    },
+  path: '/services/nextjs-development',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/nextjs-development',
+    'en-US': 'https://www.eladsaadon.dev/services/nextjs-development',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/nextjs-development',
+    'x-default': 'https://www.eladsaadon.dev/services/nextjs-development',
   },
-};
+});
 
 const schemas = [
   {

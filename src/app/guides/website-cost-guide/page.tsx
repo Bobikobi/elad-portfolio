@@ -1,17 +1,18 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Globe, Bot, Workflow, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'כמה עולה לבנות אתר ב-Next.js? מדריך מחירים 2026',
   description:
     'פירוט עלויות מלא לבניית אתר Next.js: אתר תדמית, חנות מסחר, פורטל עם AI. טווחי מחירים, דוגמאות אמיתיות וטיפים לחיסכון מבלי להתפשר על איכות.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/guides/website-cost-guide',
-  },
-};
+  path: '/guides/website-cost-guide',
+  article: { publishedTime: '2026-05-01T00:00:00Z' },
+});
 
 const schemas = [
   {

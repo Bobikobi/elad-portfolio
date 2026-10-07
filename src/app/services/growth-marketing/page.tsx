@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Filter, Mail, BarChart2, Sparkles, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'en',
   title: 'Growth Marketing Automation',
   description:
     'Building measurable marketing infrastructure: lead automation, nurturing workflows, dashboards, and conversion funnels that connect product, content, and business results.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/services/growth-marketing',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/growth-marketing',
-      'en-US': 'https://www.eladsaadon.dev/services/growth-marketing',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/growth-marketing',
-      'x-default': 'https://www.eladsaadon.dev/services/growth-marketing',
-    },
+  path: '/services/growth-marketing',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/growth-marketing',
+    'en-US': 'https://www.eladsaadon.dev/services/growth-marketing',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/growth-marketing',
+    'x-default': 'https://www.eladsaadon.dev/services/growth-marketing',
   },
-};
+});
 
 const schemas = [
   {

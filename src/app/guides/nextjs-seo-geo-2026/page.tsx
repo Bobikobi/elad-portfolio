@@ -1,17 +1,18 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Search, Bot, FileCode2, Gauge, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'מדריך Next.js SEO + GEO לשנת 2026',
   description:
     'מדריך מעשי לשיפור דירוג בגוגל ונראות בכלי AI בפרויקטי Next.js: metadata, schema, llms.txt, Core Web Vitals ותכנון תוכן שמקבל ציטוטים.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/guides/nextjs-seo-geo-2026',
-  },
-};
+  path: '/guides/nextjs-seo-geo-2026',
+  article: { publishedTime: '2026-04-28T00:00:00Z' },
+});
 
 const schemas = [
   {

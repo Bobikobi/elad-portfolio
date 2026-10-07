@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Bot, FileText, MessageSquare, Zap, ArrowLeft } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'en',
   title: 'AI Integration for Existing and New Systems',
   description:
     'Integrate AI into web products: smart chat, document summarization, data classification, and automation with Gemini and OpenAI - securely.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/services/ai-integration',
-    languages: {
-      'he-IL': 'https://www.eladsaadon.dev/he/services/ai-integration',
-      'en-US': 'https://www.eladsaadon.dev/services/ai-integration',
-      'ru-RU': 'https://www.eladsaadon.dev/ru/services/ai-integration',
-      'x-default': 'https://www.eladsaadon.dev/services/ai-integration',
-    },
+  path: '/services/ai-integration',
+  languages: {
+    'he-IL': 'https://www.eladsaadon.dev/he/services/ai-integration',
+    'en-US': 'https://www.eladsaadon.dev/services/ai-integration',
+    'ru-RU': 'https://www.eladsaadon.dev/ru/services/ai-integration',
+    'x-default': 'https://www.eladsaadon.dev/services/ai-integration',
   },
-};
+});
 
 const schemas = [
   {

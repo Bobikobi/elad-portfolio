@@ -1,17 +1,18 @@
 import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { Bot, Code2, Sparkles, Workflow, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { JsonLd } from '@/components/JsonLd';
 import GradientBar from '@/components/ui/GradientBar';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  locale: 'he',
   title: 'איך AI משנה את עולם פיתוח האתרים ב-2026',
   description:
     'כיצד בינה מלאכותית משנה פיתוח אתרים: קוד אוטומטי, עיצוב מונע AI, צ\'אטבוטים חכמים, אופטימיזציית SEO ואוטומציה של תהליכי פיתוח שלמים.',
-  alternates: {
-    canonical: 'https://www.eladsaadon.dev/guides/ai-in-web-development',
-  },
-};
+  path: '/guides/ai-in-web-development',
+  article: { publishedTime: '2026-05-01T00:00:00Z' },
+});
 
 const schemas = [
   {
