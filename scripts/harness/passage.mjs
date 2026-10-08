@@ -41,7 +41,7 @@ const browser = await puppeteer.launch({
 console.log('PID', browser.process().pid);
 try {
   const page = await browser.newPage();
-  await page.setViewport({ width: W, height: H, deviceScaleFactor: MOB ? 2 : 1, isMobile: MOB, hasTouch: MOB });
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: +(process.env.DSF || (MOB ? 2 : 1)), isMobile: MOB, hasTouch: MOB });
   if (BYPASS && /vercel\.app/.test(BASE)) await page.setExtraHTTPHeaders({ 'x-vercel-protection-bypass': BYPASS });
   // STALL=1: time the WebGL calls that can block (program link/status, texture uploads) so the
   // swap frame's cost can be split into compile vs upload vs everything else (JS, React).
