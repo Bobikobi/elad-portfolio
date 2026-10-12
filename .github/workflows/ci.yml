@@ -55,3 +55,13 @@ jobs:
             echo "::error::Lint errors ($COUNT). The budget is zero — fix it or justify a scoped disable with a written reason."
             exit 1
           fi
+
+      # Blocking. Typecheck and lint do not prove the site builds: a route segment option,
+      # a server/client boundary mistake or a module that only fails at bundle time shows
+      # up here and nowhere earlier. Until this step the first place it showed was the
+      # Vercel build of master. No secrets are set on purpose: .env.example documents that
+      # the site builds without them, and this step keeps that promise honest.
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
