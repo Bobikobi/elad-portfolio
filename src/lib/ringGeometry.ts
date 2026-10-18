@@ -179,6 +179,37 @@ export interface RingMetrics {
 }
 
 export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: boolean): RingMetrics {
+  const base = solveRing(vw, vh, rtl, portrait, 0, 1);
+  // Enough fan for the wanted windows: done. This is every normal viewport and costs nothing.
+  const k = portrait ? RING_TUNING.portrait : RING_TUNING.landscape;
+  if (portrait || (base.fanUp + base.fanDown) * base.rMid >= 2 * (k.minThick + k.cardGap)) return base;
+  // A SHORT viewport (a laptop with browser chrome, ~1280x620): the planet sits high and the
+  // ring is tilted, so the fan centre lands at the very bottom of the screen and the clamp
+  // leaves no fan at all - one window, cut off by the viewport edge. Two things give: the fan
+  // slides along the ring to wherever the screen has room, and the windows get shallower.
+  // Take the first combination that holds two windows' worth of arc, else the best seen.
+  let best = base;
+  let bestArc = (base.fanUp + base.fanDown) * base.rMid;
+  for (const depthScale of [1, 0.85, 0.7, 0.58]) {
+    for (let i = 0; i <= 12; i++) {
+      const shift = (i % 2 ? -1 : 1) * Math.ceil(i / 2) * 0.1;
+      const m = solveRing(vw, vh, rtl, portrait, shift, depthScale);
+      const arc = (m.fanUp + m.fanDown) * m.rMid;
+      if (arc > bestArc + 1e-6) { best = m; bestArc = arc; }
+    }
+    if (bestArc >= 2 * (k.minThick + k.cardGap)) break;
+  }
+  return best;
+}
+
+function solveRing(
+  vw: number,
+  vh: number,
+  rtl: boolean,
+  portrait: boolean,
+  shift: number,
+  depthScale: number
+): RingMetrics {
   const k = portrait ? RING_TUNING.portrait : RING_TUNING.landscape;
   // The rendered limb when the rig is publishing one, the design framing until then (the
   // first paint, reduced-motion, and the no-WebGL fallback all land here).
@@ -210,13 +241,15 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   // Which canonical direction the fan sits in: away from the planet's side of the screen.
   // Read off the PLANET, never off the locale - the rig already mirrors the pose for RTL,
   // and asking the document a second time is how the two can disagree.
-  const th0 = portrait ? Math.PI / 2 : rect.cx < vw / 2 ? 0 : Math.PI;
+  const th00 = portrait ? Math.PI / 2 : rect.cx < vw / 2 ? 0 : Math.PI;
   // Which way canonical angle grows ON SCREEN is a property of the projected basis, not a
   // rule about left and right: under the plane matrix `v` can point either way. Sample it.
-  const [, yA] = toScreen(1, th0);
-  const [, yB] = toScreen(1, th0 + 0.05);
+  const [, yA] = toScreen(1, th00);
+  const [, yB] = toScreen(1, th00 + 0.05);
   const sweep: 1 | -1 = portrait ? (rtl ? 1 : -1) : yB >= yA ? 1 : -1;
 
+  // `shift` slides the fan's centre along the ring (rad); 0 is straight out from the planet.
+  const th0 = th00 + sweep * shift;
   const design = k.fanDeg * DEG2RAD;
 
   // The inner radius has to clear the LIMB, and under an elliptical projection that is not
@@ -230,9 +263,9 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   const r0 = (rect.r + k.gap) / Math.max(0.2, worstScale);
 
   // Depth: what is left between the ring and the far edge once the header keeps its zone.
-  const edge = portrait ? vh - rect.cy : th0 === 0 ? vw - rect.cx : rect.cx;
+  const edge = portrait ? vh - rect.cy : th00 === 0 ? vw - rect.cx : rect.cx;
   const room = portrait ? edge - k.gap - 12 : edge / Math.max(0.2, scaleAt(th0)) - r0 - k.headroom;
-  const depth = Math.min(k.depth, Math.max(portrait ? 160 : 200, room));
+  const depth = Math.min(k.depth, Math.max(portrait ? 160 : 200, room)) * depthScale;
 
   const r1 = r0 + depth;
   const rMid = (r0 + r1) / 2;
