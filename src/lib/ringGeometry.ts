@@ -182,7 +182,7 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
   const base = solveRing(vw, vh, rtl, portrait, 0, 1);
   // Enough fan for the wanted windows: done. This is every normal viewport and costs nothing.
   const k = portrait ? RING_TUNING.portrait : RING_TUNING.landscape;
-  if (portrait || (base.fanUp + base.fanDown) * base.rMid >= k.minThick * 2) return base;
+  if (portrait || (base.fanUp + base.fanDown) * base.rMid >= 2 * (k.minThick + k.cardGap)) return base;
   // A SHORT viewport (a laptop with browser chrome, ~1280x620): the planet sits high and the
   // ring is tilted, so the fan centre lands at the very bottom of the screen and the clamp
   // leaves no fan at all - one window, cut off by the viewport edge. Two things give: the fan
@@ -197,7 +197,7 @@ export function ringMetrics(vw: number, vh: number, rtl: boolean, portrait: bool
       const arc = (m.fanUp + m.fanDown) * m.rMid;
       if (arc > bestArc + 1e-6) { best = m; bestArc = arc; }
     }
-    if (bestArc >= k.minThick * 2) break;
+    if (bestArc >= 2 * (k.minThick + k.cardGap)) break;
   }
   return best;
 }
