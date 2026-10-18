@@ -15,7 +15,7 @@
 ## MCP Servers
 - Connect to an MCP server only when a specific task actually needs it, not preemptively.
 - Disconnect / clean up the connection once that task is done — don't leave sessions open.
-- New installs still go through the global checklist (trust check → fetch → scan → report → approval → pin exact version) — that doesn't relax per project.
+- New installs go through the global checklist in `~/.claude/CLAUDE.md` unchanged (check the source → download → scan → pin an exact version → install and report; ask only when the scan finds something worrying).
 
 ## Problem-Solving Style
 - Default to the simplest solution that solves the actual problem. No unasked-for abstraction, config, or tooling.
