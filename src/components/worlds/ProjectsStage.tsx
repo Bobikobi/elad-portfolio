@@ -745,8 +745,8 @@ export default function ProjectsStage({
         // the planet for the same reason the fan's side does.
         head.style.setProperty('--ring-header-w', `${m.headerW.toFixed(1)}px`);
         head.style.insetInlineStart = 'auto';
-        head.style.left = m.th0 === 0 ? 'auto' : '0';
-        head.style.right = m.th0 === 0 ? '0' : 'auto';
+        head.style.left = Math.cos(m.th0) > 0 ? 'auto' : '0';
+        head.style.right = Math.cos(m.th0) > 0 ? '0' : 'auto';
       }
 
       rebuildShape(m);
