@@ -207,6 +207,41 @@ export const projects: Project[] = [
     featured: true,
   },
   {
+    id: 'loomvale',
+    title: {
+      he: 'Loomvale - משחק פיקסל-ארט שהשחקנים בונים יחד',
+      en: 'Loomvale - A Pixel-Art Game Its Players Build Together',
+      ru: 'Loomvale - пиксельная игра, которую строят сами игроки',
+    },
+    description: {
+      he: 'משחק הרפתקאות בדפדפן, חינמי ובקוד פתוח. כל צמח, משימה ודמות נוצרו על ידי שחקן: תוכן נכתב כקובצי JSON עם סכמות, ליבת סימולציה דטרמיניסטית ובדיקה אוטומטית לכל תרומה. קוד תחת AGPL ותוכן תחת CC BY-SA.',
+      en: 'A free, open-source adventure game in the browser. Every herb, quest and stranger was made by a player: content is declarative JSON with schemas, the simulation kernel is deterministic, and every contribution gets an automatic check. Code under AGPL, content under CC BY-SA.',
+      ru: 'Бесплатная браузерная приключенческая игра с открытым кодом. Каждое растение, квест и персонаж создан игроком: контент пишется в JSON со схемами, ядро симуляции детерминировано, каждый вклад проверяется автоматически. Код под AGPL, контент под CC BY-SA.',
+    },
+    category: 'web-app',
+    techStack: ['TypeScript', 'Phaser', 'JSON Schema', 'MCP', 'Vercel'],
+    liveUrl: 'https://loomvale.vercel.app',
+    githubUrl: 'https://github.com/Bobikobi/GAME',
+    featured: true,
+  },
+  {
+    id: 'claude-stats-widget',
+    title: {
+      he: 'Claude Stats Widget',
+      en: 'Claude Stats Widget',
+      ru: 'Claude Stats Widget',
+    },
+    description: {
+      he: 'ווידג\'ט שולחן עבודה ל-Linux (GNOME) ול-Windows שמציג את מכסת הסשן והשבוע האמיתית של Claude Code, מפת פעילות, ואת Clawd בפיקסל-ארט. מותקן בפקודה אחת, רישיון MIT.',
+      en: 'A desktop widget for Linux (GNOME) and Windows that shows your real Claude Code session and weekly quota, an activity heatmap, and Clawd in pixel art. One-line install, MIT licensed.',
+      ru: 'Виджет рабочего стола для Linux (GNOME) и Windows: реальные квоты сессии и недели Claude Code, карта активности и Clawd в пиксель-арте. Установка одной командой, лицензия MIT.',
+    },
+    category: 'desktop',
+    techStack: ['Python', 'GTK3', 'GNOME Shell extension', 'Tkinter', 'Claude Code'],
+    githubUrl: 'https://github.com/Bobikobi/claude-stats-widget',
+    featured: false,
+  },
+  {
     id: 'accessibility-widget',
     title: {
       he: 'Accessibility Widget',
