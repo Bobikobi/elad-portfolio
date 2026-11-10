@@ -221,6 +221,7 @@ export const projects: Project[] = [
     category: 'web-app',
     techStack: ['TypeScript', 'Phaser', 'JSON Schema', 'MCP', 'Vercel'],
     liveUrl: 'https://loomvale.vercel.app',
+    previewImage: '/images/projects/loomvale-preview.jpg',
     githubUrl: 'https://github.com/Bobikobi/GAME',
     featured: true,
   },
