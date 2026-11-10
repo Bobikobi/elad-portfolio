@@ -31,6 +31,8 @@ Core focus areas:
 - Political Compass IL - civic-tech analytics platform
 - AI Visual Web Scraper - desktop AI data collection tool
 - SHAPERZ - community marketing platform
+- [Loomvale](https://github.com/Bobikobi/GAME) - free pixel-art browser game built by its players ([play](https://loomvale.vercel.app))
+- [Claude Stats Widget](https://github.com/Bobikobi/claude-stats-widget) - desktop widget for Claude Code usage (Linux and Windows)
 
 ## Contact
 
