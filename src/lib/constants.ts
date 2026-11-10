@@ -219,7 +219,7 @@ export const projects: Project[] = [
       ru: 'Бесплатная браузерная приключенческая игра с открытым кодом. Каждое растение, квест и персонаж создан игроком: контент пишется в JSON со схемами, ядро симуляции детерминировано, каждый вклад проверяется автоматически. Код под AGPL, контент под CC BY-SA.',
     },
     category: 'web-app',
-    techStack: ['TypeScript', 'Phaser', 'JSON Schema', 'MCP', 'Vercel'],
+    techStack: ['TypeScript', 'Phaser 4', 'Three.js', 'Astro', 'Vite', 'TypeBox', 'Vitest', 'MCP', 'Vercel'],
     liveUrl: 'https://loomvale.vercel.app',
     previewImage: '/images/projects/loomvale-preview.jpg',
     githubUrl: 'https://github.com/Bobikobi/GAME',
@@ -274,7 +274,7 @@ export const techCategories = [
   },
   {
     key: 'frontend',
-    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Framer Motion', 'PWA / Web Push', 'Recharts', 'shadcn/ui'],
+    items: ['React 19', 'Next.js 16', 'Tailwind CSS v4', 'Astro', 'Vite', 'Framer Motion', 'PWA / Web Push', 'Recharts', 'shadcn/ui'],
   },
   {
     // Split out of `frontend`, where the whole of the real-time 3D work was a single
@@ -288,19 +288,21 @@ export const techCategories = [
       'Post-processing pipelines',
       'GPU instancing',
       'Real-time performance engineering',
+      'Phaser 4 (2D game engine)',
+      'Deterministic game simulation',
     ],
   },
   {
     key: 'backend',
-    items: ['Node.js', 'Django', 'Django REST Framework', 'PostgreSQL', 'Supabase', 'Neon', 'SQLite', 'Redis', 'Prisma', 'NextAuth', 'Zod', 'OAuth 2.0', 'Server Actions'],
+    items: ['Node.js', 'Django', 'Django REST Framework', 'PostgreSQL', 'Supabase', 'Neon', 'SQLite', 'Redis', 'Prisma', 'NextAuth', 'Zod', 'TypeBox / JSON Schema', 'Upstash Redis', 'OAuth 2.0', 'Server Actions'],
   },
   {
     key: 'ai',
-    items: ['Claude (Anthropic)', 'Google Gemini', 'AI Agents', 'MCP', 'Vision AI', 'Function Calling', 'Prompt Engineering', 'Freqtrade'],
+    items: ['Claude (Anthropic)', 'Google Gemini', 'AI Agents', 'MCP', 'Vision AI', 'Function Calling', 'MCP server authoring', 'Prompt Engineering', 'Freqtrade'],
   },
   {
     key: 'automation',
-    items: ['Electron', 'Puppeteer', 'Playwright', 'Cron Jobs', 'systemd', 'Telegram Bot API', 'WhatsApp API'],
+    items: ['Electron', 'Puppeteer', 'Playwright', 'Vitest', 'Headless-browser e2e', 'pnpm monorepos', 'Cron Jobs', 'systemd', 'Telegram Bot API', 'WhatsApp API'],
   },
   {
     key: 'cloud',
