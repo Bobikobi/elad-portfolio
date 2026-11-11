@@ -146,6 +146,7 @@ const WARMUP_MS = 4000;    // same reason as the governor's grace: compiles are 
 const LOW_RATIO = 0.85;    // below this share of target = scale down
 const HIGH_RATIO = 0.95;   // above this share = room to scale back up
 const BUDGET_PX = 1600 * 900; // a plain laptop's cost at the old flat dpr 1 - see `base` below
+const DPR_FLOOR = 1.25; // the budget cap never goes below this - see `budgetCap` below
 
 // The ratio last set here, for <Canvas dpr>: R3F re-applies that prop on every render of
 // the component holding the Canvas, so a constant there undid this scaler on each act change.
@@ -195,7 +196,13 @@ export function ResolutionScaler() {
   const rawDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
   const viewportPx =
     typeof window === 'undefined' ? BUDGET_PX : window.innerWidth * window.innerHeight;
-  const budgetCap = Math.sqrt(BUDGET_PX / Math.max(viewportPx, 1));
+  // The budget never pushes the canvas below 1.25 (or the screen's own ratio, if lower). On a
+  // laptop bigger than BUDGET_PX it was drawing UNDER the screen's pixels - 1536x850 at
+  // devicePixelRatio 1.25 drew at 1.05, 1920x1080 at 1.0 drew at 0.83 - and the browser's
+  // upscale blurred every fine line, the sun's most of all: the same blur the phone fix above
+  // removed (Elad, 2026-10-07). Phones are unchanged: their budget cap is already above 1.25.
+  // Load is still handled by the scale below (down to 0.6 of base), not by this ceiling.
+  const budgetCap = Math.max(Math.sqrt(BUDGET_PX / Math.max(viewportPx, 1)), DPR_FLOOR);
   const tierCap = quality === 'high' ? 1.25 : 2;
   const base = Math.min(rawDpr, tierCap, budgetCap);
 
