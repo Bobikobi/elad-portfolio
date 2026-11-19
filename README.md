@@ -1,28 +1,25 @@
-# Elad Saadon (אלעד סעדון) - Full-Stack Developer & AI Systems Architect
+# eladsaadon.dev - a portfolio you scroll into
 
-Official portfolio source code for Elad Saadon, a full-stack developer and AI systems architect from Israel.
+[![Elad Saadon - a ringed planet in a 3D galaxy, the opening frame of eladsaadon.dev](public/og/og-en.jpg)](https://www.eladsaadon.dev)
 
-Website: https://www.eladsaadon.dev
+**[Open the site](https://www.eladsaadon.dev)** - scroll from a whole galaxy down to one planet. Every planet is a page: about, projects, services, tech, contact.
 
-## About
+The portfolio of Elad Saadon (אלעד סעדון), a full-stack developer and AI systems architect from Israel. It runs in three languages - English, Hebrew (right to left) and Russian.
 
-Elad Saadon (אלעד סעדון) builds production-ready web platforms, AI-integrated products, and civic-tech systems.
+## What is in here
 
-Core focus areas:
-- Next.js and React development
-- TypeScript and scalable frontend architecture
-- AI integration with Google Gemini
-- Cloud automation across Vercel, GCP, and Oracle Cloud
-- Civic-tech and municipal software solutions
+- **A galaxy in WebGL** - React Three Fiber, drei and postprocessing, with hand-written GLSL shaders for the galaxy (`src/components/scene/galaxy/shaders.ts`).
+- **Scroll as a camera** - scrolling carries the camera from the galaxy down to a planet, a drag turns the view, and on phones a swipe steps between stops (`src/components/scene/CameraRig.tsx`, `DragControls.tsx`).
+- **Three languages, one layout** - `/`, `/he` and `/ru`, with the layout mirrored for Hebrew.
+- **Search and AI readable** - per-language metadata and share images, JSON-LD, a sitemap, `llms.txt` and `llms-full.txt`.
+- **An accessibility widget** - text size, contrast and grayscale (`src/components/AccessibilityWidget.tsx`).
 
 ## Tech Stack
 
-- Next.js (App Router)
-- React
-- TypeScript
-- Tailwind CSS
-- Framer Motion
-- Supabase
+- Next.js (App Router), React, TypeScript
+- three.js, React Three Fiber, drei, postprocessing, GLSL
+- Tailwind CSS, Framer Motion, Zustand
+- Neon (serverless Postgres), Vercel Analytics and Speed Insights
 
 ## Featured Projects
 
